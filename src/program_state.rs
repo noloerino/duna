@@ -18,12 +18,12 @@ impl BitStr32 {
         }
     }
 
-    pub fn concat(&self, o: BitStr32) -> BitStr32 {
-        BitStr32::new((self.value << o.len) | o.value, self.len + o.len)
+    pub fn concat(self, o: BitStr32) -> BitStr32 {
+        BitStr32::new((self.value << o.len as u32) | o.value, self.len + o.len)
     }
 
     /// Extracts a the bits between start and end, inclusive.
-    pub fn slice(&self, start: u8, end: u8) -> BitStr32 {
+    pub fn slice(self, start: u8, end: u8) -> BitStr32 {
         let high = max(start, end);
         let low = min(start, end);
         let len = high - low + 1;
@@ -31,7 +31,7 @@ impl BitStr32 {
     }
 
     /// Extracts the bit at index i.
-    pub fn index(&self, i: u8) -> BitStr32 {
+    pub fn index(self, i: u8) -> BitStr32 {
         BitStr32::new(self.value >> i as u32, 1)
     }
 }
@@ -92,11 +92,11 @@ struct ByteAddress {
 }
 
 impl ByteAddress {
-    fn to_word_address(&self) -> WordAddress {
+    fn to_word_address(self) -> WordAddress {
         self.addr >> 2
     }
 
-    fn get_word_offset(&self) -> u8 {
+    fn get_word_offset(self) -> u8 {
         (self.addr & 0b11) as u8
     }
 }
