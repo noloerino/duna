@@ -95,10 +95,10 @@ pub enum IRegister {
 }
 
 impl IRegister {
-    pub fn to_bit_str(self) -> BitStr32 {
+    pub const fn to_bit_str(self) -> BitStr32 {
         BitStr32::new(self as u32, 5)
     }
-    pub fn to_usize(self) -> usize {
+    pub const fn to_usize(self) -> usize {
         self as usize
     }
 }
@@ -109,11 +109,11 @@ struct ByteAddress {
 }
 
 impl ByteAddress {
-    fn to_word_address(self) -> WordAddress {
+    const fn to_word_address(self) -> WordAddress {
         self.addr >> 2
     }
 
-    fn get_word_offset(self) -> u8 {
+    const fn get_word_offset(self) -> u8 {
         (self.addr & 0b11) as u8
     }
 }
