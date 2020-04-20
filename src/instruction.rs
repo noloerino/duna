@@ -164,7 +164,7 @@ pub trait RType {
     fn inst_fields() -> RInstFields;
 
     /// Calculates the new value of rd given values of rs1 and rs2.
-    fn eval(rs1_val: Word, rs2_val: Word) -> Word;
+    fn eval(rs1_val: DataWord, rs2_val: DataWord) -> DataWord;
 }
 
 pub trait IType {
@@ -203,7 +203,7 @@ pub trait ITypeArith {
     fn inst_fields() -> IInstFields;
 
     /// Calculates the new value of rd given values of rs1 and imm.
-    fn eval(rs1_val: Word, imm: BitStr32) -> Word;
+    fn eval(rs1_val: DataWord, imm: BitStr32) -> DataWord;
 }
 
 pub trait ITypeLoad {
@@ -211,15 +211,15 @@ pub trait ITypeLoad {
         let imm_vec = BitStr32::new(imm, 12);
         ConcreteInst {
             eval: Box::new(move |state| {
-                let offs = imm_vec.as_i32();
+                let offs = imm_vec.to_sgn_data_word();
                 let rs1_val = state.regfile.read(rs1);
-                let addr = if offs >= 0 {
-                    rs1_val + offs as u32
+                let addr = DataWord::from(if i32::from(offs) >= 0 {
+                    u32::from(rs1_val) + u32::from(offs)
                 } else {
-                    rs1_val - (offs.wrapping_abs() as u32)
-                };
+                    u32::from(rs1_val) - u32::from(offs.neg())
+                });
                 let new_rd_val = Self::eval(addr);
-                StateChange::mem_write_op(state, addr, new_rd_val)
+                StateChange::mem_write_op(state, u32::from(addr), new_rd_val)
             }),
             data: ConcreteInstData::I {
                 fields: Self::inst_fields(),
@@ -232,7 +232,7 @@ pub trait ITypeLoad {
     fn inst_fields() -> IInstFields;
 
     /// Calculates the new value of rd given the memory address to read from.
-    fn eval(addr: Word) -> Word;
+    fn eval(addr: DataWord) -> DataWord;
 }
 
 // pub trait EnvironInst {}

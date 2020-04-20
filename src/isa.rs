@@ -21,8 +21,8 @@ impl RType for Add {
             opcode: R_OPCODE,
         }
     }
-    fn eval(rs1_val: Word, rs2_val: Word) -> Word {
-        ((rs1_val as i32) + (rs2_val as i32)) as u32
+    fn eval(rs1_val: DataWord, rs2_val: DataWord) -> DataWord {
+        DataWord::from(i32::from(rs1_val) + i32::from(rs2_val))
     }
 }
 
@@ -35,8 +35,8 @@ impl ITypeArith for Addi {
         }
     }
 
-    fn eval(rs1_val: Word, imm: BitStr32) -> Word {
-        ((rs1_val as i32) + imm.as_i32()) as u32
+    fn eval(rs1_val: DataWord, imm: BitStr32) -> DataWord {
+        DataWord::from(i32::from(rs1_val) + imm.as_i32())
     }
 }
 
@@ -45,8 +45,8 @@ mod test {
     use crate::isa::*;
     use crate::program_state::IRegister::*;
 
-    const RS1_VAL: Word = 1023;
-    const RS2_VAL_POS: Word = 49;
+    const RS1_VAL: DataWord = DataWord::from(1023);
+    const RS2_VAL_POS: DataWord = DataWord::from(49);
     const RD: IRegister = T2;
     const RS1: IRegister = T0;
     const RS2_POS: IRegister = T1;
@@ -56,7 +56,7 @@ mod test {
         let mut state = ProgramState::new();
         state.regfile.set(RS1, RS1_VAL);
         state.regfile.set(RS2_POS, RS2_VAL_POS);
-        state.regfile.set(RS2_NEG, -1i32 as u32);
+        state.regfile.set(RS2_NEG, DataWord::from(-1i32 as u32));
         state
     }
 
@@ -64,20 +64,23 @@ mod test {
     fn test_add() {
         let mut state = get_init_state();
         state.apply_inst(&Add::new(RD, RS1, RS2_POS));
-        assert_eq!(state.regfile.read(RD), RS1_VAL + RS2_VAL_POS);
+        assert_eq!(
+            i32::from(state.regfile.read(RD)),
+            i32::from(RS1_VAL) + i32::from(RS2_VAL_POS)
+        );
         state.apply_inst(&Add::new(RD, RS1, RS2_NEG));
-        assert_eq!(state.regfile.read(RD), RS1_VAL - 1);
+        assert_eq!(i32::from(state.regfile.read(RD)), i32::from(RS1_VAL) - 1);
     }
 
     #[test]
     fn test_addi() {
         let mut state = get_init_state();
         state.apply_inst(&Addi::new(RD, RS1, -504i32 as u32));
-        assert_eq!(state.regfile.read(RD), RS1_VAL - 504);
+        assert_eq!(i32::from(state.regfile.read(RD)), i32::from(RS1_VAL) - 504);
         state.apply_inst(&Addi::new(RD, RS1, -1i32 as u32));
-        assert_eq!(state.regfile.read(RD), RS1_VAL - 1);
+        assert_eq!(i32::from(state.regfile.read(RD)), i32::from(RS1_VAL) - 1);
         state.apply_inst(&Addi::new(RD, RS1, -1024i32 as u32));
-        assert_eq!(state.regfile.read(RD) as i32, (RS1_VAL as i32) - 1024);
+        assert_eq!(i32::from(state.regfile.read(RD)), i32::from(RS1_VAL) - 1024);
     }
 }
 

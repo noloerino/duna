@@ -36,13 +36,18 @@ impl BitStr32 {
         BitStr32::new(self.value >> i as u32, 1)
     }
 
-    pub fn as_i32(self) -> i32 {
+    /// Sign extends the value and stores it in a DataWord.
+    pub fn to_sgn_data_word(self) -> DataWord {
         let sign_mask = !((1 << self.len as u32) - 1);
-        (if self.index(self.len - 1).value == 1 {
+        DataWord::from(if self.index(self.len - 1).value == 1 {
             self.value | sign_mask
         } else {
             self.value
-        }) as i32
+        })
+    }
+
+    pub fn as_i32(self) -> i32 {
+        i32::from(self.to_sgn_data_word())
     }
 
     pub const fn as_u32(self) -> u32 {
@@ -54,6 +59,56 @@ impl Add for BitStr32 {
     type Output = Self;
     fn add(self, other: Self) -> Self {
         self.concat(other)
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+/// Represents a 32-bit word of data that can be stored in a register.
+/// This struct is used in place of a typealias to force call sites to make clear
+/// whether desired behavior is that of a signed or unsigned number.
+/// Note that Rust casts between int types of the same size is specified to be a no-op.
+/// https://doc.rust-lang.org/nomicon/casts.html
+pub struct DataWord {
+    value: u32,
+}
+
+impl DataWord {
+    /// Returns a DataWord of zero.
+    pub const fn zero() -> DataWord {
+        DataWord { value: 0 }
+    }
+
+    /// Returns the result of taking the 2's complement negation of the DataWord.
+    pub const fn neg(self) -> DataWord {
+        DataWord {
+            value: !self.value + 1,
+        }
+    }
+}
+
+impl From<u32> for DataWord {
+    fn from(value: u32) -> DataWord {
+        DataWord { value }
+    }
+}
+
+impl From<i32> for DataWord {
+    fn from(value: i32) -> DataWord {
+        DataWord {
+            value: value as u32,
+        }
+    }
+}
+
+impl From<DataWord> for u32 {
+    fn from(value: DataWord) -> u32 {
+        value.value
+    }
+}
+
+impl From<DataWord> for i32 {
+    fn from(value: DataWord) -> i32 {
+        value.value as i32
     }
 }
 
@@ -119,34 +174,33 @@ impl ByteAddress {
 }
 
 pub type WordAddress = u32;
-pub type Word = u32;
 
 const REGFILE_SIZE: usize = 32;
 
 pub struct RegFile {
-    store: [Word; REGFILE_SIZE],
+    store: [DataWord; REGFILE_SIZE],
 }
 
 impl RegFile {
     fn new() -> RegFile {
         RegFile {
-            store: [0; REGFILE_SIZE],
+            store: [DataWord::zero(); REGFILE_SIZE],
         }
     }
 
-    pub fn set(&mut self, rd: IRegister, val: Word) {
+    pub fn set(&mut self, rd: IRegister, val: DataWord) {
         if rd != IRegister::Zero {
             self.store[rd.to_usize()] = val;
         }
     }
 
-    pub fn read(&self, rs: IRegister) -> Word {
+    pub fn read(&self, rs: IRegister) -> DataWord {
         self.store[rs.to_usize()]
     }
 }
 
 pub struct Memory {
-    store: HashMap<WordAddress, Word>,
+    store: HashMap<WordAddress, DataWord>,
 }
 
 impl Memory {
@@ -156,15 +210,15 @@ impl Memory {
         }
     }
 
-    pub fn set_word(&mut self, addr: WordAddress, value: Word) {
+    pub fn set_word(&mut self, addr: WordAddress, value: DataWord) {
         self.store.insert(addr, value);
     }
 
-    pub fn get_word(&self, addr: WordAddress) -> Word {
+    pub fn get_word(&self, addr: WordAddress) -> DataWord {
         if let Some(&v) = self.store.get(&addr) {
             v
         } else {
-            0
+            DataWord::zero()
         }
     }
 }
@@ -207,8 +261,8 @@ pub struct StateChange {
     pub old_pc: WordAddress,
     pub new_pc: WordAddress,
     pub change_target: StateChangeTarget,
-    pub old_value: Word,
-    pub new_value: Word,
+    pub old_value: DataWord,
+    pub new_value: DataWord,
 }
 
 impl StateChange {
@@ -216,7 +270,7 @@ impl StateChange {
         state: &ProgramState,
         new_pc: WordAddress,
         tgt: StateChangeTarget,
-        new: Word,
+        new: DataWord,
     ) -> StateChange {
         StateChange {
             old_pc: state.pc,
@@ -230,7 +284,7 @@ impl StateChange {
         }
     }
 
-    fn new_pc_p4(state: &ProgramState, tgt: StateChangeTarget, new: Word) -> StateChange {
+    fn new_pc_p4(state: &ProgramState, tgt: StateChangeTarget, new: DataWord) -> StateChange {
         StateChange::new(state, state.pc + 4, tgt, new)
     }
 
@@ -238,16 +292,16 @@ impl StateChange {
         state: &ProgramState,
         new_pc: WordAddress,
         reg: IRegister,
-        val: Word,
+        val: DataWord,
     ) -> StateChange {
         StateChange::new(state, new_pc, StateChangeTarget::RegChange(reg), val)
     }
 
-    pub fn reg_write_pc_p4(state: &ProgramState, reg: IRegister, val: Word) -> StateChange {
+    pub fn reg_write_pc_p4(state: &ProgramState, reg: IRegister, val: DataWord) -> StateChange {
         StateChange::new_pc_p4(state, StateChangeTarget::RegChange(reg), val)
     }
 
-    pub fn mem_write_op(state: &ProgramState, addr: WordAddress, val: Word) -> StateChange {
+    pub fn mem_write_op(state: &ProgramState, addr: WordAddress, val: DataWord) -> StateChange {
         StateChange::new_pc_p4(state, StateChangeTarget::MemChange(addr), val)
     }
 }
