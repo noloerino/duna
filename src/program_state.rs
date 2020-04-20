@@ -1,3 +1,4 @@
+use crate::instruction::*;
 use std::cmp::{max, min};
 use std::collections::HashMap;
 use std::ops::Add;
@@ -180,6 +181,18 @@ impl ProgramState {
             pc: 0,
             regfile: RegFile::new(),
             memory: Memory::new(),
+        }
+    }
+
+    pub fn apply_inst(&mut self, inst: &ConcreteInst) {
+        self.apply_diff(&(*inst.eval)(self));
+    }
+
+    pub fn apply_diff(&mut self, diff: &StateChange) {
+        self.pc = diff.new_pc;
+        match diff.change_target {
+            StateChangeTarget::RegChange(reg) => self.regfile.set(reg, diff.new_value),
+            StateChangeTarget::MemChange(addr) => self.memory.set_word(addr, diff.new_value),
         }
     }
 }

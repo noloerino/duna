@@ -216,7 +216,7 @@ pub trait ITypeLoad {
                 let addr = if offs >= 0 {
                     rs1_val + offs as u32
                 } else {
-                    rs1_val - ((!offs.wrapping_abs() + 1) as u32)
+                    rs1_val - (offs.wrapping_abs() as u32)
                 };
                 let new_rd_val = Self::eval(addr);
                 StateChange::mem_write_op(state, addr, new_rd_val)
