@@ -133,7 +133,7 @@ impl ConcreteInst {
                 imm,
                 rd,
                 ..
-            } => imm.slice(31, 12) + rd.to_bit_str() + opcode,
+            } => imm + rd.to_bit_str() + opcode,
             ConcreteInstData::J {
                 fields: JInstFields { opcode },
                 imm,
@@ -168,8 +168,8 @@ pub trait RType {
 }
 
 pub trait IType {
-    fn new(rd: IRegister, rs1: IRegister, imm: u32) -> ConcreteInst {
-        let imm_vec = BitStr32::new(imm, 12);
+    fn new(rd: IRegister, rs1: IRegister, imm: DataWord) -> ConcreteInst {
+        let imm_vec = imm.to_bit_str(12);
         ConcreteInst {
             eval: Box::new(move |state| Self::eval(state, rd, rs1, imm_vec)),
             data: ConcreteInstData::I {
@@ -185,8 +185,8 @@ pub trait IType {
 }
 
 pub trait ITypeArith {
-    fn new(rd: IRegister, rs1: IRegister, imm: u32) -> ConcreteInst {
-        let imm_vec = BitStr32::new(imm, 12);
+    fn new(rd: IRegister, rs1: IRegister, imm: DataWord) -> ConcreteInst {
+        let imm_vec = imm.to_bit_str(12);
         ConcreteInst {
             eval: Box::new(move |state| {
                 let new_rd_val = Self::eval(state.regfile.read(rs1), imm_vec);
@@ -207,8 +207,8 @@ pub trait ITypeArith {
 }
 
 pub trait ITypeLoad {
-    fn new(rd: IRegister, rs1: IRegister, imm: u32) -> ConcreteInst {
-        let imm_vec = BitStr32::new(imm, 12);
+    fn new(rd: IRegister, rs1: IRegister, imm: DataWord) -> ConcreteInst {
+        let imm_vec = imm.to_bit_str(12);
         ConcreteInst {
             eval: Box::new(move |state| {
                 let offs = imm_vec.to_sgn_data_word();
@@ -238,8 +238,8 @@ pub trait ITypeLoad {
 // pub trait EnvironInst {}
 
 pub trait SType {
-    fn new(rs1: IRegister, rs2: IRegister, imm: u32) -> ConcreteInst {
-        let imm_vec = BitStr32::new(imm, 12);
+    fn new(rs1: IRegister, rs2: IRegister, imm: DataWord) -> ConcreteInst {
+        let imm_vec = imm.to_bit_str(12);
         ConcreteInst {
             eval: Box::new(move |state| Self::eval(state, rs1, rs2, imm_vec)),
             data: ConcreteInstData::S {
@@ -255,8 +255,8 @@ pub trait SType {
 }
 
 pub trait BType {
-    fn new(rs1: IRegister, rs2: IRegister, imm: u32) -> ConcreteInst {
-        let imm_vec = BitStr32::new(imm, 13);
+    fn new(rs1: IRegister, rs2: IRegister, imm: DataWord) -> ConcreteInst {
+        let imm_vec = imm.to_bit_str(13);
         ConcreteInst {
             eval: Box::new(move |state| Self::eval(state, rs1, rs2, imm_vec)),
             data: ConcreteInstData::B {
@@ -273,14 +273,14 @@ pub trait BType {
 }
 
 pub trait UType {
-    fn new(rd: IRegister, imm: u32) -> ConcreteInst {
-        let imm_vec = BitStr32::new(imm, 27);
+    fn new(rd: IRegister, imm: DataWord) -> ConcreteInst {
+        let imm_vec = imm.to_bit_str(20);
         ConcreteInst {
             eval: Box::new(move |state| Self::eval(state, rd, imm_vec)),
             data: ConcreteInstData::U {
                 fields: Self::inst_fields(),
                 rd,
-                imm: imm_vec, // chopping LSB is deferred to to_machine_code
+                imm: imm_vec,
             },
         }
     }
@@ -290,8 +290,8 @@ pub trait UType {
 }
 
 pub trait JType {
-    fn new(rd: IRegister, imm: u32) -> ConcreteInst {
-        let imm_vec = BitStr32::new(imm, 21);
+    fn new(rd: IRegister, imm: DataWord) -> ConcreteInst {
+        let imm_vec = imm.to_bit_str(20);
         ConcreteInst {
             eval: Box::new(move |state| Self::eval(state, rd, imm_vec)),
             data: ConcreteInstData::J {

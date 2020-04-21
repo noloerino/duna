@@ -1,7 +1,7 @@
 use crate::instruction::*;
 use crate::isa::*;
 use crate::program_state::IRegister::*;
-use crate::program_state::{ProgramState, StateChange};
+use crate::program_state::{DataWord, ProgramState};
 
 mod instruction;
 mod isa;
@@ -10,10 +10,9 @@ mod parser;
 mod program_state;
 
 fn main() {
-    let instructions = [Addi::new(T0, T1, 0)];
-    let state = ProgramState::new();
-    let mut diffs = Vec::<StateChange>::new();
+    let instructions = [Addi::new(T0, T1, DataWord::zero())];
+    let mut state = ProgramState::new();
     for inst in &instructions {
-        diffs.push((*inst.eval)(&state))
+        state.apply_inst(inst);
     }
 }

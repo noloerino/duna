@@ -40,6 +40,12 @@ impl BitStr32 {
         BitStr32::new(self.value >> i as u32, 1)
     }
 
+    /// Zero pads the LSB of this BitStr32.
+    pub const fn zero_pad_lsb(self) -> BitStr32 {
+        let shamt = (32 - self.len) as u32;
+        BitStr32::new(self.value << shamt, 32)
+    }
+
     /// Sign extends the value and stores it in a DataWord.
     pub fn to_sgn_data_word(self) -> DataWord {
         let sign_mask = u32::max_value() << self.len as u32;
@@ -87,6 +93,10 @@ impl DataWord {
         DataWord {
             value: !self.value + 1,
         }
+    }
+
+    pub const fn to_bit_str(self, size: u8) -> BitStr32 {
+        BitStr32::new(self.value, size)
     }
 }
 
@@ -250,48 +260,56 @@ impl ProgramState {
 
     pub fn apply_diff(&mut self, diff: &StateChange) {
         self.pc = diff.new_pc;
-        match diff.change_target {
-            StateChangeTarget::RegChange(reg) => self.regfile.set(reg, diff.new_value),
-            StateChangeTarget::MemChange(addr) => self.memory.set_word(addr, diff.new_value),
+        match diff.change_type {
+            StateChangeType::RegChange(
+                reg,
+                WordChange {
+                    old_value: _,
+                    new_value,
+                },
+            ) => self.regfile.set(reg, new_value),
+            StateChangeType::MemChange(
+                addr,
+                WordChange {
+                    old_value: _,
+                    new_value,
+                },
+            ) => self.memory.set_word(addr, new_value),
+            StateChangeType::NoRegOrMemChange => (),
         }
     }
 }
 
 #[derive(Copy, Clone)]
-pub enum StateChangeTarget {
-    RegChange(IRegister),
-    MemChange(WordAddress),
+enum StateChangeType {
+    NoRegOrMemChange,
+    RegChange(IRegister, WordChange),
+    MemChange(WordAddress, WordChange),
+}
+
+#[derive(Copy, Clone)]
+struct WordChange {
+    old_value: DataWord,
+    new_value: DataWord,
 }
 
 pub struct StateChange {
-    pub old_pc: WordAddress,
-    pub new_pc: WordAddress,
-    pub change_target: StateChangeTarget,
-    pub old_value: DataWord,
-    pub new_value: DataWord,
+    old_pc: WordAddress,
+    new_pc: WordAddress,
+    change_type: StateChangeType,
 }
 
 impl StateChange {
-    fn new(
-        state: &ProgramState,
-        new_pc: WordAddress,
-        tgt: StateChangeTarget,
-        new: DataWord,
-    ) -> StateChange {
+    fn new(state: &ProgramState, new_pc: WordAddress, tgt: StateChangeType) -> StateChange {
         StateChange {
             old_pc: state.pc,
             new_pc,
-            change_target: tgt,
-            old_value: match tgt {
-                StateChangeTarget::RegChange(reg) => state.regfile.read(reg),
-                StateChangeTarget::MemChange(addr) => state.memory.get_word(addr),
-            },
-            new_value: new,
+            change_type: tgt,
         }
     }
 
-    fn new_pc_p4(state: &ProgramState, tgt: StateChangeTarget, new: DataWord) -> StateChange {
-        StateChange::new(state, state.pc + 4, tgt, new)
+    fn new_pc_p4(state: &ProgramState, tgt: StateChangeType) -> StateChange {
+        StateChange::new(state, state.pc + 4, tgt)
     }
 
     pub fn reg_write_op(
@@ -300,15 +318,43 @@ impl StateChange {
         reg: IRegister,
         val: DataWord,
     ) -> StateChange {
-        StateChange::new(state, new_pc, StateChangeTarget::RegChange(reg), val)
+        StateChange::new(
+            state,
+            new_pc,
+            StateChangeType::RegChange(
+                reg,
+                WordChange {
+                    old_value: state.regfile.read(reg),
+                    new_value: val,
+                },
+            ),
+        )
     }
 
     pub fn reg_write_pc_p4(state: &ProgramState, reg: IRegister, val: DataWord) -> StateChange {
-        StateChange::new_pc_p4(state, StateChangeTarget::RegChange(reg), val)
+        StateChange::new_pc_p4(
+            state,
+            StateChangeType::RegChange(
+                reg,
+                WordChange {
+                    old_value: state.regfile.read(reg),
+                    new_value: val,
+                },
+            ),
+        )
     }
 
     pub fn mem_write_op(state: &ProgramState, addr: WordAddress, val: DataWord) -> StateChange {
-        StateChange::new_pc_p4(state, StateChangeTarget::MemChange(addr), val)
+        StateChange::new_pc_p4(
+            state,
+            StateChangeType::MemChange(
+                addr,
+                WordChange {
+                    old_value: state.memory.get_word(addr),
+                    new_value: val,
+                },
+            ),
+        )
     }
 }
 
@@ -336,5 +382,11 @@ mod test {
         let bv = BitStr32::new(all_ones, 12);
         assert_eq!(bv.as_u32(), 0xFFF);
         assert_eq!(bv.as_i32(), all_ones as i32);
+    }
+
+    #[test]
+    fn test_bv_zero_pad() {
+        let bv = BitStr32::new(0x7FF, 12);
+        assert_eq!(bv.zero_pad_lsb().as_u32(), 0x7FF0_0000);
     }
 }
