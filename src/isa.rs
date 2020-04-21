@@ -9,8 +9,8 @@ fn f7(val: u32) -> BitStr32 {
     BitStr32::new(val, 7)
 }
 
-const R_OPCODE: BitStr32 = BitStr32::new(0b0110011, 7);
-const I_OPCODE_ARITH: BitStr32 = BitStr32::new(0b0010011, 7);
+const R_OPCODE: BitStr32 = BitStr32::new(0b011_0011, 7);
+const I_OPCODE_ARITH: BitStr32 = BitStr32::new(0b001_0011, 7);
 
 pub struct Add;
 impl RType for Add {
@@ -45,8 +45,8 @@ mod test {
     use crate::isa::*;
     use crate::program_state::IRegister::*;
 
-    const RS1_VAL: DataWord = DataWord::from(1023);
-    const RS2_VAL_POS: DataWord = DataWord::from(49);
+    const RS1_VAL: i32 = 1023;
+    const RS2_VAL_POS: i32 = 49;
     const RD: IRegister = T2;
     const RS1: IRegister = T0;
     const RS2_POS: IRegister = T1;
@@ -54,10 +54,17 @@ mod test {
 
     fn get_init_state() -> ProgramState {
         let mut state = ProgramState::new();
-        state.regfile.set(RS1, RS1_VAL);
-        state.regfile.set(RS2_POS, RS2_VAL_POS);
-        state.regfile.set(RS2_NEG, DataWord::from(-1i32 as u32));
+        state.regfile.set(RS1, DataWord::from(RS1_VAL));
+        state.regfile.set(RS2_POS, DataWord::from(RS2_VAL_POS));
+        state.regfile.set(RS2_NEG, DataWord::from(-1i32));
         state
+    }
+
+    #[test]
+    fn test_to_binary() {
+        // add s0, s1, s2
+        const ADD_HEX: u32 = 0x0124_8433;
+        assert_eq!(Add::new(S0, S1, S2).to_machine_code(), ADD_HEX);
     }
 
     #[test]

@@ -15,6 +15,7 @@ fn string_from_utf8(cs: Vec<u8>) -> String {
 
 fn build_comment(iter: &mut dyn Iterator<Item = char>) -> Token {
     let mut cs = Vec::<u8>::new();
+    #[allow(clippy::while_let_on_iterator)]
     while let Some(c) = iter.next() {
         match c {
             '\n' => break,
@@ -26,6 +27,7 @@ fn build_comment(iter: &mut dyn Iterator<Item = char>) -> Token {
 
 fn build_name(iter: &mut dyn Iterator<Item = char>) -> Token {
     let mut cs = Vec::<u8>::new();
+    #[allow(clippy::while_let_on_iterator)]
     while let Some(c) = iter.next() {
         if c.is_whitespace() {
             break;

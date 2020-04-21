@@ -81,7 +81,7 @@ enum ConcreteInstData {
 }
 
 impl ConcreteInst {
-    fn to_int(self) -> u32 {
+    pub fn to_machine_code(&self) -> u32 {
         match self.data {
             ConcreteInstData::R {
                 fields:
@@ -263,7 +263,7 @@ pub trait BType {
                 fields: Self::inst_fields(),
                 rs1,
                 rs2,
-                imm: imm_vec, // chopping LSB is deferred to to_int
+                imm: imm_vec, // chopping LSB is deferred to to_machine_code
             },
         }
     }
@@ -280,7 +280,7 @@ pub trait UType {
             data: ConcreteInstData::U {
                 fields: Self::inst_fields(),
                 rd,
-                imm: imm_vec, // chopping LSB is deferred to to_int
+                imm: imm_vec, // chopping LSB is deferred to to_machine_code
             },
         }
     }
@@ -297,7 +297,7 @@ pub trait JType {
             data: ConcreteInstData::J {
                 fields: Self::inst_fields(),
                 rd,
-                imm: imm_vec, // chopping LSB is deferred to to_int
+                imm: imm_vec, // chopping LSB is deferred to to_machine_code
             },
         }
     }

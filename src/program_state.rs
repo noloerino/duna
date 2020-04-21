@@ -12,9 +12,13 @@ pub struct BitStr32 {
 
 impl BitStr32 {
     pub const fn new(value: u32, len: u8) -> BitStr32 {
+        // Mask off upper bits
+        // Shift by 32 is undef behavior, so need to use checked version; sadly it's not const fn
+        // let truncated = value & !(u32::max_value().checked_shl(len as u32).unwrap_or(0));
+        let shamt = (32 - len) as u32;
+        let truncated = (value << shamt) >> shamt;
         BitStr32 {
-            // Mask off upper bits
-            value: value & ((1 << len as u32) - 1),
+            value: truncated,
             len,
         }
     }
@@ -38,7 +42,7 @@ impl BitStr32 {
 
     /// Sign extends the value and stores it in a DataWord.
     pub fn to_sgn_data_word(self) -> DataWord {
-        let sign_mask = !((1 << self.len as u32) - 1);
+        let sign_mask = u32::max_value() << self.len as u32;
         DataWord::from(if self.index(self.len - 1).value == 1 {
             self.value | sign_mask
         } else {
@@ -115,15 +119,15 @@ impl From<DataWord> for i32 {
 #[allow(dead_code)]
 #[derive(Copy, Clone, PartialEq)]
 pub enum IRegister {
-    Zero = 0,
-    Ra,
-    Sp,
-    Gp,
-    Tp,
+    ZERO = 0,
+    RA,
+    SP,
+    GP,
+    TP,
     T0,
     T1,
     T2,
-    Fp,
+    FP,
     S1,
     A0,
     A1,
@@ -148,6 +152,8 @@ pub enum IRegister {
     T5,
     T6,
 }
+
+pub const S0: IRegister = IRegister::FP;
 
 impl IRegister {
     pub const fn to_bit_str(self) -> BitStr32 {
@@ -189,7 +195,7 @@ impl RegFile {
     }
 
     pub fn set(&mut self, rd: IRegister, val: DataWord) {
-        if rd != IRegister::Zero {
+        if rd != IRegister::ZERO {
             self.store[rd.to_usize()] = val;
         }
     }
@@ -274,7 +280,7 @@ impl StateChange {
     ) -> StateChange {
         StateChange {
             old_pc: state.pc,
-            new_pc: new_pc,
+            new_pc,
             change_target: tgt,
             old_value: match tgt {
                 StateChangeTarget::RegChange(reg) => state.regfile.read(reg),
@@ -316,6 +322,12 @@ mod test {
         assert_eq!(bv.as_i32(), -4);
         let wrap = BitStr32::new(-1i32 as u32, 12);
         assert_eq!(wrap.as_i32(), -1);
+    }
+
+    #[test]
+    fn test_full_bv() {
+        let bv = BitStr32::new(0xFFFF_FFFF, 32);
+        assert_eq!(bv.as_u32(), 0xFFFF_FFFF);
     }
 
     #[test]
