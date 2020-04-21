@@ -258,7 +258,13 @@ pub trait BType {
     fn new(rs1: IRegister, rs2: IRegister, imm: DataWord) -> ConcreteInst {
         let imm_vec = imm.to_bit_str(13);
         ConcreteInst {
-            eval: Box::new(move |state| Self::eval(state, rs1, rs2, imm_vec)),
+            eval: Box::new(move |state| {
+                if Self::eval(state.regfile.read(rs1), state.regfile.read(rs2)) {
+                    StateChange::pc_update_op(state, (state.pc as i32 + imm_vec.as_i32()) as u32)
+                } else {
+                    StateChange::noop(state)
+                }
+            }),
             data: ConcreteInstData::B {
                 fields: Self::inst_fields(),
                 rs1,
@@ -269,7 +275,9 @@ pub trait BType {
     }
 
     fn inst_fields() -> BInstFields;
-    fn eval(state: &ProgramState, rs1: IRegister, rs2: IRegister, imm: BitStr32) -> StateChange;
+
+    /// Returns true if the branch should be taken.
+    fn eval(rs1_val: DataWord, rs2_val: DataWord) -> bool;
 }
 
 pub trait UType {

@@ -11,6 +11,7 @@ fn f7(val: u32) -> BitStr32 {
 
 const R_OPCODE: BitStr32 = BitStr32::new(0b011_0011, 7);
 const I_OPCODE_ARITH: BitStr32 = BitStr32::new(0b001_0011, 7);
+const B_OPCODE: BitStr32 = BitStr32::new(0b110_0011, 7);
 
 pub struct Add;
 impl RType for Add {
@@ -86,6 +87,90 @@ impl UType for Auipc {
     }
 }
 
+pub struct Beq;
+impl BType for Beq {
+    fn inst_fields() -> BInstFields {
+        BInstFields {
+            opcode: B_OPCODE,
+            funct3: f3(0),
+        }
+    }
+
+    fn eval(rs1_val: DataWord, rs2_val: DataWord) -> bool {
+        rs1_val == rs2_val
+    }
+}
+
+pub struct Bge;
+impl BType for Bge {
+    fn inst_fields() -> BInstFields {
+        BInstFields {
+            opcode: B_OPCODE,
+            funct3: f3(0b101),
+        }
+    }
+
+    fn eval(rs1_val: DataWord, rs2_val: DataWord) -> bool {
+        i32::from(rs1_val) >= i32::from(rs2_val)
+    }
+}
+
+pub struct Bgeu;
+impl BType for Bgeu {
+    fn inst_fields() -> BInstFields {
+        BInstFields {
+            opcode: B_OPCODE,
+            funct3: f3(0b111),
+        }
+    }
+
+    fn eval(rs1_val: DataWord, rs2_val: DataWord) -> bool {
+        u32::from(rs1_val) >= u32::from(rs2_val)
+    }
+}
+
+pub struct Blt;
+impl BType for Blt {
+    fn inst_fields() -> BInstFields {
+        BInstFields {
+            opcode: B_OPCODE,
+            funct3: f3(0b100),
+        }
+    }
+
+    fn eval(rs1_val: DataWord, rs2_val: DataWord) -> bool {
+        i32::from(rs1_val) < i32::from(rs2_val)
+    }
+}
+
+pub struct Bltu;
+impl BType for Bltu {
+    fn inst_fields() -> BInstFields {
+        BInstFields {
+            opcode: B_OPCODE,
+            funct3: f3(0b110),
+        }
+    }
+
+    fn eval(rs1_val: DataWord, rs2_val: DataWord) -> bool {
+        u32::from(rs1_val) < u32::from(rs2_val)
+    }
+}
+
+pub struct Bne;
+impl BType for Bne {
+    fn inst_fields() -> BInstFields {
+        BInstFields {
+            opcode: B_OPCODE,
+            funct3: f3(0b001),
+        }
+    }
+
+    fn eval(rs1_val: DataWord, rs2_val: DataWord) -> bool {
+        rs1_val != rs2_val
+    }
+}
+
 #[cfg(test)]
 mod test {
     use crate::isa::*;
@@ -96,6 +181,7 @@ mod test {
     const RS2_VAL_NEG: i32 = -1;
     const RD: IRegister = T2;
     const RS1: IRegister = T0;
+    const RS2: IRegister = T3;
     const RS2_POS: IRegister = T1;
     const RS2_NEG: IRegister = S1;
 
@@ -105,6 +191,13 @@ mod test {
         state.regfile.set(RS2_POS, DataWord::from(RS2_VAL_POS));
         state.regfile.set(RS2_NEG, DataWord::from(RS2_VAL_NEG));
         state
+    }
+
+    #[test]
+    fn test_write_x0() {
+        let mut state = ProgramState::new();
+        state.apply_inst(&Addi::new(ZERO, ZERO, DataWord::from(0x100)));
+        assert_eq!(i32::from(state.regfile.read(ZERO)), 0);
     }
 
     struct RTestData {
@@ -136,7 +229,7 @@ mod test {
     }
 
     #[test]
-    fn test_to_binary() {
+    fn test_to_machine_code() {
         // add s0, s1, s2
         const ADD_HEX: u32 = 0x0124_8433;
         assert_eq!(Add::new(S0, S1, S2).to_machine_code(), ADD_HEX);
@@ -151,6 +244,12 @@ mod test {
         assert_eq!(
             Auipc::new(S1, DataWord::from(10)).to_machine_code(),
             AUIPC_HEX
+        );
+        // bne s1, s2, 4
+        const BNE_HEX: u32 = 0x0124_9263;
+        assert_eq!(
+            Bne::new(S1, S2, DataWord::from(4)).to_machine_code(),
+            BNE_HEX
         );
     }
 
@@ -221,7 +320,7 @@ mod test {
     }
 
     #[test]
-    fn test_u_type() {
+    fn test_u_type_insts() {
         let mut state = get_init_state();
         state.pc = 0x10FC_0000;
         state.apply_inst(&Auipc::new(RD, DataWord::from(0x10)));
@@ -230,16 +329,148 @@ mod test {
             0x10FC_0000 + (0x10 << 12)
         );
     }
+
+    struct BTestData {
+        rs1_val: DataWord,
+        rs2_val: DataWord,
+        should_take: bool,
+    }
+
+    /// Tests a branch instruction. Taken jumps move forward by 0x100.
+    fn test_b_type<T: BType>(state: &mut ProgramState, args: Vec<BTestData>) {
+        let offs = DataWord::from(0x100);
+        for BTestData {
+            rs1_val,
+            rs2_val,
+            should_take,
+        } in args
+        {
+            let exp_new_pc = state.pc + if should_take { u32::from(offs) } else { 4 };
+            state.regfile.set(RS1, rs1_val);
+            state.regfile.set(RS2, rs2_val);
+            state.apply_inst(&T::new(RS1, RS2, offs));
+            assert_eq!(exp_new_pc, state.pc);
+        }
+    }
+
+    #[test]
+    fn test_b_type_insts() {
+        let mut state = ProgramState::new();
+        test_b_type::<Beq>(
+            &mut state,
+            vec![
+                BTestData {
+                    rs1_val: DataWord::from(100),
+                    rs2_val: DataWord::from(100),
+                    should_take: true,
+                },
+                BTestData {
+                    rs1_val: DataWord::from(100),
+                    rs2_val: DataWord::from(101),
+                    should_take: false,
+                },
+            ],
+        );
+        test_b_type::<Bge>(
+            &mut state,
+            vec![
+                BTestData {
+                    rs1_val: DataWord::from(100),
+                    rs2_val: DataWord::from(-1),
+                    should_take: true,
+                },
+                BTestData {
+                    rs1_val: DataWord::from(-1),
+                    rs2_val: DataWord::from(100),
+                    should_take: false,
+                },
+                BTestData {
+                    rs1_val: DataWord::from(100),
+                    rs2_val: DataWord::from(100),
+                    should_take: true,
+                },
+            ],
+        );
+        test_b_type::<Bgeu>(
+            &mut state,
+            vec![
+                BTestData {
+                    rs1_val: DataWord::from(-1), // max uint
+                    rs2_val: DataWord::from(100),
+                    should_take: true,
+                },
+                BTestData {
+                    rs1_val: DataWord::from(100),
+                    rs2_val: DataWord::from(-1), // max uint
+                    should_take: false,
+                },
+                BTestData {
+                    rs1_val: DataWord::from(100),
+                    rs2_val: DataWord::from(100),
+                    should_take: true,
+                },
+            ],
+        );
+        test_b_type::<Blt>(
+            &mut state,
+            vec![
+                BTestData {
+                    rs1_val: DataWord::from(-1),
+                    rs2_val: DataWord::from(100),
+                    should_take: true,
+                },
+                BTestData {
+                    rs1_val: DataWord::from(100),
+                    rs2_val: DataWord::from(-1),
+                    should_take: false,
+                },
+                BTestData {
+                    rs1_val: DataWord::from(100),
+                    rs2_val: DataWord::from(100),
+                    should_take: false,
+                },
+            ],
+        );
+        test_b_type::<Bltu>(
+            &mut state,
+            vec![
+                BTestData {
+                    rs1_val: DataWord::from(-1), // max uint
+                    rs2_val: DataWord::from(100),
+                    should_take: false,
+                },
+                BTestData {
+                    rs1_val: DataWord::from(100),
+                    rs2_val: DataWord::from(-1), // max uint
+                    should_take: true,
+                },
+                BTestData {
+                    rs1_val: DataWord::from(100),
+                    rs2_val: DataWord::from(100),
+                    should_take: false,
+                },
+            ],
+        );
+        test_b_type::<Bne>(
+            &mut state,
+            vec![
+                BTestData {
+                    rs1_val: DataWord::from(-1),
+                    rs2_val: DataWord::from(100),
+                    should_take: true,
+                },
+                BTestData {
+                    rs1_val: DataWord::from(100),
+                    rs2_val: DataWord::from(100),
+                    should_take: false,
+                },
+            ],
+        );
+    }
 }
 
 #[allow(dead_code)]
 pub enum Instruction {
-    Beq,
-    Bge,
-    Bgeu,
-    Blt,
-    Bltu,
-    Bne,
     Ebreak,
     Ecall,
     Jal,

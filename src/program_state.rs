@@ -72,7 +72,7 @@ impl Add for BitStr32 {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 /// Represents a 32-bit word of data that can be stored in a register.
 /// This struct is used in place of a typealias to force call sites to make clear
 /// whether desired behavior is that of a signed or unsigned number.
@@ -310,6 +310,14 @@ impl StateChange {
 
     fn new_pc_p4(state: &ProgramState, tgt: StateChangeType) -> StateChange {
         StateChange::new(state, state.pc + 4, tgt)
+    }
+
+    pub fn noop(state: &ProgramState) -> StateChange {
+        StateChange::new_pc_p4(state, StateChangeType::NoRegOrMemChange)
+    }
+
+    pub fn pc_update_op(state: &ProgramState, new_pc: WordAddress) -> StateChange {
+        StateChange::new(state, new_pc, StateChangeType::NoRegOrMemChange)
     }
 
     pub fn reg_write_op(
