@@ -38,7 +38,10 @@ fn build_name(iter: &mut dyn Iterator<Item = char>) -> Token {
 }
 
 fn lex_file(path: String) -> TokenStream {
-    let contents = fs::read_to_string(path).expect("Failed to open file");
+    lex_string(fs::read_to_string(path).expect("Failed to open file"))
+}
+
+fn lex_string(contents: String) -> TokenStream {
     let mut toks = Vec::<Token>::new();
     let iter = &mut contents.chars();
     while let Some(c) = iter.next() {
