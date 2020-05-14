@@ -4,5 +4,6 @@ A 32-bit RISCV emulator built in Rust. Inspired by [Venus](https://github.com/Th
 ## Roadmap
 - [ ] Support base ISA
 - [ ] Simulate ecalls
-- [ ] Provide debugger support
+- [ ] Run [compliance tests](https://github.com/riscv/riscv-compliance)
+- [ ] Provide debugger support a la GDB, possibly valgrind-like tools as well?
 - [ ] Implement peephole optimizations + visualizations
