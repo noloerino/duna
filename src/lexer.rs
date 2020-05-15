@@ -8,11 +8,17 @@ type LineNo = usize;
 // The offset of a token within a line.
 type LineOffs = usize;
 
+#[derive(Eq, PartialEq, Debug)]
+struct LexErrorData {
+    msg: String,
+    contents: String,
+}
+
+#[derive(Eq, PartialEq, Debug)]
 struct LexError {
     lineno: LineNo,
     offs: LineOffs,
-    msg: String,
-    contents: String,
+    data: LexErrorData,
 }
 
 #[derive(Eq, PartialEq, Debug)]
@@ -22,7 +28,23 @@ struct Token {
     data: TokenType,
 }
 
-#[allow(dead_code)]
+#[derive(Eq, PartialEq, Debug, Copy, Clone)]
+enum ImmRenderType {
+    Bin,
+    Hex,
+    Dec,
+}
+
+impl ImmRenderType {
+    fn radix(self) -> u32 {
+        match self {
+            ImmRenderType::Bin => 2,
+            ImmRenderType::Dec => 10,
+            ImmRenderType::Hex => 16,
+        }
+    }
+}
+
 #[derive(Eq, PartialEq, Debug)]
 enum TokenType {
     /// A token possibly representing the name of an instruction, reg, or branch target.
@@ -33,15 +55,15 @@ enum TokenType {
     SectionDef(String),
     Comment(String),
     Comma,
-    Immediate(i32),
+    Immediate(i32, ImmRenderType),
     LParen,
     RParen,
-    Newline,
 }
 
 const DELIMS: [char; 5] = ['#', ':', ',', '(', ')'];
 
 type TokenStream = Vec<Token>;
+type LineTokenStream = Vec<TokenStream>;
 type LineIter<'a> = Peekable<Enumerate<Chars<'a>>>;
 
 fn string_from_utf8(cs: Vec<u8>) -> String {
@@ -65,7 +87,7 @@ fn is_name_start(c: char) -> bool {
 }
 
 fn is_imm_start(c: char) -> bool {
-    c == '-' || c.is_ascii_digit()
+    c == '-' || c == '+' || c.is_ascii_digit()
 }
 
 fn build_comment(iter: &mut LineIter) -> TokenType {
@@ -112,19 +134,94 @@ fn build_name(iter: &mut LineIter, head: char) -> TokenType {
 }
 
 fn build_imm(iter: &mut LineIter, head: char) -> TokenType {
-    unimplemented!()
+    // determines whether we negate at end
+    let negate = head == '-';
+    let mut digits = Vec::<char>::new();
+    let mut fmt = ImmRenderType::Dec;
+    // first two chars are special because they determine the number format
+    let c1 = if head != '-' && head != '+' {
+        head
+    } else {
+        match iter.peek() {
+            Some((_, c_ref)) => {
+                let c = *c_ref;
+                if c.is_ascii_digit() {
+                    iter.next();
+                    c
+                } else {
+                    unimplemented!()
+                }
+            }
+            None => unimplemented!(),
+        }
+    };
+    match iter.peek() {
+        // if only one char, return it as base 10 literal
+        None => digits.push(c1),
+        Some((_, c_ref)) => {
+            let c = *c_ref;
+            // possibly look for format specifier
+            if c1 == '0' {
+                if c == 'x' {
+                    fmt = ImmRenderType::Hex;
+                } else if c == 'b' {
+                    fmt = ImmRenderType::Bin;
+                } else {
+                    println!("{}", c);
+                    // assume base 10
+                    if c.is_ascii_digit() {
+                        digits.push(c1);
+                        digits.push(c);
+                    } else {
+                        unimplemented!();
+                    }
+                }
+            } else {
+                // definitely base 10
+                if c.is_ascii_digit() {
+                    digits.push(c1);
+                    digits.push(c);
+                } else {
+                    unimplemented!()
+                }
+            }
+        }
+    }
+    iter.next();
+    while let Some((_, c_ref)) = iter.peek() {
+        let c = *c_ref;
+        let push: bool = match fmt {
+            ImmRenderType::Bin => c == '0' || c == '1',
+            ImmRenderType::Hex => c.is_ascii_hexdigit(),
+            ImmRenderType::Dec => c.is_ascii_digit(),
+        };
+        if push {
+            digits.push(c);
+            iter.next();
+        } else {
+            // quit
+            unimplemented!();
+        }
+    }
+    if let Ok(val) =
+        i32::from_str_radix(digits.into_iter().collect::<String>().as_str(), fmt.radix())
+    {
+        TokenType::Immediate(if negate { -val } else { val }, fmt)
+    } else {
+        unimplemented!()
+    }
 }
 
-fn lex_file(path: String) -> TokenStream {
+fn lex_file(path: String) -> LineTokenStream {
     lex_string(fs::read_to_string(path).expect("Failed to open file"))
 }
 
-fn lex_string(contents: String) -> TokenStream {
-    let mut toks = Vec::<Token>::new();
+fn lex_string(contents: String) -> LineTokenStream {
+    let mut toks = Vec::<TokenStream>::new();
     let lines = contents.as_str().lines();
     for (lineno, line) in lines.enumerate() {
         let iter = &mut line.chars().enumerate().peekable();
-        toks.extend(lex_line(iter, lineno));
+        toks.push(lex_line(iter, lineno));
     }
     toks
 }
@@ -140,7 +237,6 @@ fn lex_line(iter: &mut LineIter, lineno: LineNo) -> TokenStream {
             Some(build_imm(iter, c))
         } else {
             match c {
-                // rules for section definitions are same for rules of names
                 '.' => Some(build_section_def(iter)),
                 ',' => Some(TokenType::Comma),
                 '#' => Some(build_comment(iter)),
@@ -167,7 +263,7 @@ mod tests {
 
     #[test]
     fn test_simple_lex() {
-        let toks = lex_string("addi x0, x1, x2".to_string());
+        let toks = &lex_string("addi x0, x1, x2".to_string())[0];
         // check actual data
         assert_eq!(toks[0].data, TokenType::Name("addi".to_string()));
         assert_eq!(toks[1].data, TokenType::Name("x0".to_string()));
@@ -176,7 +272,7 @@ mod tests {
         assert_eq!(toks[4].data, TokenType::Comma);
         assert_eq!(toks[5].data, TokenType::Name("x2".to_string()));
         // check line offsets
-        for tok in &toks {
+        for tok in toks {
             assert_eq!(tok.lineno, 0);
         }
         assert_eq!(toks[0].offs, 0);
@@ -185,5 +281,26 @@ mod tests {
         assert_eq!(toks[3].offs, 9);
         assert_eq!(toks[4].offs, 11);
         assert_eq!(toks[5].offs, 13);
+    }
+
+    #[test]
+    fn test_imm_builder_good() {
+        use ImmRenderType::*;
+        let cases = vec![
+            ("0x123", Hex, 0x123),
+            ("0b101", Bin, 0b101),
+            ("3", Dec, 3),
+            ("874", Dec, 874),
+            ("-0x123", Hex, -0x123),
+            ("-0b101", Bin, -0b101),
+            ("-3", Dec, -3),
+            ("-874", Dec, -874),
+        ];
+        for (line, fmt, exp) in cases {
+            let iter = &mut line.chars().enumerate().peekable();
+            let (_, head) = iter.next().unwrap();
+            let result = build_imm(iter, head);
+            assert_eq!(result, TokenType::Immediate(exp, fmt));
+        }
     }
 }
