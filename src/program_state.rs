@@ -285,13 +285,13 @@ impl ProgramState {
     pub fn apply_diff(&mut self, diff: &StateChange) {
         self.pc = diff.new_pc;
         match diff.change_type {
-            StateChangeType::RegChange(reg, WordChange { new_value, .. }) => {
+            StateChangeType::Reg(reg, WordChange { new_value, .. }) => {
                 self.regfile.set(reg, new_value)
             }
-            StateChangeType::MemChange(addr, WordChange { new_value, .. }) => {
+            StateChangeType::Mem(addr, WordChange { new_value, .. }) => {
                 self.memory.set_word(addr, new_value)
             }
-            StateChangeType::NoRegOrMemChange => (),
+            StateChangeType::NoRegOrMem => (),
         }
     }
 
@@ -299,22 +299,22 @@ impl ProgramState {
     pub fn revert_diff(&mut self, diff: &StateChange) {
         self.pc = diff.old_pc;
         match diff.change_type {
-            StateChangeType::RegChange(reg, WordChange { old_value, .. }) => {
+            StateChangeType::Reg(reg, WordChange { old_value, .. }) => {
                 self.regfile.set(reg, old_value)
             }
-            StateChangeType::MemChange(addr, WordChange { old_value, .. }) => {
+            StateChangeType::Mem(addr, WordChange { old_value, .. }) => {
                 self.memory.set_word(addr, old_value)
             }
-            StateChangeType::NoRegOrMemChange => (),
+            StateChangeType::NoRegOrMem => (),
         }
     }
 }
 
 #[derive(Copy, Clone)]
 enum StateChangeType {
-    NoRegOrMemChange,
-    RegChange(IRegister, WordChange),
-    MemChange(WordAddress, WordChange),
+    NoRegOrMem,
+    Reg(IRegister, WordChange),
+    Mem(WordAddress, WordChange),
 }
 
 #[derive(Copy, Clone)]
@@ -343,11 +343,11 @@ impl StateChange {
     }
 
     pub fn noop(state: &ProgramState) -> StateChange {
-        StateChange::new_pc_p4(state, StateChangeType::NoRegOrMemChange)
+        StateChange::new_pc_p4(state, StateChangeType::NoRegOrMem)
     }
 
     pub fn pc_update_op(state: &ProgramState, new_pc: WordAddress) -> StateChange {
-        StateChange::new(state, new_pc, StateChangeType::NoRegOrMemChange)
+        StateChange::new(state, new_pc, StateChangeType::NoRegOrMem)
     }
 
     pub fn reg_write_op(
@@ -359,7 +359,7 @@ impl StateChange {
         StateChange::new(
             state,
             new_pc,
-            StateChangeType::RegChange(
+            StateChangeType::Reg(
                 reg,
                 WordChange {
                     old_value: state.regfile.read(reg),
@@ -372,7 +372,7 @@ impl StateChange {
     pub fn reg_write_pc_p4(state: &ProgramState, reg: IRegister, val: DataWord) -> StateChange {
         StateChange::new_pc_p4(
             state,
-            StateChangeType::RegChange(
+            StateChangeType::Reg(
                 reg,
                 WordChange {
                     old_value: state.regfile.read(reg),
@@ -385,7 +385,7 @@ impl StateChange {
     pub fn mem_write_op(state: &ProgramState, addr: WordAddress, val: DataWord) -> StateChange {
         StateChange::new_pc_p4(
             state,
-            StateChangeType::MemChange(
+            StateChangeType::Mem(
                 addr,
                 WordChange {
                     old_value: state.memory.get_word(addr),

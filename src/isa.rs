@@ -84,7 +84,7 @@ impl UType for Auipc {
         StateChange::reg_write_pc_p4(
             state,
             rd,
-            DataWord::from(u32::from(state.pc) + imm.zero_pad_lsb().as_u32()),
+            DataWord::from(state.pc + imm.zero_pad_lsb().as_u32()),
         )
     }
 }
@@ -184,7 +184,7 @@ impl JType for Jal {
             state,
             ((state.pc as i32) + imm.as_i32()) as u32,
             rd,
-            DataWord::from(u32::from(state.pc) + 4),
+            DataWord::from(state.pc + 4),
         )
     }
 }

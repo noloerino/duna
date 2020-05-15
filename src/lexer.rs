@@ -274,7 +274,7 @@ fn lex_line(iter: &mut LineIter, lineno: LineNo, errs: &mut Vec<LexError>) -> To
     while let Some((start_offs, c)) = iter.next() {
         let state = LexState {
             head: c,
-            lineno: lineno,
+            lineno,
             offs: start_offs,
         };
         let maybe_tok = if is_name_start(c) {
