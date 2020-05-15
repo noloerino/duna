@@ -28,16 +28,6 @@ pub struct EnvironInstFields {
     pub opcode: BitStr32,
 }
 
-enum InstType {
-    R(RInstFields),
-    I(IInstFields),
-    S(SInstFields),
-    B(BInstFields),
-    U(UInstFields),
-    J(JInstFields),
-    Environ(EnvironInstFields),
-}
-
 pub struct ConcreteInst {
     pub eval: Box<dyn Fn(&ProgramState) -> StateChange>,
     data: ConcreteInstData,
@@ -133,13 +123,22 @@ impl ConcreteInst {
                 imm,
                 rd,
                 ..
-            } => imm + rd.to_bit_str() + opcode,
+            } => {
+                // don't slice because when we constructed the imm we already truncated it
+                imm + rd.to_bit_str() + opcode
+            }
             ConcreteInstData::J {
                 fields: JInstFields { opcode },
                 imm,
                 rd,
-            } => imm.slice(31, 12) + rd.to_bit_str() + opcode,
-            // TODO implement ecall/ebreak
+            } => {
+                imm.index(20)
+                    + imm.slice(10, 1)
+                    + imm.index(11)
+                    + imm.slice(19, 12)
+                    + rd.to_bit_str()
+                    + opcode
+            } // TODO implement ecall/ebreak
         }
         .as_u32()
     }

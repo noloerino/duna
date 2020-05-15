@@ -12,6 +12,8 @@ fn f7(val: u32) -> BitStr32 {
 const R_OPCODE: BitStr32 = BitStr32::new(0b011_0011, 7);
 const I_OPCODE_ARITH: BitStr32 = BitStr32::new(0b001_0011, 7);
 const B_OPCODE: BitStr32 = BitStr32::new(0b110_0011, 7);
+const J_OPCODE: BitStr32 = BitStr32::new(0b110_1111, 7);
+const S_OPCODE: BitStr32 = BitStr32::new(0b010_0011, 7);
 
 pub struct Add;
 impl RType for Add {
@@ -171,6 +173,22 @@ impl BType for Bne {
     }
 }
 
+pub struct Jal;
+impl JType for Jal {
+    fn inst_fields() -> JInstFields {
+        JInstFields { opcode: J_OPCODE }
+    }
+
+    fn eval(state: &ProgramState, rd: IRegister, imm: BitStr32) -> StateChange {
+        StateChange::reg_write_op(
+            state,
+            ((state.pc as i32) + imm.as_i32()) as u32,
+            rd,
+            DataWord::from(u32::from(state.pc) + 4),
+        )
+    }
+}
+
 #[cfg(test)]
 mod test {
     use crate::isa::*;
@@ -251,6 +269,9 @@ mod test {
             Bne::new(S1, S2, DataWord::from(4)).to_machine_code(),
             BNE_HEX
         );
+        // jal ra, 16
+        const JAL_HEX: u32 = 0x010000EF;
+        assert_eq!(Jal::new(RA, DataWord::from(16)).to_machine_code(), JAL_HEX);
     }
 
     #[test]
@@ -467,13 +488,28 @@ mod test {
             ],
         );
     }
+
+    #[test]
+    fn test_jal() {
+        let mut state = get_init_state();
+        let starting_pc = 0x10FC_0000;
+        state.pc = starting_pc;
+        let inst = Jal::new(RA, DataWord::from(16));
+        state.apply_inst(&inst);
+        assert_eq!(u32::from(state.regfile.read(RA)), starting_pc + 4);
+        assert_eq!(state.pc, starting_pc + 16);
+        state.pc = starting_pc;
+        let inst = Jal::new(RA, DataWord::from(-256));
+        state.apply_inst(&inst);
+        assert_eq!(u32::from(state.regfile.read(RA)), starting_pc + 4);
+        assert_eq!(state.pc, starting_pc - 256);
+    }
 }
 
 #[allow(dead_code)]
 pub enum Instruction {
     Ebreak,
     Ecall,
-    Jal,
     Jalr,
     Lb,
     Lbu,
@@ -485,7 +521,7 @@ pub enum Instruction {
     Lwu,
     Or,
     Ori,
-    Sb,
+    // Sb,
     Sd,
     Sh,
     Sll,
