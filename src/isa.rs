@@ -523,12 +523,16 @@ mod test {
         assert_eq!(state.pc, starting_pc - 256);
     }
 
-    fn test_sw(state: &mut ProgramState) {
+    #[test]
+    fn test_sw() {
+        let mut state = get_init_state();
         let test_data = vec![
             (0x1000_0000, 0, DataWord::from(100)),
             (0x0000_0014, 0, DataWord::from(-4)),
         ];
         for (addr, offs, rs1_val) in test_data {
+            state.regfile.set(RS1, DataWord::from(addr));
+            state.regfile.set(RS2, rs1_val);
             state.apply_inst(&Sw::new(RS1, RS2, DataWord::from(offs)));
             assert_eq!(
                 state

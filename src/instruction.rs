@@ -23,6 +23,7 @@ pub struct UInstFields {
 pub struct JInstFields {
     pub opcode: BitStr32,
 }
+#[allow(dead_code)]
 pub struct EnvironInstFields {
     pub funct3: BitStr32,
     pub opcode: BitStr32,

@@ -285,20 +285,26 @@ impl ProgramState {
     pub fn apply_diff(&mut self, diff: &StateChange) {
         self.pc = diff.new_pc;
         match diff.change_type {
-            StateChangeType::RegChange(
-                reg,
-                WordChange {
-                    old_value: _,
-                    new_value,
-                },
-            ) => self.regfile.set(reg, new_value),
-            StateChangeType::MemChange(
-                addr,
-                WordChange {
-                    old_value: _,
-                    new_value,
-                },
-            ) => self.memory.set_word(addr, new_value),
+            StateChangeType::RegChange(reg, WordChange { new_value, .. }) => {
+                self.regfile.set(reg, new_value)
+            }
+            StateChangeType::MemChange(addr, WordChange { new_value, .. }) => {
+                self.memory.set_word(addr, new_value)
+            }
+            StateChangeType::NoRegOrMemChange => (),
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn revert_diff(&mut self, diff: &StateChange) {
+        self.pc = diff.old_pc;
+        match diff.change_type {
+            StateChangeType::RegChange(reg, WordChange { old_value, .. }) => {
+                self.regfile.set(reg, old_value)
+            }
+            StateChangeType::MemChange(addr, WordChange { old_value, .. }) => {
+                self.memory.set_word(addr, old_value)
+            }
             StateChangeType::NoRegOrMemChange => (),
         }
     }

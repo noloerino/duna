@@ -144,7 +144,7 @@ fn build_name(iter: &mut LineIter, state: &LexState) -> Result<TokenType, LexErr
 }
 
 fn build_imm(iter: &mut LineIter, state: &LexState) -> Result<TokenType, LexError> {
-    let LexState { head, offs, .. } = *state;
+    let LexState { head, .. } = *state;
     // determines whether we negate at end
     let negate = head == '-';
     let mut digits = Vec::<char>::new();
@@ -161,7 +161,10 @@ fn build_imm(iter: &mut LineIter, state: &LexState) -> Result<TokenType, LexErro
                     c
                 } else {
                     return Err(LexError::new(
-                        state,
+                        &LexState {
+                            offs: *offs,
+                            ..*state
+                        },
                         "Cannot parse number literal".to_string(),
                         string_from_utf8(vec![head as u8, c as u8]),
                     ));
@@ -249,6 +252,7 @@ fn build_imm(iter: &mut LineIter, state: &LexState) -> Result<TokenType, LexErro
     }
 }
 
+#[allow(dead_code)]
 fn lex_file(path: String) -> (LineTokenStream, Vec<LexError>) {
     lex_string(fs::read_to_string(path).expect("Failed to open file"))
 }
