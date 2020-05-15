@@ -189,6 +189,24 @@ impl JType for Jal {
     }
 }
 
+pub struct Sw;
+impl SType for Sw {
+    fn inst_fields() -> SInstFields {
+        SInstFields {
+            funct3: BitStr32::new(0b010, 3),
+            opcode: S_OPCODE,
+        }
+    }
+
+    fn eval(state: &ProgramState, rs1: IRegister, rs2: IRegister, imm: BitStr32) -> StateChange {
+        StateChange::mem_write_op(
+            state,
+            ByteAddress::from(i32::from(state.regfile.read(rs1)) + imm.as_i32()).to_word_address(),
+            state.regfile.read(rs2),
+        )
+    }
+}
+
 #[cfg(test)]
 mod test {
     use crate::isa::*;
@@ -503,6 +521,22 @@ mod test {
         state.apply_inst(&inst);
         assert_eq!(u32::from(state.regfile.read(RA)), starting_pc + 4);
         assert_eq!(state.pc, starting_pc - 256);
+    }
+
+    fn test_sw(state: &mut ProgramState) {
+        let test_data = vec![
+            (0x1000_0000, 0, DataWord::from(100)),
+            (0x0000_0014, 0, DataWord::from(-4)),
+        ];
+        for (addr, offs, rs1_val) in test_data {
+            state.apply_inst(&Sw::new(RS1, RS2, DataWord::from(offs)));
+            assert_eq!(
+                state
+                    .memory
+                    .get_word(((i32::from(addr) + offs) >> 2) as u32),
+                rs1_val
+            );
+        }
     }
 }
 

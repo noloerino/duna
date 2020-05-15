@@ -175,17 +175,41 @@ impl IRegister {
 }
 
 #[derive(Debug, Copy, Clone)]
-struct ByteAddress {
+pub struct ByteAddress {
     addr: u32,
 }
 
 impl ByteAddress {
-    const fn to_word_address(self) -> WordAddress {
+    pub const fn to_word_address(self) -> WordAddress {
         self.addr >> 2
     }
 
-    const fn get_word_offset(self) -> u8 {
+    pub const fn get_word_offset(self) -> u8 {
         (self.addr & 0b11) as u8
+    }
+}
+
+impl From<u32> for ByteAddress {
+    fn from(value: u32) -> ByteAddress {
+        ByteAddress { addr: value }
+    }
+}
+
+impl From<i32> for ByteAddress {
+    fn from(value: i32) -> ByteAddress {
+        ByteAddress { addr: value as u32 }
+    }
+}
+
+impl From<ByteAddress> for u32 {
+    fn from(value: ByteAddress) -> u32 {
+        value.addr
+    }
+}
+
+impl From<ByteAddress> for i32 {
+    fn from(value: ByteAddress) -> i32 {
+        value.addr as i32
     }
 }
 
