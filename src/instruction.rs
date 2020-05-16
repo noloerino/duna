@@ -260,7 +260,10 @@ pub trait BType {
         ConcreteInst {
             eval: Box::new(move |state| {
                 if Self::eval(state.regfile.read(rs1), state.regfile.read(rs2)) {
-                    StateChange::pc_update_op(state, (state.pc as i32 + imm_vec.as_i32()) as u32)
+                    StateChange::pc_update_op(
+                        state,
+                        ByteAddress::from(i32::from(state.pc) + imm_vec.as_i32()),
+                    )
                 } else {
                     StateChange::noop(state)
                 }

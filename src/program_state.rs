@@ -174,7 +174,7 @@ impl IRegister {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Eq, PartialEq, Debug, Copy, Clone)]
 pub struct ByteAddress {
     addr: u32,
 }
@@ -264,7 +264,7 @@ impl Memory {
 }
 
 pub struct ProgramState {
-    pub pc: WordAddress,
+    pub pc: ByteAddress,
     pub regfile: RegFile,
     pub memory: Memory,
 }
@@ -272,7 +272,7 @@ pub struct ProgramState {
 impl ProgramState {
     pub fn new() -> ProgramState {
         ProgramState {
-            pc: 0,
+            pc: ByteAddress::from(0),
             regfile: RegFile::new(),
             memory: Memory::new(),
         }
@@ -324,13 +324,13 @@ struct WordChange {
 }
 
 pub struct StateChange {
-    old_pc: WordAddress,
-    new_pc: WordAddress,
+    old_pc: ByteAddress,
+    new_pc: ByteAddress,
     change_type: StateChangeType,
 }
 
 impl StateChange {
-    fn new(state: &ProgramState, new_pc: WordAddress, tgt: StateChangeType) -> StateChange {
+    fn new(state: &ProgramState, new_pc: ByteAddress, tgt: StateChangeType) -> StateChange {
         StateChange {
             old_pc: state.pc,
             new_pc,
@@ -339,20 +339,20 @@ impl StateChange {
     }
 
     fn new_pc_p4(state: &ProgramState, tgt: StateChangeType) -> StateChange {
-        StateChange::new(state, state.pc + 4, tgt)
+        StateChange::new(state, ByteAddress::from(u32::from(state.pc) + 4), tgt)
     }
 
     pub fn noop(state: &ProgramState) -> StateChange {
         StateChange::new_pc_p4(state, StateChangeType::NoRegOrMem)
     }
 
-    pub fn pc_update_op(state: &ProgramState, new_pc: WordAddress) -> StateChange {
+    pub fn pc_update_op(state: &ProgramState, new_pc: ByteAddress) -> StateChange {
         StateChange::new(state, new_pc, StateChangeType::NoRegOrMem)
     }
 
     pub fn reg_write_op(
         state: &ProgramState,
-        new_pc: WordAddress,
+        new_pc: ByteAddress,
         reg: IRegister,
         val: DataWord,
     ) -> StateChange {

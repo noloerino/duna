@@ -84,7 +84,7 @@ impl UType for Auipc {
         StateChange::reg_write_pc_p4(
             state,
             rd,
-            DataWord::from(state.pc + imm.zero_pad_lsb().as_u32()),
+            DataWord::from(u32::from(state.pc) + imm.zero_pad_lsb().as_u32()),
         )
     }
 }
@@ -182,9 +182,27 @@ impl JType for Jal {
     fn eval(state: &ProgramState, rd: IRegister, imm: BitStr32) -> StateChange {
         StateChange::reg_write_op(
             state,
-            ((state.pc as i32) + imm.as_i32()) as u32,
+            ByteAddress::from(i32::from(state.pc) + imm.as_i32()),
             rd,
-            DataWord::from(state.pc + 4),
+            DataWord::from(u32::from(state.pc) + 4),
+        )
+    }
+}
+
+pub struct Jalr;
+impl IType for Jalr {
+    fn inst_fields() -> IInstFields {
+        IInstFields {
+            opcode: BitStr32::new(0b110_0111, 7),
+            funct3: f3(0b000),
+        }
+    }
+    fn eval(state: &ProgramState, rd: IRegister, rs1: IRegister, imm: BitStr32) -> StateChange {
+        StateChange::reg_write_op(
+            state,
+            ByteAddress::from(i32::from(state.regfile.read(rs1)) + imm.as_i32()),
+            rd,
+            DataWord::from(u32::from(state.pc) + 4),
         )
     }
 }
@@ -361,7 +379,7 @@ mod test {
     #[test]
     fn test_u_type_insts() {
         let mut state = get_init_state();
-        state.pc = 0x10FC_0000;
+        state.pc = ByteAddress::from(0x10FC_0000);
         state.apply_inst(&Auipc::new(RD, DataWord::from(0x10)));
         assert_eq!(
             u32::from(state.regfile.read(RD)),
@@ -375,20 +393,24 @@ mod test {
         should_take: bool,
     }
 
-    /// Tests a branch instruction. Taken jumps move forward by 0x100.
+    /// Tests a branch instruction. Taken jumps move forward by 0x100, or backwards by 0x100.
     fn test_b_type<T: BType>(state: &mut ProgramState, args: Vec<BTestData>) {
-        let offs = DataWord::from(0x100);
-        for BTestData {
-            rs1_val,
-            rs2_val,
-            should_take,
-        } in args
-        {
-            let exp_new_pc = state.pc + if should_take { u32::from(offs) } else { 4 };
-            state.regfile.set(RS1, rs1_val);
-            state.regfile.set(RS2, rs2_val);
-            state.apply_inst(&T::new(RS1, RS2, offs));
-            assert_eq!(exp_new_pc, state.pc);
+        for dist in vec![0x100, -0x100] {
+            let offs = DataWord::from(dist);
+            for &BTestData {
+                rs1_val,
+                rs2_val,
+                should_take,
+            } in &args
+            {
+                let exp_new_pc = ByteAddress::from(
+                    i32::from(state.pc) + if should_take { i32::from(offs) } else { 4 },
+                );
+                state.regfile.set(RS1, rs1_val);
+                state.regfile.set(RS2, rs2_val);
+                state.apply_inst(&T::new(RS1, RS2, offs));
+                assert_eq!(exp_new_pc, state.pc);
+            }
         }
     }
 
@@ -510,17 +532,30 @@ mod test {
     #[test]
     fn test_jal() {
         let mut state = get_init_state();
-        let starting_pc = 0x10FC_0000;
-        state.pc = starting_pc;
+        let starting_pc_val = 0x10FC_0000;
+        state.pc = ByteAddress::from(starting_pc_val);
         let inst = Jal::new(RA, DataWord::from(16));
         state.apply_inst(&inst);
-        assert_eq!(u32::from(state.regfile.read(RA)), starting_pc + 4);
-        assert_eq!(state.pc, starting_pc + 16);
-        state.pc = starting_pc;
+        assert_eq!(u32::from(state.regfile.read(RA)), starting_pc_val + 4);
+        assert_eq!(state.pc, ByteAddress::from(starting_pc_val + 16));
+        state.pc = ByteAddress::from(starting_pc_val);
         let inst = Jal::new(RA, DataWord::from(-256));
         state.apply_inst(&inst);
-        assert_eq!(u32::from(state.regfile.read(RA)), starting_pc + 4);
-        assert_eq!(state.pc, starting_pc - 256);
+        assert_eq!(u32::from(state.regfile.read(RA)), starting_pc_val + 4);
+        assert_eq!(state.pc, ByteAddress::from(starting_pc_val - 256));
+    }
+
+    #[test]
+    fn test_jalr() {
+        let mut state = get_init_state();
+        let starting_pc_val = 0x10FC_0000;
+        state.pc = ByteAddress::from(starting_pc_val);
+        let tgt_pc_val = 0xABCD_EF10u32;
+        let inst = Jalr::new(RA, RS1, DataWord::from(-4));
+        let exp_pc_val = tgt_pc_val - 4;
+        state.regfile.set(RS1, DataWord::from(tgt_pc_val));
+        state.apply_inst(&inst);
+        assert_eq!(state.pc, ByteAddress::from(exp_pc_val));
     }
 
     #[test]
