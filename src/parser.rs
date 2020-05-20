@@ -4,6 +4,7 @@ use crate::lexer::*;
 use crate::program_state::IRegister;
 use std::collections::HashMap;
 use std::iter::Peekable;
+use std::vec::IntoIter;
 
 #[derive(Eq, PartialEq, Debug)]
 struct ParseErrorData {
@@ -67,15 +68,20 @@ enum ParseType {
     U,
 }
 
-struct RiscVParser {
+struct ParserData {
     inst_expansion_table: HashMap<String, ParseType>,
     reg_expansion_table: HashMap<String, IRegister>,
 }
 
-type TokenIter<'a> = Peekable<&'a mut dyn Iterator<Item = Token>>;
+struct RiscVParser {
+    parser_data: ParserData,
+    lines: LineTokenStream,
+}
+
+type TokenIter<'a> = Peekable<IntoIter<Token>>;
 
 impl RiscVParser {
-    pub fn new() -> Self {
+    pub fn from_tokens(lines: LineTokenStream) -> Self {
         use isa::*;
         use ParseType::*;
         let inst_expansion_table = [
@@ -133,30 +139,55 @@ impl RiscVParser {
         // don't forget FP
         reg_expansion_table.insert("fp".to_string(), IRegister::FP);
         RiscVParser {
-            inst_expansion_table,
-            reg_expansion_table,
+            parser_data: ParserData {
+                inst_expansion_table,
+                reg_expansion_table,
+            },
+            lines,
         }
     }
 
+    pub fn parse(self) -> Result<Vec<ConcreteInst>, Vec<ParseError>> {
+        let mut insts = Vec::<ConcreteInst>::new();
+        let mut errs = Vec::<ParseError>::new();
+        for line in self.lines {
+            match LineParser::new(&self.parser_data, line).parse() {
+                Ok(new_insts) => insts.extend(new_insts),
+                Err(new_err) => errs.push(new_err),
+            }
+        }
+        if errs.is_empty() {
+            Ok(insts)
+        } else {
+            Err(errs)
+        }
+    }
+}
+
+struct LineParser<'a> {
+    data: &'a ParserData,
+    iter: TokenIter<'a>,
+}
+
+impl LineParser<'_> {
     /// Attempts to consume exactly N arguments from the iterator, possibly comma-separated.
     /// The first and last tokens cannot be commas. If repeated commas appear anywhere,
     /// an error is returned.
     /// The only tokens that may appear during this consumption are commas, names, and immediates.
     fn consume_commasep_args(
-        &self,
-        iter: &mut TokenIter,
+        &mut self,
         head_loc: Location,
         head_name: String,
         n: usize,
     ) -> Result<Vec<Token>, ParseError> {
         use TokenType::*;
         if n == 0 {
-            if iter.peek().is_some() {
+            if self.iter.peek().is_some() {
                 Err(ParseError::unexpected(
                     head_loc,
                     format!(
                         "{:?} (too many arguments for instruction {})",
-                        iter.next().unwrap(),
+                        self.iter.next().unwrap(),
                         head_name
                     ),
                 ))
@@ -164,16 +195,16 @@ impl RiscVParser {
                 Ok(Vec::new())
             }
         } else {
-            match iter.next() {
+            match self.iter.next() {
                 Some(tok) => match tok.data {
                     Name(..) | Immediate(..) => {
                         // Allow single comma
-                        if let Some(tok2) = iter.peek() {
+                        if let Some(tok2) = self.iter.peek() {
                             if let Comma = tok2.data {
-                                iter.next();
+                                self.iter.next();
                             }
                         }
-                        self.consume_commasep_args(iter, head_loc, head_name, n - 1)
+                        self.consume_commasep_args(head_loc, head_name, n - 1)
                             .and_then(|mut args| {
                                 args.insert(0, tok);
                                 Ok(args)
@@ -192,6 +223,7 @@ impl RiscVParser {
     fn try_parse_reg(&self, token: &Token) -> Result<IRegister, ParseError> {
         match &token.data {
             TokenType::Name(name) => self
+                .data
                 .reg_expansion_table
                 .get(name)
                 .cloned()
@@ -204,16 +236,15 @@ impl RiscVParser {
     }
 
     fn try_expand_inst(
-        &self,
+        &mut self,
         head_loc: Location,
         name: String,
-        iter: &mut TokenIter,
     ) -> Result<Vec<ConcreteInst>, ParseError> {
-        if let Some(parse_type) = self.inst_expansion_table.get(name.as_str()) {
+        if let Some(parse_type) = self.data.inst_expansion_table.get(name.as_str()) {
             match parse_type {
                 ParseType::R(inst_new) => {
                     // R-types are always "inst rd, rs1, rs2" with one or no commas in between
-                    let args = self.consume_commasep_args(iter, head_loc, name, 3);
+                    let args = self.consume_commasep_args(head_loc, name, 3);
                     args.and_then(|lst| {
                         debug_assert!(lst.len() == 3);
                         let maybe_rd = self.try_parse_reg(&lst[0]);
@@ -247,14 +278,19 @@ impl RiscVParser {
         }
     }
 
-    fn parse_line(&self, toks: TokenStream) -> Result<Vec<ConcreteInst>, ParseError> {
+    fn new<'a>(data: &'a ParserData, tokens: TokenStream) -> LineParser<'a> {
+        LineParser {
+            data,
+            iter: tokens.into_iter().peekable(),
+        }
+    }
+
+    fn parse(mut self) -> Result<Vec<ConcreteInst>, ParseError> {
         // needed for lifetime reasons i guess
-        let orig_iter = &mut toks.into_iter() as &mut dyn Iterator<Item = Token>;
-        let mut iter = orig_iter.peekable();
-        if let Some(head_tok) = iter.next() {
+        if let Some(head_tok) = self.iter.next() {
             use TokenType::*;
             match head_tok.data {
-                Name(name) => self.try_expand_inst(head_tok.location, name, &mut iter),
+                Name(name) => self.try_expand_inst(head_tok.location, name),
                 LabelDef(_label_name) => Ok(Vec::new()), // TODO
                 SectionDef(_section_name) => Ok(Vec::new()), // TODO
                 Comment(..) => Ok(Vec::new()),           // deliberate no-op
@@ -269,25 +305,6 @@ impl RiscVParser {
             Ok(Vec::new())
         }
     }
-
-    pub fn parse_program(
-        &self,
-        lines: LineTokenStream,
-    ) -> Result<Vec<ConcreteInst>, Vec<ParseError>> {
-        let mut insts = Vec::<ConcreteInst>::new();
-        let mut errs = Vec::<ParseError>::new();
-        for line in lines {
-            match self.parse_line(line) {
-                Ok(new_insts) => insts.extend(new_insts),
-                Err(new_err) => errs.push(new_err),
-            }
-        }
-        if errs.is_empty() {
-            Ok(insts)
-        } else {
-            Err(errs)
-        }
-    }
 }
 
 #[cfg(test)]
@@ -299,10 +316,10 @@ mod tests {
 
     #[test]
     fn test_r_type_parse() {
-        let parser = RiscVParser::new();
         let (toks, lex_err) = lexer::Lexer::from_string("add x5, sp, fp".to_string()).lex();
+        let parser = RiscVParser::from_tokens(toks);
         assert!(lex_err.is_empty());
-        let result = parser.parse_program(toks).expect("Error while parsing");
+        let result = parser.parse().expect("Error while parsing");
         assert_eq!(result.len(), 1);
         assert_eq!(result[0], Add::new(IRegister::from(5), SP, FP));
     }
