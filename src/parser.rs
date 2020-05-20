@@ -3,6 +3,7 @@ use crate::isa;
 use crate::lexer::*;
 use crate::program_state::IRegister;
 use std::collections::HashMap;
+use std::fmt;
 use std::iter::Peekable;
 use std::vec::IntoIter;
 
@@ -55,6 +56,16 @@ impl ParseError {
     }
 }
 
+impl fmt::Display for ParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "ParseError at {}: {}\n\t{}",
+            self.location, self.data.msg, self.data.contents
+        )
+    }
+}
+
 #[derive(Clone)]
 enum ParseType {
     R(&'static dyn Fn(IRegister, IRegister, IRegister) -> ConcreteInst),
@@ -73,7 +84,7 @@ struct ParserData {
     reg_expansion_table: HashMap<String, IRegister>,
 }
 
-struct RiscVParser {
+pub struct RiscVParser {
     parser_data: ParserData,
     lines: LineTokenStream,
 }
@@ -147,7 +158,7 @@ impl RiscVParser {
         }
     }
 
-    pub fn parse(self) -> Result<Vec<ConcreteInst>, Vec<ParseError>> {
+    pub fn parse(self) -> (Vec<ConcreteInst>, Vec<ParseError>) {
         let mut insts = Vec::<ConcreteInst>::new();
         let mut errs = Vec::<ParseError>::new();
         for line in self.lines {
@@ -156,11 +167,7 @@ impl RiscVParser {
                 Err(new_err) => errs.push(new_err),
             }
         }
-        if errs.is_empty() {
-            Ok(insts)
-        } else {
-            Err(errs)
-        }
+        (insts, errs)
     }
 }
 
@@ -319,8 +326,9 @@ mod tests {
         let (toks, lex_err) = lexer::Lexer::from_string("add x5, sp, fp".to_string()).lex();
         let parser = RiscVParser::from_tokens(toks);
         assert!(lex_err.is_empty());
-        let result = parser.parse().expect("Error while parsing");
-        assert_eq!(result.len(), 1);
-        assert_eq!(result[0], Add::new(IRegister::from(5), SP, FP));
+        let (insts, parse_err) = parser.parse();
+        assert!(parse_err.is_empty());
+        assert_eq!(insts.len(), 1);
+        assert_eq!(insts[0], Add::new(IRegister::from(5), SP, FP));
     }
 }

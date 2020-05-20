@@ -1,4 +1,5 @@
 use crate::parser::ParseError;
+use std::fmt;
 use std::fs;
 use std::iter::Enumerate;
 use std::iter::Peekable;
@@ -13,6 +14,12 @@ pub type LineOffs = usize;
 pub struct Location {
     lineno: LineNo,
     offs: LineOffs,
+}
+
+impl fmt::Display for Location {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}:{}", self.lineno, self.offs)
+    }
 }
 
 #[derive(Eq, PartialEq, Debug)]

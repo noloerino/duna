@@ -2,12 +2,11 @@ use crate::instruction::*;
 use std::cmp::{max, min};
 use std::collections::HashMap;
 use std::fmt;
-use std::fmt::{Display, Formatter};
 use std::ops::Add;
 
 pub struct RiscVProgram {
-    insts: Vec<ConcreteInst>,
-    state: ProgramState,
+    pub insts: Vec<ConcreteInst>,
+    pub state: ProgramState,
     // TODO add symbol table, relocation data, etc.?
 }
 
@@ -144,6 +143,12 @@ impl DataWord {
     }
 }
 
+impl fmt::Display for DataWord {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.value)
+    }
+}
+
 impl From<u32> for DataWord {
     fn from(value: u32) -> DataWord {
         DataWord { value }
@@ -258,8 +263,8 @@ pub enum IRegister {
     T6,
 }
 
-impl Display for IRegister {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+impl fmt::Display for IRegister {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut s = format!("{:?}", self);
         s.make_ascii_lowercase();
         write!(f, "{}", s)
