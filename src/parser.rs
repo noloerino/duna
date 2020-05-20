@@ -300,7 +300,7 @@ mod tests {
     #[test]
     fn test_r_type_parse() {
         let parser = RiscVParser::new();
-        let (toks, lex_err) = lexer::lex_string("add x5, sp, fp".to_string());
+        let (toks, lex_err) = lexer::Lexer::from_string("add x5, sp, fp".to_string()).lex();
         assert!(lex_err.is_empty());
         let result = parser.parse_program(toks).expect("Error while parsing");
         assert_eq!(result.len(), 1);

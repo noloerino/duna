@@ -3,7 +3,6 @@ use std::fs;
 use std::iter::Enumerate;
 use std::iter::Peekable;
 use std::str::Chars;
-use std::str::Lines;
 
 // The line number of a token.
 pub type LineNo = usize;
@@ -101,7 +100,7 @@ impl LineLexer<'_> {
         // assume leading # already consumed
         // just consume the rest of the line
         let mut cs = Vec::<u8>::new();
-        for (_, c) in self.iter {
+        for (_, c) in &mut self.iter {
             cs.push(c as u8);
         }
         // TODO reimplement this uzing unzip
@@ -254,7 +253,7 @@ impl LineLexer<'_> {
     }
 
     /// Generates a TokenStream for a line in a file.
-    fn lex(self, errs: &mut Vec<ParseError>) -> TokenStream {
+    fn lex(mut self, errs: &mut Vec<ParseError>) -> TokenStream {
         let mut toks = Vec::<Token>::new();
         while let Some((start_offs, c)) = self.iter.next() {
             let state = LexState {
@@ -294,27 +293,26 @@ impl LineLexer<'_> {
     }
 }
 
-pub struct Lexer<'a> {
-    line_iters: Enumerate<Lines<'a>>,
+pub struct Lexer {
+    contents: String,
 }
 
-impl Lexer<'_> {
+impl Lexer {
     #[allow(dead_code)]
-    pub fn from_file(path: &String) -> Lexer {
-        Lexer::from_string(&fs::read_to_string(path).expect("Failed to open file"))
+    pub fn from_file(path: &str) -> Lexer {
+        let contents = fs::read_to_string(path).expect("Failed to open file");
+        Lexer::from_string(contents)
     }
 
-    pub fn from_string(contents: &String) -> Lexer {
-        Lexer {
-            line_iters: contents.as_str().lines().enumerate(),
-        }
+    pub fn from_string(contents: String) -> Lexer {
+        Lexer { contents }
     }
 
     /// Consume the lexer's iterator to produce a stream of tokens and any possible errors.
     pub fn lex(self) -> (LineTokenStream, Vec<ParseError>) {
         let mut toks = Vec::<TokenStream>::new();
         let mut errs = Vec::<ParseError>::new();
-        for (lineno, line) in self.line_iters {
+        for (lineno, line) in self.contents.lines().enumerate() {
             toks.push(LineLexer::new(lineno, line.chars().enumerate().peekable()).lex(&mut errs));
         }
         (toks, errs)
@@ -327,7 +325,7 @@ mod tests {
 
     #[test]
     fn test_simple_lex() {
-        let (lines, errs) = Lexer::from_string(&"addi x0, x1, x2".to_string()).lex();
+        let (lines, errs) = Lexer::from_string("addi x0, x1, x2".to_string()).lex();
         let toks = &lines[0];
         assert!(errs.is_empty());
         // check actual data
@@ -363,9 +361,9 @@ mod tests {
             ("-874", Dec, -874),
         ];
         for (line, fmt, exp) in cases {
-            let iter = line.chars().enumerate().peekable();
-            let lexer = LineLexer::new(0, iter);
+            let mut iter = line.chars().enumerate().peekable();
             let (_, head) = iter.next().unwrap();
+            let mut lexer = LineLexer::new(0, iter);
             let result = lexer.build_imm(&LexState {
                 head,
                 location: Location { lineno: 0, offs: 0 },
