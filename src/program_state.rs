@@ -1,6 +1,8 @@
 use crate::instruction::*;
 use std::cmp::{max, min};
 use std::collections::HashMap;
+use std::fmt;
+use std::fmt::{Display, Formatter};
 use std::ops::Add;
 
 #[derive(Debug, Copy, Clone)]
@@ -127,7 +129,7 @@ impl From<DataWord> for i32 {
 }
 
 #[allow(dead_code)]
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 pub enum IRegister {
     ZERO = 0,
     RA,
@@ -165,7 +167,55 @@ pub enum IRegister {
 
 pub const S0: IRegister = IRegister::FP;
 
+impl Display for IRegister {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        let mut s = format!("{:?}", self);
+        s.make_ascii_lowercase();
+        write!(f, "{}", s)
+    }
+}
+
+impl From<u8> for IRegister {
+    fn from(value: u8) -> IRegister {
+        IRegister::REG_ARRAY[value as usize]
+    }
+}
+
 impl IRegister {
+    pub const REG_ARRAY: [IRegister; 32] = [
+        IRegister::ZERO,
+        IRegister::RA,
+        IRegister::SP,
+        IRegister::GP,
+        IRegister::TP,
+        IRegister::T0,
+        IRegister::T1,
+        IRegister::T2,
+        IRegister::FP,
+        IRegister::S1,
+        IRegister::A0,
+        IRegister::A1,
+        IRegister::A2,
+        IRegister::A3,
+        IRegister::A4,
+        IRegister::A5,
+        IRegister::A6,
+        IRegister::A7,
+        IRegister::S2,
+        IRegister::S3,
+        IRegister::S4,
+        IRegister::S5,
+        IRegister::S6,
+        IRegister::S7,
+        IRegister::S8,
+        IRegister::S9,
+        IRegister::S10,
+        IRegister::S11,
+        IRegister::T3,
+        IRegister::T4,
+        IRegister::T5,
+        IRegister::T6,
+    ];
     pub const fn to_bit_str(self) -> BitStr32 {
         BitStr32::new(self as u32, 5)
     }

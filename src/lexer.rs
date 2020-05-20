@@ -4,9 +4,15 @@ use std::iter::Peekable;
 use std::str::Chars;
 
 // The line number of a token.
-type LineNo = usize;
+pub type LineNo = usize;
 // The offset of a token within a line.
-type LineOffs = usize;
+pub type LineOffs = usize;
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub struct Location {
+    lineno: LineNo,
+    offs: LineOffs,
+}
 
 #[derive(Eq, PartialEq, Debug)]
 struct LexErrorData {
@@ -15,31 +21,28 @@ struct LexErrorData {
 }
 
 #[derive(Eq, PartialEq, Debug)]
-struct LexError {
-    lineno: LineNo,
-    offs: LineOffs,
+pub struct LexError {
+    location: Location,
     data: LexErrorData,
 }
 
 impl LexError {
-    fn new(state: &LexState, msg: String, contents: String) -> Self {
+    fn new(location: &Location, msg: String, contents: String) -> Self {
         LexError {
-            lineno: state.lineno,
-            offs: state.offs,
+            location: *location,
             data: LexErrorData { msg, contents },
         }
     }
 }
 
 #[derive(Eq, PartialEq, Debug)]
-struct Token {
-    lineno: LineNo,
-    offs: LineOffs,
-    data: TokenType,
+pub struct Token {
+    pub location: Location,
+    pub data: TokenType,
 }
 
 #[derive(Eq, PartialEq, Debug, Copy, Clone)]
-enum ImmRenderType {
+pub enum ImmRenderType {
     Bin,
     Hex,
     Dec,
@@ -54,10 +57,18 @@ impl ImmRenderType {
             Hex => 16,
         }
     }
+
+    pub fn format(self, n: i32) -> String {
+        match self {
+            Bin => format!("{}", n),
+            Dec => format!("{:#b}", n),
+            Hex => format!("{:#x}", n),
+        }
+    }
 }
 
 #[derive(Eq, PartialEq, Debug)]
-enum TokenType {
+pub enum TokenType {
     /// A token possibly representing the name of an instruction, reg, or branch target.
     Name(String),
     /// A token representing the name of a label, without the trailing colon.
@@ -73,14 +84,13 @@ enum TokenType {
 
 const DELIMS: [char; 5] = ['#', ':', ',', '(', ')'];
 
-type TokenStream = Vec<Token>;
-type LineTokenStream = Vec<TokenStream>;
+pub type TokenStream = Vec<Token>;
+pub type LineTokenStream = Vec<TokenStream>;
 type LineIter<'a> = Peekable<Enumerate<Chars<'a>>>;
 
 struct LexState {
     head: char,
-    lineno: LineNo,
-    offs: LineOffs,
+    location: Location,
 }
 
 fn string_from_utf8(cs: Vec<u8>) -> String {
@@ -144,6 +154,7 @@ fn build_name(iter: &mut LineIter, state: &LexState) -> Result<TokenType, LexErr
 }
 
 fn build_imm(iter: &mut LineIter, state: &LexState) -> Result<TokenType, LexError> {
+    // TODO implement max munch for error handling
     let LexState { head, .. } = *state;
     // determines whether we negate at end
     let negate = head == '-';
@@ -161,9 +172,9 @@ fn build_imm(iter: &mut LineIter, state: &LexState) -> Result<TokenType, LexErro
                     c
                 } else {
                     return Err(LexError::new(
-                        &LexState {
+                        &Location {
                             offs: *offs,
-                            ..*state
+                            lineno: state.location.lineno,
                         },
                         "Cannot parse number literal".to_string(),
                         string_from_utf8(vec![head as u8, c as u8]),
@@ -172,7 +183,7 @@ fn build_imm(iter: &mut LineIter, state: &LexState) -> Result<TokenType, LexErro
             }
             None => {
                 return Err(LexError::new(
-                    state,
+                    &state.location,
                     "Ran out of characters while parsing number literal".to_string(),
                     head.to_string(),
                 ))
@@ -191,13 +202,12 @@ fn build_imm(iter: &mut LineIter, state: &LexState) -> Result<TokenType, LexErro
                 } else if c == 'b' {
                     fmt = Bin;
                 } else {
-                    println!("{}", c);
                     // assume base 10
                     digits.push(c1);
                     digits.push(c);
                     if !c.is_ascii_digit() {
                         return Err(LexError::new(
-                            state,
+                            &state.location,
                             "Error parsing base 10 integer literal".to_string(),
                             digits.into_iter().collect(),
                         ));
@@ -209,7 +219,7 @@ fn build_imm(iter: &mut LineIter, state: &LexState) -> Result<TokenType, LexErro
                 digits.push(c);
                 if !c.is_ascii_digit() {
                     return Err(LexError::new(
-                        state,
+                        &state.location,
                         "Error parsing base 10 integer literal".to_string(),
                         digits.into_iter().collect(),
                     ));
@@ -230,7 +240,7 @@ fn build_imm(iter: &mut LineIter, state: &LexState) -> Result<TokenType, LexErro
             iter.next();
         } else {
             return Err(LexError::new(
-                state,
+                &state.location,
                 format!(
                     "Error parsing {} integer literal",
                     match fmt {
@@ -257,7 +267,7 @@ fn lex_file(path: String) -> (LineTokenStream, Vec<LexError>) {
     lex_string(fs::read_to_string(path).expect("Failed to open file"))
 }
 
-fn lex_string(contents: String) -> (LineTokenStream, Vec<LexError>) {
+pub fn lex_string(contents: String) -> (LineTokenStream, Vec<LexError>) {
     let mut toks = Vec::<TokenStream>::new();
     let mut errs = Vec::<LexError>::new();
     let lines = contents.as_str().lines();
@@ -274,8 +284,10 @@ fn lex_line(iter: &mut LineIter, lineno: LineNo, errs: &mut Vec<LexError>) -> To
     while let Some((start_offs, c)) = iter.next() {
         let state = LexState {
             head: c,
-            lineno,
-            offs: start_offs,
+            location: Location {
+                lineno,
+                offs: start_offs,
+            },
         };
         let maybe_tok = if is_name_start(c) {
             build_name(iter, &state)
@@ -294,8 +306,10 @@ fn lex_line(iter: &mut LineIter, lineno: LineNo, errs: &mut Vec<LexError>) -> To
         };
         match maybe_tok {
             Ok(tok) => toks.push(Token {
-                lineno,
-                offs: start_offs,
+                location: Location {
+                    lineno,
+                    offs: start_offs,
+                },
                 data: tok,
             }),
             Err(err) => errs.push(err),
@@ -306,7 +320,7 @@ fn lex_line(iter: &mut LineIter, lineno: LineNo, errs: &mut Vec<LexError>) -> To
 
 #[cfg(test)]
 mod tests {
-    use crate::lexer::*;
+    use super::*;
 
     #[test]
     fn test_simple_lex() {
@@ -322,14 +336,14 @@ mod tests {
         assert_eq!(toks[5].data, TokenType::Name("x2".to_string()));
         // check line offsets
         for tok in toks {
-            assert_eq!(tok.lineno, 0);
+            assert_eq!(tok.location.lineno, 0);
         }
-        assert_eq!(toks[0].offs, 0);
-        assert_eq!(toks[1].offs, 5);
-        assert_eq!(toks[2].offs, 7);
-        assert_eq!(toks[3].offs, 9);
-        assert_eq!(toks[4].offs, 11);
-        assert_eq!(toks[5].offs, 13);
+        assert_eq!(toks[0].location.offs, 0);
+        assert_eq!(toks[1].location.offs, 5);
+        assert_eq!(toks[2].location.offs, 7);
+        assert_eq!(toks[3].location.offs, 9);
+        assert_eq!(toks[4].location.offs, 11);
+        assert_eq!(toks[5].location.offs, 13);
     }
 
     #[test]
@@ -352,8 +366,7 @@ mod tests {
                 iter,
                 &LexState {
                     head,
-                    lineno: 0,
-                    offs: 0,
+                    location: Location { lineno: 0, offs: 0 },
                 },
             );
             assert_eq!(result, Ok(TokenType::Immediate(exp, fmt)));
