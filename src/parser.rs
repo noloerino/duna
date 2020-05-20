@@ -1,6 +1,7 @@
 use crate::instruction::*;
 use crate::isa;
 use crate::lexer::*;
+use crate::program_state::DataWord;
 use crate::program_state::IRegister;
 use std::collections::HashMap;
 use std::fmt;
@@ -60,7 +61,7 @@ impl fmt::Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "ParseError at {}: {}\n\t{}",
+            "ParseError at {}: {}\t{}",
             self.location, self.data.msg, self.data.contents
         )
     }
@@ -69,7 +70,7 @@ impl fmt::Display for ParseError {
 #[derive(Clone)]
 enum ParseType {
     R(&'static dyn Fn(IRegister, IRegister, IRegister) -> ConcreteInst),
-    Arith,
+    Arith(&'static dyn Fn(IRegister, IRegister, DataWord) -> ConcreteInst),
     Env,
     MemL,
     MemS,
@@ -97,9 +98,9 @@ impl RiscVParser {
         use ParseType::*;
         let inst_expansion_table = [
             ("add", R(&Add::new)),
-            ("addi", Arith),
+            ("addi", Arith(&Addi::new)),
             ("and", R(&And::new)),
-            ("andi", Arith),
+            ("andi", Arith(&Andi::new)),
             ("auipc", U),
             ("beq", B),
             ("bge", B),
@@ -118,23 +119,23 @@ impl RiscVParser {
             ("lui", U),
             ("lw", MemL),
             // ("or", R),
-            ("ori", Arith),
+            // ("ori", Arith),
             ("sb", MemS),
             ("sh", MemS),
             // ("sll", R),
-            ("slli", Arith),
+            // ("slli", Arith),
             // ("slt", R),
-            ("slti", Arith),
-            ("sltiu", Arith),
+            // ("slti", Arith),
+            // ("sltiu", Arith),
             // ("sltu", R),
             // ("sra", R),
-            ("srai", Arith),
+            // ("srai", Arith),
             // ("srl", R),
-            ("srli", Arith),
+            // ("srli", Arith),
             // ("sub", R),
             ("sw", MemS),
             // ("xor", R),
-            ("xori", Arith),
+            // ("xori", Arith),
         ]
         .iter()
         .cloned()
@@ -171,6 +172,14 @@ impl RiscVParser {
     }
 }
 
+/// Returns the first error found in lst, or none if there are no such errors.
+fn find_first_err<T, E>(lst: Vec<Result<T, E>>) -> Option<E> {
+    lst.into_iter().find_map(|r| match r {
+        Err(e) => Some(e),
+        _ => None,
+    })
+}
+
 struct LineParser<'a> {
     data: &'a ParserData,
     iter: TokenIter<'a>,
@@ -205,10 +214,12 @@ impl LineParser<'_> {
             match self.iter.next() {
                 Some(tok) => match tok.data {
                     Name(..) | Immediate(..) => {
-                        // Allow single comma
-                        if let Some(tok2) = self.iter.peek() {
-                            if let Comma = tok2.data {
-                                self.iter.next();
+                        // Allow single comma, excpet when trailing
+                        if n > 1 {
+                            if let Some(tok2) = self.iter.peek() {
+                                if let Comma = tok2.data {
+                                    self.iter.next();
+                                }
                             }
                         }
                         self.consume_commasep_args(head_loc, head_name, n - 1)
@@ -242,29 +253,43 @@ impl LineParser<'_> {
         }
     }
 
+    fn try_parse_imm(&self, token: &Token) -> Result<DataWord, ParseError> {
+        match &token.data {
+            TokenType::Immediate(val, ..) => Ok(DataWord::from(*val)),
+            _ => Err(ParseError::unexpected(
+                token.location,
+                format!("Expected immediate, found {:?}", token.data),
+            )),
+        }
+    }
+
     fn try_expand_inst(
         &mut self,
         head_loc: Location,
         name: String,
     ) -> Result<Vec<ConcreteInst>, ParseError> {
+        use ParseType::*;
         if let Some(parse_type) = self.data.inst_expansion_table.get(name.as_str()) {
             match parse_type {
-                ParseType::R(inst_new) => {
+                R(inst_new) => {
                     // R-types are always "inst rd, rs1, rs2" with one or no commas in between
-                    let args = self.consume_commasep_args(head_loc, name, 3);
-                    args.and_then(|lst| {
-                        debug_assert!(lst.len() == 3);
-                        let maybe_rd = self.try_parse_reg(&lst[0]);
-                        let maybe_rs1 = self.try_parse_reg(&lst[1]);
-                        let maybe_rs2 = self.try_parse_reg(&lst[2]);
-                        maybe_rd.and_then(|rd| {
-                            maybe_rs1.and_then(|rs1| {
-                                maybe_rs2.and_then(|rs2| Ok(vec![inst_new(rd, rs1, rs2)]))
-                            })
-                        })
-                    })
+                    let args = self.consume_commasep_args(head_loc, name, 3)?;
+                    debug_assert!(args.len() == 3);
+                    let regs: Vec<Result<IRegister, ParseError>> =
+                        args.iter().map(|arg| self.try_parse_reg(arg)).collect();
+                    match regs.as_slice() {
+                        [Ok(rd), Ok(rs1), Ok(rs2)] => Ok(vec![inst_new(*rd, *rs1, *rs2)]),
+                        _ => Err(find_first_err(regs).unwrap()),
+                    }
                 }
-                // Arith => ,
+                Arith(inst_new) => {
+                    let args = self.consume_commasep_args(head_loc, name, 3)?;
+                    debug_assert!(args.len() == 3);
+                    let rd = self.try_parse_reg(&args[0])?;
+                    let rs1 = self.try_parse_reg(&args[1])?;
+                    let imm = self.try_parse_imm(&args[2])?;
+                    Ok(vec![inst_new(rd, rs1, imm)])
+                }
                 // // Env => ,
                 // Mem => ,
                 // B => ,
@@ -285,7 +310,7 @@ impl LineParser<'_> {
         }
     }
 
-    fn new<'a>(data: &'a ParserData, tokens: TokenStream) -> LineParser<'a> {
+    fn new(data: &ParserData, tokens: TokenStream) -> LineParser {
         LineParser {
             data,
             iter: tokens.into_iter().peekable(),
@@ -322,13 +347,42 @@ mod tests {
     use crate::program_state::IRegister::*;
 
     #[test]
+    fn test_bad_commas() {
+        let bad_insts = vec![
+            "add x5, sp, fp,",
+            "add ,x1, x2, x3",
+            ",add x1 x2 x3",
+            "add x1,,x2, x3",
+        ];
+        for inst in bad_insts {
+            let (toks, lex_err) = lexer::Lexer::from_string(inst.to_string()).lex();
+            assert!(lex_err.is_empty());
+            let parser = RiscVParser::from_tokens(toks);
+            let (_, parse_err) = parser.parse();
+            assert!(!parse_err.is_empty());
+        }
+    }
+
+    #[test]
     fn test_r_type_parse() {
         let (toks, lex_err) = lexer::Lexer::from_string("add x5, sp, fp".to_string()).lex();
-        let parser = RiscVParser::from_tokens(toks);
         assert!(lex_err.is_empty());
+        let parser = RiscVParser::from_tokens(toks);
         let (insts, parse_err) = parser.parse();
         assert!(parse_err.is_empty());
         assert_eq!(insts.len(), 1);
         assert_eq!(insts[0], Add::new(IRegister::from(5), SP, FP));
+    }
+
+    #[test]
+    fn test_i_arith_parse() {
+        // lack of commas is deliberate
+        let (toks, lex_err) = lexer::Lexer::from_string("addi sp sp -4".to_string()).lex();
+        assert!(lex_err.is_empty());
+        let parser = RiscVParser::from_tokens(toks);
+        let (insts, parse_err) = parser.parse();
+        assert!(parse_err.is_empty());
+        assert_eq!(insts.len(), 1);
+        assert_eq!(insts[0], Addi::new(SP, SP, DataWord::from(-4)));
     }
 }
