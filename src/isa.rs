@@ -11,6 +11,7 @@ fn f7(val: u32) -> BitStr32 {
 
 const R_OPCODE: BitStr32 = BitStr32::new(0b011_0011, 7);
 const I_OPCODE_ARITH: BitStr32 = BitStr32::new(0b001_0011, 7);
+const I_OPCODE_LOAD: BitStr32 = BitStr32::new(0b000_0011, 7);
 const B_OPCODE: BitStr32 = BitStr32::new(0b110_0011, 7);
 const J_OPCODE: BitStr32 = BitStr32::new(0b110_1111, 7);
 const S_OPCODE: BitStr32 = BitStr32::new(0b010_0011, 7);
@@ -204,6 +205,87 @@ impl IType for Jalr {
             rd,
             DataWord::from(u32::from(state.pc) + 4),
         )
+    }
+}
+
+pub struct Lb;
+impl ITypeLoad for Lb {
+    fn inst_fields() -> IInstFields {
+        IInstFields {
+            opcode: I_OPCODE_LOAD,
+            funct3: f3(0b000),
+        }
+    }
+
+    fn eval(mem: &Memory, addr: ByteAddress) -> DataWord {
+        mem.get_byte(addr).sign_extend()
+    }
+}
+
+pub struct Lbu;
+impl ITypeLoad for Lbu {
+    fn inst_fields() -> IInstFields {
+        IInstFields {
+            opcode: I_OPCODE_LOAD,
+            funct3: f3(0b100),
+        }
+    }
+
+    fn eval(mem: &Memory, addr: ByteAddress) -> DataWord {
+        mem.get_byte(addr).zero_pad()
+    }
+}
+
+pub struct Lh;
+impl ITypeLoad for Lh {
+    fn inst_fields() -> IInstFields {
+        IInstFields {
+            opcode: I_OPCODE_LOAD,
+            funct3: f3(0b001),
+        }
+    }
+
+    // TODO define alignment behavior
+    fn eval(mem: &Memory, addr: ByteAddress) -> DataWord {
+        let second_byte_addr = ByteAddress::from(u32::from(addr) + 1);
+        DataWord::from(
+            (u32::from(mem.get_byte(second_byte_addr).sign_extend()) << 8)
+                | u32::from(mem.get_byte(addr).zero_pad()),
+        )
+    }
+}
+
+pub struct Lhu;
+impl ITypeLoad for Lhu {
+    fn inst_fields() -> IInstFields {
+        IInstFields {
+            opcode: I_OPCODE_LOAD,
+            funct3: f3(0b101),
+        }
+    }
+
+    // TODO define alignment behavior
+    fn eval(mem: &Memory, addr: ByteAddress) -> DataWord {
+        let second_byte_addr = ByteAddress::from(u32::from(addr) + 1);
+        DataWord::from(
+            (u32::from(mem.get_byte(second_byte_addr).zero_pad()) << 8)
+                | u32::from(mem.get_byte(addr).zero_pad()),
+        )
+    }
+}
+
+pub struct Lw;
+impl ITypeLoad for Lw {
+    fn inst_fields() -> IInstFields {
+        IInstFields {
+            opcode: I_OPCODE_LOAD,
+            funct3: f3(0b010),
+        }
+    }
+
+    // TODO define alignment behavior
+    fn eval(mem: &Memory, addr: ByteAddress) -> DataWord {
+        mem.get_word(addr.to_word_address())
     }
 }
 
@@ -559,6 +641,72 @@ mod test {
     }
 
     #[test]
+    fn test_lb_lbu() {
+        let mut state = get_init_state();
+        let base_addr = 0xFFFF_0004u32;
+        let test_data = 0xABCD_EF01u32;
+        state.memory.set_word(
+            ByteAddress::from(base_addr).to_word_address(),
+            DataWord::from(test_data),
+        );
+        state.regfile.set(T0, DataWord::from(base_addr));
+        // signed loads
+        state.apply_inst(&Lb::new(T1, T0, DataWord::from(0)));
+        state.apply_inst(&Lb::new(T2, T0, DataWord::from(1)));
+        state.apply_inst(&Lb::new(T3, T0, DataWord::from(2)));
+        state.apply_inst(&Lb::new(T4, T0, DataWord::from(3)));
+        assert_eq!(state.regfile.read(T1), DataWord::from(0x01));
+        assert_eq!(state.regfile.read(T2), DataWord::from(0xFFFF_FFEFu32));
+        assert_eq!(state.regfile.read(T3), DataWord::from(0xFFFF_FFCDu32));
+        assert_eq!(state.regfile.read(T4), DataWord::from(0xFFFF_FFABu32));
+        // unsigned loads
+        state.apply_inst(&Lbu::new(T1, T0, DataWord::from(0)));
+        state.apply_inst(&Lbu::new(T2, T0, DataWord::from(1)));
+        state.apply_inst(&Lbu::new(T3, T0, DataWord::from(2)));
+        state.apply_inst(&Lbu::new(T4, T0, DataWord::from(3)));
+        assert_eq!(state.regfile.read(T1), DataWord::from(0x01));
+        assert_eq!(state.regfile.read(T2), DataWord::from(0xEF));
+        assert_eq!(state.regfile.read(T3), DataWord::from(0xCD));
+        assert_eq!(state.regfile.read(T4), DataWord::from(0xAB));
+    }
+
+    #[test]
+    fn test_lh_lhu_aligned() {
+        let mut state = get_init_state();
+        let base_addr = 0xFFFF_0004u32;
+        let test_data = 0x0BCD_EF01u32;
+        state.memory.set_word(
+            ByteAddress::from(base_addr).to_word_address(),
+            DataWord::from(test_data),
+        );
+        state.regfile.set(T0, DataWord::from(base_addr));
+        // signed loads
+        state.apply_inst(&Lh::new(T1, T0, DataWord::from(0)));
+        state.apply_inst(&Lh::new(T2, T0, DataWord::from(2)));
+        assert_eq!(state.regfile.read(T1), DataWord::from(0xFFFF_EF01u32));
+        assert_eq!(state.regfile.read(T2), DataWord::from(0x0BCD));
+        // unsigned loads
+        state.apply_inst(&Lhu::new(T1, T0, DataWord::from(0)));
+        state.apply_inst(&Lhu::new(T2, T0, DataWord::from(2)));
+        assert_eq!(state.regfile.read(T1), DataWord::from(0xEF01));
+        assert_eq!(state.regfile.read(T2), DataWord::from(0x0BCD));
+    }
+
+    #[test]
+    fn test_lw_aligned() {
+        let mut state = get_init_state();
+        let base_addr = 0xFFFF_0004u32;
+        let test_data = 0xABCD_EF01u32;
+        state.memory.set_word(
+            ByteAddress::from(base_addr).to_word_address(),
+            DataWord::from(test_data),
+        );
+        state.regfile.set(T0, DataWord::from(base_addr));
+        state.apply_inst(&Lw::new(T1, T0, DataWord::from(0)));
+        assert_eq!(state.regfile.read(T1), DataWord::from(test_data));
+    }
+
+    #[test]
     fn test_sw() {
         let mut state = get_init_state();
         let test_data = vec![
@@ -583,13 +731,8 @@ mod test {
 pub enum Instruction {
     Ebreak,
     Ecall,
-    Lb,
-    Lbu,
     Ld,
-    Lh,
-    Lhu,
     Lui,
-    Lw,
     Lwu,
     Or,
     Ori,

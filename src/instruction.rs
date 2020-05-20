@@ -231,8 +231,8 @@ pub trait ITypeLoad {
                 } else {
                     u32::from(rs1_val) - u32::from(offs.neg())
                 });
-                let new_rd_val = Self::eval(addr);
-                StateChange::mem_write_op(state, u32::from(addr), new_rd_val)
+                let new_rd_val = Self::eval(&state.memory, ByteAddress::from(addr));
+                StateChange::reg_write_pc_p4(state, rd, new_rd_val)
             }),
             data: ConcreteInstData::I {
                 fields: Self::inst_fields(),
@@ -245,7 +245,7 @@ pub trait ITypeLoad {
     fn inst_fields() -> IInstFields;
 
     /// Calculates the new value of rd given the memory address to read from.
-    fn eval(addr: DataWord) -> DataWord;
+    fn eval(mem: &Memory, addr: ByteAddress) -> DataWord;
 }
 
 // pub trait EnvironInst {}

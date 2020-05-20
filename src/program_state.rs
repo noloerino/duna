@@ -100,6 +100,23 @@ impl DataWord {
     pub const fn to_bit_str(self, size: u8) -> BitStr32 {
         BitStr32::new(self.value, size)
     }
+
+    /// Returns a copy of the value with the ith byte set to val.
+    pub fn set_byte(self, i: u8, val: DataByte) -> DataWord {
+        debug_assert!(i < 4);
+        let mask: u32 = !(0xFF << (i * 8));
+        DataWord {
+            value: (self.value & mask) | ((val.value as u32) << (i * 8)),
+        }
+    }
+
+    /// Selects the ith byte in the word, where 0 is the LSB.
+    pub fn get_byte(self, i: u8) -> DataByte {
+        debug_assert!(i < 4);
+        DataByte {
+            value: (self.value >> (i * 8)) as u8,
+        }
+    }
 }
 
 impl From<u32> for DataWord {
@@ -125,6 +142,57 @@ impl From<DataWord> for u32 {
 impl From<DataWord> for i32 {
     fn from(value: DataWord) -> i32 {
         value.value as i32
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct DataByte {
+    value: u8,
+}
+
+impl DataByte {
+    pub const fn zero() -> DataByte {
+        DataByte { value: 0 }
+    }
+
+    pub const fn zero_pad(self) -> DataWord {
+        DataWord {
+            value: self.value as u32,
+        }
+    }
+
+    pub fn sign_extend(self) -> DataWord {
+        if (self.value >> 7) > 0 {
+            DataWord {
+                value: (self.value as u32) | 0xFFFF_FF00,
+            }
+        } else {
+            self.zero_pad()
+        }
+    }
+}
+
+impl From<u8> for DataByte {
+    fn from(value: u8) -> DataByte {
+        DataByte { value }
+    }
+}
+
+impl From<i8> for DataByte {
+    fn from(value: i8) -> DataByte {
+        DataByte { value: value as u8 }
+    }
+}
+
+impl From<DataByte> for u8 {
+    fn from(value: DataByte) -> u8 {
+        value.value
+    }
+}
+
+impl From<DataByte> for i8 {
+    fn from(value: DataByte) -> i8 {
+        value.value as i8
     }
 }
 
@@ -238,6 +306,12 @@ impl ByteAddress {
     }
 }
 
+impl From<DataWord> for ByteAddress {
+    fn from(value: DataWord) -> ByteAddress {
+        ByteAddress { addr: value.value }
+    }
+}
+
 impl From<u32> for ByteAddress {
     fn from(value: u32) -> ByteAddress {
         ByteAddress { addr: value }
@@ -297,6 +371,24 @@ impl Memory {
         Memory {
             store: HashMap::new(),
         }
+    }
+
+    #[allow(dead_code)]
+    pub fn set_byte(&mut self, addr: ByteAddress, value: DataByte) {
+        let word_addr = addr.to_word_address();
+        let offs = addr.get_word_offset();
+        let word_val = if let Some(&old_val) = self.store.get(&word_addr) {
+            old_val
+        } else {
+            DataWord::zero()
+        };
+        self.set_word(word_addr, word_val.set_byte(offs, value))
+    }
+
+    pub fn get_byte(&self, addr: ByteAddress) -> DataByte {
+        let word_addr = addr.to_word_address();
+        let offs = addr.get_word_offset();
+        self.get_word(word_addr).get_byte(offs)
     }
 
     pub fn set_word(&mut self, addr: WordAddress, value: DataWord) {
