@@ -131,7 +131,6 @@ impl RiscVParser {
         let mut reg_expansion_table: HashMap<String, IRegister> = IRegister::REG_ARRAY
             .iter()
             .map(|r| (r.to_string(), *r))
-            .into_iter()
             .collect();
         for i in 0..32 {
             reg_expansion_table.insert(format!("x{}", i), IRegister::from(i));
@@ -157,7 +156,7 @@ impl RiscVParser {
     ) -> Result<Vec<Token>, ParseError> {
         use TokenType::*;
         if n == 0 {
-            if !iter.peek().is_none() {
+            if iter.peek().is_some() {
                 Err(ParseError::unexpected(
                     head_loc,
                     format!(
@@ -200,8 +199,8 @@ impl RiscVParser {
             TokenType::Name(name) => self
                 .reg_expansion_table
                 .get(name)
-                .and_then(|r| Some(*r))
-                .ok_or(ParseError::bad_reg(token.location, name.to_string())),
+                .cloned()
+                .ok_or_else(|| ParseError::bad_reg(token.location, name.to_string())),
             _ => Err(ParseError::unexpected(
                 token.location,
                 format!("Expected register name, found {:?}", token.data),
@@ -257,7 +256,7 @@ impl RiscVParser {
         // needed for lifetime reasons i guess
         let orig_iter = &mut toks.into_iter() as &mut dyn Iterator<Item = Token>;
         let mut iter = orig_iter.peekable();
-        return if let Some(head_tok) = iter.next() {
+        if let Some(head_tok) = iter.next() {
             use TokenType::*;
             match head_tok.data {
                 Name(name) => self.try_expand_inst(head_tok.location, name, &mut iter),
@@ -273,7 +272,7 @@ impl RiscVParser {
             }
         } else {
             Ok(Vec::new())
-        };
+        }
     }
 
     pub fn parse_program(&self, lines: LineTokenStream) -> Result<RiscVProgram, Vec<ParseError>> {

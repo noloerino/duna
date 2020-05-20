@@ -286,7 +286,7 @@ mod test {
     fn test_to_machine_code() {
         // add s0, s1, s2
         const ADD_HEX: u32 = 0x0124_8433;
-        assert_eq!(Add::new(S0, S1, S2).to_machine_code(), ADD_HEX);
+        assert_eq!(Add::new(IRegister::S0, S1, S2).to_machine_code(), ADD_HEX);
         // addi t1, t2, -10
         const ADDI_HEX: u32 = 0xFF63_8313;
         assert_eq!(

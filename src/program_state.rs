@@ -165,8 +165,6 @@ pub enum IRegister {
     T6,
 }
 
-pub const S0: IRegister = IRegister::FP;
-
 impl Display for IRegister {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         let mut s = format!("{:?}", self);
@@ -182,6 +180,7 @@ impl From<u8> for IRegister {
 }
 
 impl IRegister {
+    pub const S0: IRegister = IRegister::FP;
     pub const REG_ARRAY: [IRegister; 32] = [
         IRegister::ZERO,
         IRegister::RA,
