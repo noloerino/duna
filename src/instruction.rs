@@ -1,4 +1,5 @@
 use crate::program_state::*;
+use std::fmt;
 
 pub struct RInstFields {
     pub funct7: BitStr32,
@@ -142,6 +143,18 @@ impl ConcreteInst {
             } // TODO implement ecall/ebreak
         }
         .as_u32()
+    }
+}
+
+impl PartialEq<ConcreteInst> for ConcreteInst {
+    fn eq(&self, other: &ConcreteInst) -> bool {
+        self.to_machine_code() == other.to_machine_code()
+    }
+}
+
+impl fmt::Debug for ConcreteInst {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:#010X}", self.to_machine_code())
     }
 }
 

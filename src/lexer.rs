@@ -62,7 +62,7 @@ impl ImmRenderType {
         match self {
             Bin => format!("{}", n),
             Dec => format!("{:#b}", n),
-            Hex => format!("{:#x}", n),
+            Hex => format!("{:#X}", n),
         }
     }
 }

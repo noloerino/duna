@@ -583,7 +583,6 @@ mod test {
 pub enum Instruction {
     Ebreak,
     Ecall,
-    Jalr,
     Lb,
     Lbu,
     Ld,
@@ -594,7 +593,7 @@ pub enum Instruction {
     Lwu,
     Or,
     Ori,
-    // Sb,
+    Sb,
     Sd,
     Sh,
     Sll,

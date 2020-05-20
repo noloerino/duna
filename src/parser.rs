@@ -307,9 +307,6 @@ mod tests {
         assert!(lex_err.is_empty());
         let result = parser.parse_program(toks).expect("Error while parsing");
         assert_eq!(result.insts.len(), 1);
-        assert_eq!(
-            result.insts[0].to_machine_code(),
-            Add::new(IRegister::from(5), SP, FP).to_machine_code()
-        );
+        assert_eq!(result.insts[0], Add::new(IRegister::from(5), SP, FP));
     }
 }
