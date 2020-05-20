@@ -1,7 +1,9 @@
+use crate::parser::ParseError;
 use std::fs;
 use std::iter::Enumerate;
 use std::iter::Peekable;
 use std::str::Chars;
+use std::str::Lines;
 
 // The line number of a token.
 pub type LineNo = usize;
@@ -12,27 +14,6 @@ pub type LineOffs = usize;
 pub struct Location {
     lineno: LineNo,
     offs: LineOffs,
-}
-
-#[derive(Eq, PartialEq, Debug)]
-struct LexErrorData {
-    msg: String,
-    contents: String,
-}
-
-#[derive(Eq, PartialEq, Debug)]
-pub struct LexError {
-    location: Location,
-    data: LexErrorData,
-}
-
-impl LexError {
-    fn new(location: &Location, msg: String, contents: String) -> Self {
-        LexError {
-            location: *location,
-            data: LexErrorData { msg, contents },
-        }
-    }
 }
 
 #[derive(Eq, PartialEq, Debug)]
@@ -110,212 +91,234 @@ fn is_imm_start(c: char) -> bool {
     c == '-' || c == '+' || c.is_ascii_digit()
 }
 
-fn build_comment(iter: &mut LineIter) -> Result<TokenType, LexError> {
-    // assume leading # already consumed
-    // just consume the rest of the line
-    let mut cs = Vec::<u8>::new();
-    for (_, c) in iter {
-        cs.push(c as u8);
-    }
-    // TODO reimplement this uzing unzip
-    Ok(TokenType::Comment(string_from_utf8(cs)))
+struct LineLexer<'a> {
+    lineno: LineNo,
+    iter: LineIter<'a>,
 }
 
-fn build_section_def(iter: &mut LineIter) -> Result<TokenType, LexError> {
-    // assume leading . already consumed
-    let mut cs = Vec::<u8>::new();
-    while let Some((_, c_ref)) = iter.peek() {
-        let c = *c_ref;
-        if is_delim(c) {
-            break;
+impl LineLexer<'_> {
+    fn build_comment(&mut self) -> Result<TokenType, ParseError> {
+        // assume leading # already consumed
+        // just consume the rest of the line
+        let mut cs = Vec::<u8>::new();
+        for (_, c) in self.iter {
+            cs.push(c as u8);
         }
-        cs.push(c as u8);
-        iter.next();
+        // TODO reimplement this uzing unzip
+        Ok(TokenType::Comment(string_from_utf8(cs)))
     }
-    Ok(TokenType::SectionDef(string_from_utf8(cs)))
-}
 
-fn build_name(iter: &mut LineIter, state: &LexState) -> Result<TokenType, LexError> {
-    let mut cs = Vec::<u8>::new();
-    cs.push(state.head as u8);
-    while let Some((_, c_ref)) = iter.peek() {
-        // colon acts as a delimiter - if we hit a colon, we should start parsing the next token
-        let c = *c_ref;
-        if c == ':' {
-            return Ok(TokenType::LabelDef(string_from_utf8(cs)));
+    fn build_section_def(&mut self) -> Result<TokenType, ParseError> {
+        // assume leading . already consumed
+        let mut cs = Vec::<u8>::new();
+        while let Some((_, c_ref)) = self.iter.peek() {
+            let c = *c_ref;
+            if is_delim(c) {
+                break;
+            }
+            cs.push(c as u8);
+            self.iter.next();
         }
-        if is_delim(c) {
-            break;
-        }
-        cs.push(c as u8);
-        iter.next();
+        Ok(TokenType::SectionDef(string_from_utf8(cs)))
     }
-    Ok(TokenType::Name(string_from_utf8(cs)))
-}
 
-fn build_imm(iter: &mut LineIter, state: &LexState) -> Result<TokenType, LexError> {
-    // TODO implement max munch for error handling
-    let LexState { head, .. } = *state;
-    // determines whether we negate at end
-    let negate = head == '-';
-    let mut digits = Vec::<char>::new();
-    let mut fmt = Dec;
-    // first two chars are special because they determine the number format
-    let c1 = if head != '-' && head != '+' {
-        head
-    } else {
-        match iter.peek() {
-            Some((offs, c_ref)) => {
-                let c = *c_ref;
-                if c.is_ascii_digit() {
-                    iter.next();
-                    c
-                } else {
-                    return Err(LexError::new(
-                        &Location {
-                            offs: *offs,
-                            lineno: state.location.lineno,
-                        },
-                        "Cannot parse number literal".to_string(),
-                        string_from_utf8(vec![head as u8, c as u8]),
-                    ));
+    fn build_name(&mut self, state: &LexState) -> Result<TokenType, ParseError> {
+        let mut cs = Vec::<u8>::new();
+        cs.push(state.head as u8);
+        while let Some((_, c_ref)) = self.iter.peek() {
+            // colon acts as a delimiter - if we hit a colon, we should start parsing the next token
+            let c = *c_ref;
+            if c == ':' {
+                return Ok(TokenType::LabelDef(string_from_utf8(cs)));
+            }
+            if is_delim(c) {
+                break;
+            }
+            cs.push(c as u8);
+            self.iter.next();
+        }
+        Ok(TokenType::Name(string_from_utf8(cs)))
+    }
+
+    fn build_imm(&mut self, state: &LexState) -> Result<TokenType, ParseError> {
+        // TODO implement max munch for error handling
+        let LexState { head, .. } = *state;
+        // determines whether we negate at end
+        let negate = head == '-';
+        let mut digits = Vec::<char>::new();
+        let mut fmt = Dec;
+        // first two chars are special because they determine the number format
+        let c1 = if head != '-' && head != '+' {
+            head
+        } else {
+            match self.iter.peek() {
+                Some((offs, c_ref)) => {
+                    let c = *c_ref;
+                    if c.is_ascii_digit() {
+                        self.iter.next();
+                        c
+                    } else {
+                        return Err(ParseError::new(
+                            Location {
+                                offs: *offs,
+                                ..state.location
+                            },
+                            "Cannot parse number literal".to_string(),
+                            string_from_utf8(vec![head as u8, c as u8]),
+                        ));
+                    }
+                }
+                None => {
+                    return Err(ParseError::new(
+                        state.location,
+                        "Ran out of characters while parsing number literal".to_string(),
+                        head.to_string(),
+                    ))
                 }
             }
-            None => {
-                return Err(LexError::new(
-                    &state.location,
-                    "Ran out of characters while parsing number literal".to_string(),
-                    head.to_string(),
-                ))
-            }
-        }
-    };
-    match iter.peek() {
-        // if only one char, return it as base 10 literal
-        None => digits.push(c1),
-        Some((_, c_ref)) => {
-            let c = *c_ref;
-            // possibly look for format specifier
-            if c1 == '0' {
-                if c == 'x' {
-                    fmt = Hex;
-                } else if c == 'b' {
-                    fmt = Bin;
+        };
+        match self.iter.peek() {
+            // if only one char, return it as base 10 literal
+            None => digits.push(c1),
+            Some((_, c_ref)) => {
+                let c = *c_ref;
+                // possibly look for format specifier
+                if c1 == '0' {
+                    if c == 'x' {
+                        fmt = Hex;
+                    } else if c == 'b' {
+                        fmt = Bin;
+                    } else {
+                        // assume base 10
+                        digits.push(c1);
+                        digits.push(c);
+                        if !c.is_ascii_digit() {
+                            return Err(ParseError::new(
+                                state.location,
+                                "Error parsing base 10 integer literal".to_string(),
+                                digits.into_iter().collect(),
+                            ));
+                        }
+                    }
                 } else {
-                    // assume base 10
+                    // definitely base 10
                     digits.push(c1);
                     digits.push(c);
                     if !c.is_ascii_digit() {
-                        return Err(LexError::new(
-                            &state.location,
+                        return Err(ParseError::new(
+                            state.location,
                             "Error parsing base 10 integer literal".to_string(),
                             digits.into_iter().collect(),
                         ));
                     }
                 }
-            } else {
-                // definitely base 10
-                digits.push(c1);
+            }
+        }
+        self.iter.next();
+        while let Some((_, c_ref)) = self.iter.peek() {
+            let c = *c_ref;
+            let push: bool = match fmt {
+                Bin => c == '0' || c == '1',
+                Hex => c.is_ascii_hexdigit(),
+                Dec => c.is_ascii_digit(),
+            };
+            if push {
                 digits.push(c);
-                if !c.is_ascii_digit() {
-                    return Err(LexError::new(
-                        &state.location,
-                        "Error parsing base 10 integer literal".to_string(),
-                        digits.into_iter().collect(),
-                    ));
-                }
+                self.iter.next();
+            } else {
+                return Err(ParseError::new(
+                    state.location,
+                    format!(
+                        "Error parsing {} integer literal",
+                        match fmt {
+                            Bin => "binary",
+                            Hex => "hexademical",
+                            Dec => "decimal",
+                        }
+                    ),
+                    digits.into_iter().collect(),
+                ));
             }
         }
-    }
-    iter.next();
-    while let Some((_, c_ref)) = iter.peek() {
-        let c = *c_ref;
-        let push: bool = match fmt {
-            Bin => c == '0' || c == '1',
-            Hex => c.is_ascii_hexdigit(),
-            Dec => c.is_ascii_digit(),
-        };
-        if push {
-            digits.push(c);
-            iter.next();
+        if let Ok(val) =
+            i32::from_str_radix(digits.into_iter().collect::<String>().as_str(), fmt.radix())
+        {
+            Ok(TokenType::Immediate(if negate { -val } else { val }, fmt))
         } else {
-            return Err(LexError::new(
-                &state.location,
-                format!(
-                    "Error parsing {} integer literal",
-                    match fmt {
-                        Bin => "binary",
-                        Hex => "hexademical",
-                        Dec => "decimal",
-                    }
-                ),
-                digits.into_iter().collect(),
-            ));
+            unimplemented!()
         }
     }
-    if let Ok(val) =
-        i32::from_str_radix(digits.into_iter().collect::<String>().as_str(), fmt.radix())
-    {
-        Ok(TokenType::Immediate(if negate { -val } else { val }, fmt))
-    } else {
-        unimplemented!()
+
+    fn new(lineno: LineNo, iter: LineIter) -> LineLexer {
+        LineLexer { lineno, iter }
     }
-}
 
-#[allow(dead_code)]
-fn lex_file(path: String) -> (LineTokenStream, Vec<LexError>) {
-    lex_string(fs::read_to_string(path).expect("Failed to open file"))
-}
-
-pub fn lex_string(contents: String) -> (LineTokenStream, Vec<LexError>) {
-    let mut toks = Vec::<TokenStream>::new();
-    let mut errs = Vec::<LexError>::new();
-    let lines = contents.as_str().lines();
-    for (lineno, line) in lines.enumerate() {
-        let iter = &mut line.chars().enumerate().peekable();
-        toks.push(lex_line(iter, lineno, &mut errs));
-    }
-    (toks, errs)
-}
-
-/// Generates a TokenStream for a line in a file.
-fn lex_line(iter: &mut LineIter, lineno: LineNo, errs: &mut Vec<LexError>) -> TokenStream {
-    let mut toks = Vec::<Token>::new();
-    while let Some((start_offs, c)) = iter.next() {
-        let state = LexState {
-            head: c,
-            location: Location {
-                lineno,
-                offs: start_offs,
-            },
-        };
-        let maybe_tok = if is_name_start(c) {
-            build_name(iter, &state)
-        } else if is_imm_start(c) {
-            build_imm(iter, &state)
-        } else {
-            match c {
-                '.' => build_section_def(iter),
-                ',' => Ok(TokenType::Comma),
-                '#' => build_comment(iter),
-                '(' => Ok(TokenType::LParen),
-                ')' => Ok(TokenType::RParen),
-                // ':' => Some(build_err("Invalid token", char::to_string(c))),
-                _ => continue,
-            }
-        };
-        match maybe_tok {
-            Ok(tok) => toks.push(Token {
+    /// Generates a TokenStream for a line in a file.
+    fn lex(self, errs: &mut Vec<ParseError>) -> TokenStream {
+        let mut toks = Vec::<Token>::new();
+        while let Some((start_offs, c)) = self.iter.next() {
+            let state = LexState {
+                head: c,
                 location: Location {
-                    lineno,
+                    lineno: self.lineno,
                     offs: start_offs,
                 },
-                data: tok,
-            }),
-            Err(err) => errs.push(err),
+            };
+            let maybe_tok = if is_name_start(c) {
+                self.build_name(&state)
+            } else if is_imm_start(c) {
+                self.build_imm(&state)
+            } else {
+                match c {
+                    '.' => self.build_section_def(),
+                    ',' => Ok(TokenType::Comma),
+                    '#' => self.build_comment(),
+                    '(' => Ok(TokenType::LParen),
+                    ')' => Ok(TokenType::RParen),
+                    // ':' => Some(build_err("Invalid token", char::to_string(c))),
+                    _ => continue,
+                }
+            };
+            match maybe_tok {
+                Ok(tok) => toks.push(Token {
+                    location: Location {
+                        lineno: self.lineno,
+                        offs: start_offs,
+                    },
+                    data: tok,
+                }),
+                Err(err) => errs.push(err),
+            }
+        }
+        toks
+    }
+}
+
+pub struct Lexer<'a> {
+    line_iters: Enumerate<Lines<'a>>,
+}
+
+impl Lexer<'_> {
+    #[allow(dead_code)]
+    pub fn from_file(path: &String) -> Lexer {
+        Lexer::from_string(&fs::read_to_string(path).expect("Failed to open file"))
+    }
+
+    pub fn from_string(contents: &String) -> Lexer {
+        Lexer {
+            line_iters: contents.as_str().lines().enumerate(),
         }
     }
-    toks
+
+    /// Consume the lexer's iterator to produce a stream of tokens and any possible errors.
+    pub fn lex(self) -> (LineTokenStream, Vec<ParseError>) {
+        let mut toks = Vec::<TokenStream>::new();
+        let mut errs = Vec::<ParseError>::new();
+        for (lineno, line) in self.line_iters {
+            toks.push(LineLexer::new(lineno, line.chars().enumerate().peekable()).lex(&mut errs));
+        }
+        (toks, errs)
+    }
 }
 
 #[cfg(test)]
@@ -324,7 +327,7 @@ mod tests {
 
     #[test]
     fn test_simple_lex() {
-        let (lines, errs) = lex_string("addi x0, x1, x2".to_string());
+        let (lines, errs) = Lexer::from_string(&"addi x0, x1, x2".to_string()).lex();
         let toks = &lines[0];
         assert!(errs.is_empty());
         // check actual data
@@ -360,15 +363,13 @@ mod tests {
             ("-874", Dec, -874),
         ];
         for (line, fmt, exp) in cases {
-            let iter = &mut line.chars().enumerate().peekable();
+            let iter = line.chars().enumerate().peekable();
+            let lexer = LineLexer::new(0, iter);
             let (_, head) = iter.next().unwrap();
-            let result = build_imm(
-                iter,
-                &LexState {
-                    head,
-                    location: Location { lineno: 0, offs: 0 },
-                },
-            );
+            let result = lexer.build_imm(&LexState {
+                head,
+                location: Location { lineno: 0, offs: 0 },
+            });
             assert_eq!(result, Ok(TokenType::Immediate(exp, fmt)));
         }
     }

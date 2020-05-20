@@ -5,6 +5,31 @@ use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::ops::Add;
 
+pub struct RiscVProgram {
+    insts: Vec<ConcreteInst>,
+    state: ProgramState,
+    // TODO add symbol table, relocation data, etc.?
+}
+
+impl RiscVProgram {
+    pub const TEXT_START: ByteAddress = ByteAddress { addr: 0x0000_0008 };
+    /// Initializes a new program instance from the provided instructions.
+    /// The memory at the start of the instruction section, which defaults to
+    /// 0x0000_0008 to avoid any accidental null pointer derefs.
+    pub fn new(insts: Vec<ConcreteInst>) -> RiscVProgram {
+        let mut state = ProgramState::new();
+        state.pc = RiscVProgram::TEXT_START;
+        let mut next_addr = state.pc.to_word_address();
+        for inst in &insts {
+            state
+                .memory
+                .set_word(next_addr, DataWord::from(inst.to_machine_code()));
+            next_addr += 1
+        }
+        RiscVProgram { insts, state }
+    }
+}
+
 #[derive(Debug, Copy, Clone)]
 /// A bit vector that can fit inside 32 bits. Used to represent instruction fields.
 pub struct BitStr32 {

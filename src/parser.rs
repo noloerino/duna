@@ -12,13 +12,13 @@ struct ParseErrorData {
 }
 
 #[derive(Eq, PartialEq, Debug)]
-struct ParseError {
+pub struct ParseError {
     location: Location,
     data: ParseErrorData,
 }
 
 impl ParseError {
-    fn new(location: Location, msg: String, contents: String) -> Self {
+    pub fn new(location: Location, msg: String, contents: String) -> Self {
         ParseError {
             location,
             data: ParseErrorData { msg, contents },
@@ -52,11 +52,6 @@ impl ParseError {
     fn unexpected(location: Location, contents: String) -> Self {
         ParseError::new(location, "Unexpected token".to_string(), contents)
     }
-}
-
-struct RiscVProgram {
-    insts: Vec<ConcreteInst>,
-    // TODO add symbol table, relocation data, etc.?
 }
 
 #[derive(Clone)]
@@ -275,7 +270,10 @@ impl RiscVParser {
         }
     }
 
-    pub fn parse_program(&self, lines: LineTokenStream) -> Result<RiscVProgram, Vec<ParseError>> {
+    pub fn parse_program(
+        &self,
+        lines: LineTokenStream,
+    ) -> Result<Vec<ConcreteInst>, Vec<ParseError>> {
         let mut insts = Vec::<ConcreteInst>::new();
         let mut errs = Vec::<ParseError>::new();
         for line in lines {
@@ -285,7 +283,7 @@ impl RiscVParser {
             }
         }
         if errs.is_empty() {
-            Ok(RiscVProgram { insts })
+            Ok(insts)
         } else {
             Err(errs)
         }
@@ -305,7 +303,7 @@ mod tests {
         let (toks, lex_err) = lexer::lex_string("add x5, sp, fp".to_string());
         assert!(lex_err.is_empty());
         let result = parser.parse_program(toks).expect("Error while parsing");
-        assert_eq!(result.insts.len(), 1);
-        assert_eq!(result.insts[0], Add::new(IRegister::from(5), SP, FP));
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0], Add::new(IRegister::from(5), SP, FP));
     }
 }
