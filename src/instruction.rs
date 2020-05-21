@@ -226,11 +226,7 @@ pub trait ITypeLoad {
             eval: Box::new(move |state| {
                 let offs = imm_vec.to_sgn_data_word();
                 let rs1_val = state.regfile.read(rs1);
-                let addr = DataWord::from(if i32::from(offs) >= 0 {
-                    u32::from(rs1_val).wrapping_add(u32::from(offs))
-                } else {
-                    u32::from(rs1_val).wrapping_sub(u32::from(offs.neg()))
-                });
+                let addr = DataWord::from(i32::from(rs1_val).wrapping_add(i32::from(offs)));
                 let new_rd_val = Self::eval(&state.memory, ByteAddress::from(addr));
                 StateChange::reg_write_pc_p4(state, rd, new_rd_val)
             }),

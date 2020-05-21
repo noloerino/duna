@@ -114,13 +114,6 @@ impl DataWord {
         DataWord { value: 0 }
     }
 
-    /// Returns the result of taking the 2's complement negation of the DataWord.
-    pub const fn neg(self) -> DataWord {
-        DataWord {
-            value: !self.value + 1,
-        }
-    }
-
     pub const fn to_bit_str(self, size: u8) -> BitStr32 {
         BitStr32::new(self.value, size)
     }
@@ -438,6 +431,12 @@ pub struct ProgramState {
     pub pc: ByteAddress,
     pub regfile: RegFile,
     pub memory: Memory,
+}
+
+impl Default for ProgramState {
+    fn default() -> Self {
+        ProgramState::new()
+    }
 }
 
 impl ProgramState {

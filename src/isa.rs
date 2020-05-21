@@ -721,6 +721,10 @@ mod test {
         state.regfile.set(T0, DataWord::from(base_addr));
         state.apply_inst(&Lw::new(T1, T0, DataWord::from(0)));
         assert_eq!(state.regfile.read(T1), DataWord::from(test_data));
+        // Test loading with negative offset
+        state.regfile.set(T0, DataWord::from(base_addr + 16));
+        state.apply_inst(&Lw::new(T1, T0, DataWord::from(-16)));
+        assert_eq!(state.regfile.read(T1), DataWord::from(test_data));
     }
 
     #[test]
