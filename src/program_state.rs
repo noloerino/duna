@@ -8,7 +8,7 @@ use std::ops::Add;
 
 pub struct RiscVProgram {
     pub insts: Vec<ConcreteInst>,
-    pub state: ProgramState,
+    pub state: UserProgState,
     // TODO add symbol table, relocation data, etc.?
 }
 
@@ -22,7 +22,7 @@ impl RiscVProgram {
     /// The stack pointer is initialized to STACK_START.
 
     pub fn new(insts: Vec<ConcreteInst>) -> RiscVProgram {
-        let mut state = ProgramState::new();
+        let mut state = UserProgState::new();
         state
             .regfile
             .set(IRegister::SP, DataWord::from(RiscVProgram::STACK_START));
@@ -480,21 +480,21 @@ impl Memory {
     }
 }
 
-pub struct ProgramState {
+pub struct UserProgState {
     pub pc: ByteAddress,
     pub regfile: RegFile,
     pub memory: Memory,
 }
 
-impl Default for ProgramState {
+impl Default for UserProgState {
     fn default() -> Self {
-        ProgramState::new()
+        UserProgState::new()
     }
 }
 
-impl ProgramState {
-    pub fn new() -> ProgramState {
-        ProgramState {
+impl UserProgState {
+    pub fn new() -> UserProgState {
+        UserProgState {
             pc: ByteAddress::from(0),
             regfile: RegFile::new(),
             memory: Memory::new(),
@@ -553,7 +553,7 @@ pub struct StateChange {
 }
 
 impl StateChange {
-    fn new(state: &ProgramState, new_pc: ByteAddress, tgt: StateChangeType) -> StateChange {
+    fn new(state: &UserProgState, new_pc: ByteAddress, tgt: StateChangeType) -> StateChange {
         StateChange {
             old_pc: state.pc,
             new_pc,
@@ -561,20 +561,20 @@ impl StateChange {
         }
     }
 
-    fn new_pc_p4(state: &ProgramState, tgt: StateChangeType) -> StateChange {
+    fn new_pc_p4(state: &UserProgState, tgt: StateChangeType) -> StateChange {
         StateChange::new(state, state.pc.plus_4(), tgt)
     }
 
-    pub fn noop(state: &ProgramState) -> StateChange {
+    pub fn noop(state: &UserProgState) -> StateChange {
         StateChange::new_pc_p4(state, StateChangeType::NoRegOrMem)
     }
 
-    pub fn pc_update_op(state: &ProgramState, new_pc: ByteAddress) -> StateChange {
+    pub fn pc_update_op(state: &UserProgState, new_pc: ByteAddress) -> StateChange {
         StateChange::new(state, new_pc, StateChangeType::NoRegOrMem)
     }
 
     pub fn reg_write_op(
-        state: &ProgramState,
+        state: &UserProgState,
         new_pc: ByteAddress,
         reg: IRegister,
         val: DataWord,
@@ -592,7 +592,7 @@ impl StateChange {
         )
     }
 
-    pub fn reg_write_pc_p4(state: &ProgramState, reg: IRegister, val: DataWord) -> StateChange {
+    pub fn reg_write_pc_p4(state: &UserProgState, reg: IRegister, val: DataWord) -> StateChange {
         StateChange::new_pc_p4(
             state,
             StateChangeType::Reg(
@@ -605,7 +605,7 @@ impl StateChange {
         )
     }
 
-    pub fn mem_write_op(state: &ProgramState, addr: WordAddress, val: DataWord) -> StateChange {
+    pub fn mem_write_op(state: &UserProgState, addr: WordAddress, val: DataWord) -> StateChange {
         StateChange::new_pc_p4(
             state,
             StateChangeType::Mem(

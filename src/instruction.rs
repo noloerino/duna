@@ -31,7 +31,7 @@ pub struct EnvironInstFields {
 }
 
 pub struct ConcreteInst {
-    pub eval: Box<dyn Fn(&ProgramState) -> StateChange>,
+    pub eval: Box<dyn Fn(&UserProgState) -> StateChange>,
     data: ConcreteInstData,
 }
 
@@ -194,7 +194,7 @@ pub trait IType {
         }
     }
     fn inst_fields() -> IInstFields;
-    fn eval(state: &ProgramState, rd: IRegister, rs1: IRegister, imm: BitStr32) -> StateChange;
+    fn eval(state: &UserProgState, rd: IRegister, rs1: IRegister, imm: BitStr32) -> StateChange;
 }
 
 pub trait ITypeArith {
@@ -260,7 +260,7 @@ pub trait SType {
         }
     }
     fn inst_fields() -> SInstFields;
-    fn eval(state: &ProgramState, rs1: IRegister, rs2: IRegister, imm: BitStr32) -> StateChange;
+    fn eval(state: &UserProgState, rs1: IRegister, rs2: IRegister, imm: BitStr32) -> StateChange;
 }
 
 pub trait BType {
@@ -306,7 +306,7 @@ pub trait UType {
     }
 
     fn inst_fields() -> UInstFields;
-    fn eval(state: &ProgramState, rd: IRegister, imm: BitStr32) -> StateChange;
+    fn eval(state: &UserProgState, rd: IRegister, imm: BitStr32) -> StateChange;
 }
 
 pub trait JType {
@@ -322,5 +322,5 @@ pub trait JType {
         }
     }
     fn inst_fields() -> JInstFields;
-    fn eval(state: &ProgramState, rd: IRegister, imm: BitStr32) -> StateChange;
+    fn eval(state: &UserProgState, rd: IRegister, imm: BitStr32) -> StateChange;
 }

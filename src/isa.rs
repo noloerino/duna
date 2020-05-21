@@ -81,7 +81,7 @@ impl UType for Auipc {
         }
     }
 
-    fn eval(state: &ProgramState, rd: IRegister, imm: BitStr32) -> StateChange {
+    fn eval(state: &UserProgState, rd: IRegister, imm: BitStr32) -> StateChange {
         StateChange::reg_write_pc_p4(
             state,
             rd,
@@ -180,7 +180,7 @@ impl JType for Jal {
         JInstFields { opcode: J_OPCODE }
     }
 
-    fn eval(state: &ProgramState, rd: IRegister, imm: BitStr32) -> StateChange {
+    fn eval(state: &UserProgState, rd: IRegister, imm: BitStr32) -> StateChange {
         StateChange::reg_write_op(
             state,
             ByteAddress::from(i32::from(state.pc).wrapping_add(imm.as_i32())),
@@ -198,7 +198,7 @@ impl IType for Jalr {
             funct3: f3(0b000),
         }
     }
-    fn eval(state: &ProgramState, rd: IRegister, rs1: IRegister, imm: BitStr32) -> StateChange {
+    fn eval(state: &UserProgState, rd: IRegister, rs1: IRegister, imm: BitStr32) -> StateChange {
         StateChange::reg_write_op(
             state,
             ByteAddress::from(i32::from(state.regfile.read(rs1)).wrapping_add(imm.as_i32())),
@@ -298,7 +298,7 @@ impl SType for Sw {
         }
     }
 
-    fn eval(state: &ProgramState, rs1: IRegister, rs2: IRegister, imm: BitStr32) -> StateChange {
+    fn eval(state: &UserProgState, rs1: IRegister, rs2: IRegister, imm: BitStr32) -> StateChange {
         StateChange::mem_write_op(
             state,
             ByteAddress::from(i32::from(state.regfile.read(rs1)) + imm.as_i32()).to_word_address(),
@@ -321,8 +321,8 @@ mod test {
     const RS2_POS: IRegister = T1;
     const RS2_NEG: IRegister = S1;
 
-    fn get_init_state() -> ProgramState {
-        let mut state = ProgramState::new();
+    fn get_init_state() -> UserProgState {
+        let mut state = UserProgState::new();
         state.regfile.set(RS1, DataWord::from(RS1_VAL));
         state.regfile.set(RS2_POS, DataWord::from(RS2_VAL_POS));
         state.regfile.set(RS2_NEG, DataWord::from(RS2_VAL_NEG));
@@ -331,7 +331,7 @@ mod test {
 
     #[test]
     fn test_write_x0() {
-        let mut state = ProgramState::new();
+        let mut state = UserProgState::new();
         state.apply_inst(&Addi::new(ZERO, ZERO, DataWord::from(0x100)));
         assert_eq!(i32::from(state.regfile.read(ZERO)), 0);
     }
@@ -343,7 +343,7 @@ mod test {
 
     /// Tests an R type instruction. Assumes that the registers being read
     /// are independent of the registers being written.
-    fn test_r_type<T: RType>(state: &mut ProgramState, args: Vec<RTestData>) {
+    fn test_r_type<T: RType>(state: &mut UserProgState, args: Vec<RTestData>) {
         for RTestData { rs2, result } in args {
             state.apply_inst(&T::new(RD, RS1, rs2));
             assert_eq!(i32::from(state.regfile.read(RD)), result);
@@ -357,7 +357,7 @@ mod test {
 
     /// Tests an I type arithmetic instruction. Assumes that the registers being read
     /// are independent of the registers being written.
-    fn test_i_type_arith<T: ITypeArith>(state: &mut ProgramState, args: Vec<IArithTestData>) {
+    fn test_i_type_arith<T: ITypeArith>(state: &mut UserProgState, args: Vec<IArithTestData>) {
         for IArithTestData { imm, result } in args {
             state.apply_inst(&T::new(RD, RS1, DataWord::from(imm)));
             assert_eq!(i32::from(state.regfile.read(RD)), result);
@@ -493,7 +493,7 @@ mod test {
     }
 
     /// Tests a branch instruction. Taken jumps move forward by 0x100, or backwards by 0x100.
-    fn test_b_type<T: BType>(state: &mut ProgramState, args: Vec<BTestData>) {
+    fn test_b_type<T: BType>(state: &mut UserProgState, args: Vec<BTestData>) {
         for dist in vec![0x100, -0x100] {
             let offs = DataWord::from(dist);
             for &BTestData {
@@ -515,7 +515,7 @@ mod test {
 
     #[test]
     fn test_b_type_insts() {
-        let mut state = ProgramState::new();
+        let mut state = UserProgState::new();
         test_b_type::<Beq>(
             &mut state,
             vec![
