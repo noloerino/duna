@@ -1,4 +1,6 @@
 use crate::instruction::*;
+use crate::lexer::Lexer;
+use crate::parser::{ParseError, RiscVParser};
 use std::cmp::{max, min};
 use std::collections::HashMap;
 use std::fmt;
@@ -11,12 +13,19 @@ pub struct RiscVProgram {
 }
 
 impl RiscVProgram {
-    pub const TEXT_START: ByteAddress = ByteAddress { addr: 0x0000_0008 };
+    pub const TEXT_START: ByteAddress = ByteAddress::new(0x0000_0008);
+    pub const STACK_START: ByteAddress = ByteAddress::new(0x7FFF_FFF0);
+
     /// Initializes a new program instance from the provided instructions.
-    /// The memory at the start of the instruction section, which defaults to
-    /// 0x0000_0008 to avoid any accidental null pointer derefs.
+    /// The instructions are loaded into memory at the start of the instruction section,
+    /// which defaults to TEXT_START to avoid any accidental null pointer derefs.
+    /// The stack pointer is initialized to STACK_START.
+
     pub fn new(insts: Vec<ConcreteInst>) -> RiscVProgram {
         let mut state = ProgramState::new();
+        state
+            .regfile
+            .set(IRegister::SP, DataWord::from(RiscVProgram::STACK_START));
         state.pc = RiscVProgram::TEXT_START;
         let mut next_addr = state.pc.to_word_address();
         for inst in &insts {
@@ -26,6 +35,34 @@ impl RiscVProgram {
             next_addr += 1
         }
         RiscVProgram { insts, state }
+    }
+
+    pub fn from_file(path: &str) -> Result<RiscVProgram, Vec<ParseError>> {
+        RiscVProgram::call_parser(Lexer::from_file(path))
+    }
+
+    pub fn from_string(contents: String) -> Result<RiscVProgram, Vec<ParseError>> {
+        RiscVProgram::call_parser(Lexer::from_string(contents))
+    }
+
+    fn call_parser(lexer: Lexer) -> Result<RiscVProgram, Vec<ParseError>> {
+        let (toks, lex_errs) = lexer.lex();
+        let (insts, parse_errs) = RiscVParser::from_tokens(toks).parse();
+        let mut all_errs = lex_errs;
+        all_errs.extend(parse_errs);
+        if all_errs.is_empty() {
+            Ok(RiscVProgram::new(insts))
+        } else {
+            Err(all_errs)
+        }
+    }
+
+    /// Runs the program to completion, returning the value in register a0.
+    pub fn run(&mut self) -> i32 {
+        for inst in &self.insts {
+            self.state.apply_inst(inst);
+        }
+        i32::from(self.state.regfile.read(IRegister::A0))
     }
 }
 
@@ -139,6 +176,14 @@ impl DataWord {
 impl fmt::Display for DataWord {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.value)
+    }
+}
+
+impl From<ByteAddress> for DataWord {
+    fn from(value: ByteAddress) -> DataWord {
+        DataWord {
+            value: u32::from(value),
+        }
     }
 }
 
@@ -320,6 +365,10 @@ pub struct ByteAddress {
 }
 
 impl ByteAddress {
+    pub const fn new(v: u32) -> ByteAddress {
+        ByteAddress { addr: v }
+    }
+
     pub const fn to_word_address(self) -> WordAddress {
         self.addr >> 2
     }
@@ -327,23 +376,27 @@ impl ByteAddress {
     pub const fn get_word_offset(self) -> u8 {
         (self.addr & 0b11) as u8
     }
+
+    pub const fn plus_4(self) -> ByteAddress {
+        ByteAddress::new(self.addr.wrapping_add(4))
+    }
 }
 
 impl From<DataWord> for ByteAddress {
     fn from(value: DataWord) -> ByteAddress {
-        ByteAddress { addr: value.value }
+        ByteAddress::new(value.value)
     }
 }
 
 impl From<u32> for ByteAddress {
     fn from(value: u32) -> ByteAddress {
-        ByteAddress { addr: value }
+        ByteAddress::new(value)
     }
 }
 
 impl From<i32> for ByteAddress {
     fn from(value: i32) -> ByteAddress {
-        ByteAddress { addr: value as u32 }
+        ByteAddress::new(value as u32)
     }
 }
 
@@ -509,7 +562,7 @@ impl StateChange {
     }
 
     fn new_pc_p4(state: &ProgramState, tgt: StateChangeType) -> StateChange {
-        StateChange::new(state, ByteAddress::from(u32::from(state.pc) + 4), tgt)
+        StateChange::new(state, state.pc.plus_4(), tgt)
     }
 
     pub fn noop(state: &ProgramState) -> StateChange {
@@ -568,7 +621,7 @@ impl StateChange {
 
 #[cfg(test)]
 mod test {
-    use crate::program_state::BitStr32;
+    use super::*;
 
     #[test]
     fn test_bv_as_i32() {
@@ -596,5 +649,13 @@ mod test {
     fn test_bv_zero_pad() {
         let bv = BitStr32::new(0x7FF, 12);
         assert_eq!(bv.zero_pad_lsb().as_u32(), 0x7FF0_0000);
+    }
+
+    #[test]
+    fn test_e2e_program() {
+        let mut program =
+            RiscVProgram::from_string("addi s1, zero, 4\nadd a0, s1, zero".to_string()).unwrap();
+        let result = program.run();
+        assert_eq!(result, 4);
     }
 }

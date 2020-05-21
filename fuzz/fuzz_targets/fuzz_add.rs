@@ -1,6 +1,5 @@
 #![no_main]
 use libfuzzer_sys::arbitrary;
-
 use libfuzzer_sys::fuzz_target;
 use mars::instruction::RType;
 use mars::isa::Add;
@@ -16,7 +15,6 @@ struct FuzzData {
 }
 
 fuzz_target!(|input: FuzzData| {
-    // fuzzed code goes here
     if input.rs1 != input.rs2 && input.rs1 < 32 && input.rs2 < 32 && input.rd < 32 {
         let mut state = ProgramState::new();
         let rs1 = IRegister::from(input.rs1);

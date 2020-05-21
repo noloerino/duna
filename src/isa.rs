@@ -185,7 +185,7 @@ impl JType for Jal {
             state,
             ByteAddress::from(i32::from(state.pc).wrapping_add(imm.as_i32())),
             rd,
-            DataWord::from(u32::from(state.pc).wrapping_add(4)),
+            DataWord::from(state.pc.plus_4()),
         )
     }
 }
@@ -203,7 +203,7 @@ impl IType for Jalr {
             state,
             ByteAddress::from(i32::from(state.regfile.read(rs1)).wrapping_add(imm.as_i32())),
             rd,
-            DataWord::from(u32::from(state.pc).wrapping_add(4)),
+            DataWord::from(state.pc.plus_4()),
         )
     }
 }

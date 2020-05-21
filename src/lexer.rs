@@ -305,7 +305,6 @@ pub struct Lexer {
 }
 
 impl Lexer {
-    #[allow(dead_code)]
     pub fn from_file(path: &str) -> Lexer {
         let contents = fs::read_to_string(path).expect("Failed to open file");
         Lexer::from_string(contents)

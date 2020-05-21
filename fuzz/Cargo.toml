@@ -13,7 +13,7 @@ cargo-fuzz = true
 libfuzzer-sys = { version = "0.3", features = ["arbitrary-derive"] }
 
 [dependencies.mars]
-path = "../"
+path = ".."
 
 # Prevent this from interfering with workspaces
 [workspace]
@@ -22,3 +22,7 @@ members = ["."]
 [[bin]]
 name = "fuzz_add"
 path = "fuzz_targets/fuzz_add.rs"
+
+[[bin]]
+name = "fuzz_loads"
+path = "fuzz_targets/fuzz_loads.rs"
