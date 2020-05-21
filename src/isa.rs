@@ -26,7 +26,7 @@ impl RType for Add {
         }
     }
     fn eval(rs1_val: DataWord, rs2_val: DataWord) -> DataWord {
-        DataWord::from(i32::from(rs1_val) + i32::from(rs2_val))
+        DataWord::from(i32::from(rs1_val).wrapping_add(i32::from(rs2_val)))
     }
 }
 
@@ -40,7 +40,7 @@ impl ITypeArith for Addi {
     }
 
     fn eval(rs1_val: DataWord, imm: BitStr32) -> DataWord {
-        DataWord::from(i32::from(rs1_val) + imm.as_i32())
+        DataWord::from(i32::from(rs1_val).wrapping_add(imm.as_i32()))
     }
 }
 
@@ -85,7 +85,7 @@ impl UType for Auipc {
         StateChange::reg_write_pc_p4(
             state,
             rd,
-            DataWord::from(u32::from(state.pc) + imm.zero_pad_lsb().as_u32()),
+            DataWord::from(u32::from(state.pc).wrapping_add(imm.zero_pad_lsb().as_u32())),
         )
     }
 }
@@ -183,9 +183,9 @@ impl JType for Jal {
     fn eval(state: &ProgramState, rd: IRegister, imm: BitStr32) -> StateChange {
         StateChange::reg_write_op(
             state,
-            ByteAddress::from(i32::from(state.pc) + imm.as_i32()),
+            ByteAddress::from(i32::from(state.pc).wrapping_add(imm.as_i32())),
             rd,
-            DataWord::from(u32::from(state.pc) + 4),
+            DataWord::from(u32::from(state.pc).wrapping_add(4)),
         )
     }
 }
@@ -201,9 +201,9 @@ impl IType for Jalr {
     fn eval(state: &ProgramState, rd: IRegister, rs1: IRegister, imm: BitStr32) -> StateChange {
         StateChange::reg_write_op(
             state,
-            ByteAddress::from(i32::from(state.regfile.read(rs1)) + imm.as_i32()),
+            ByteAddress::from(i32::from(state.regfile.read(rs1)).wrapping_add(imm.as_i32())),
             rd,
-            DataWord::from(u32::from(state.pc) + 4),
+            DataWord::from(u32::from(state.pc).wrapping_add(4)),
         )
     }
 }
@@ -247,7 +247,7 @@ impl ITypeLoad for Lh {
 
     // TODO define alignment behavior
     fn eval(mem: &Memory, addr: ByteAddress) -> DataWord {
-        let second_byte_addr = ByteAddress::from(u32::from(addr) + 1);
+        let second_byte_addr = ByteAddress::from(u32::from(addr).wrapping_add(1));
         DataWord::from(
             (u32::from(mem.get_byte(second_byte_addr).sign_extend()) << 8)
                 | u32::from(mem.get_byte(addr).zero_pad()),
@@ -266,7 +266,7 @@ impl ITypeLoad for Lhu {
 
     // TODO define alignment behavior
     fn eval(mem: &Memory, addr: ByteAddress) -> DataWord {
-        let second_byte_addr = ByteAddress::from(u32::from(addr) + 1);
+        let second_byte_addr = ByteAddress::from(u32::from(addr).wrapping_add(1));
         DataWord::from(
             (u32::from(mem.get_byte(second_byte_addr).zero_pad()) << 8)
                 | u32::from(mem.get_byte(addr).zero_pad()),
@@ -390,6 +390,23 @@ mod test {
         // jal ra, 16
         const JAL_HEX: u32 = 0x010000EF;
         assert_eq!(Jal::new(RA, DataWord::from(16)).to_machine_code(), JAL_HEX);
+    }
+
+    #[test]
+    /// The RISCV spec defines all arithmetic to be wrapping.
+    fn test_add_overflow() {
+        let mut state = get_init_state();
+        let rs1_val = 1107296010i32;
+        let rs2_val = 1242434058i32;
+        state.regfile.set(RS1, DataWord::from(rs1_val));
+        state.regfile.set(RS2_POS, DataWord::from(rs2_val));
+        test_r_type::<Add>(
+            &mut state,
+            vec![RTestData {
+                rs2: RS2_POS,
+                result: rs1_val.wrapping_add(rs2_val),
+            }],
+        )
     }
 
     #[test]

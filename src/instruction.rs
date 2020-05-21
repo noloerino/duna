@@ -227,9 +227,9 @@ pub trait ITypeLoad {
                 let offs = imm_vec.to_sgn_data_word();
                 let rs1_val = state.regfile.read(rs1);
                 let addr = DataWord::from(if i32::from(offs) >= 0 {
-                    u32::from(rs1_val) + u32::from(offs)
+                    u32::from(rs1_val).wrapping_add(u32::from(offs))
                 } else {
-                    u32::from(rs1_val) - u32::from(offs.neg())
+                    u32::from(rs1_val).wrapping_sub(u32::from(offs.neg()))
                 });
                 let new_rd_val = Self::eval(&state.memory, ByteAddress::from(addr));
                 StateChange::reg_write_pc_p4(state, rd, new_rd_val)
@@ -275,7 +275,7 @@ pub trait BType {
                 if Self::eval(state.regfile.read(rs1), state.regfile.read(rs2)) {
                     StateChange::pc_update_op(
                         state,
-                        ByteAddress::from(i32::from(state.pc) + imm_vec.as_i32()),
+                        ByteAddress::from(i32::from(state.pc).wrapping_add(imm_vec.as_i32())),
                     )
                 } else {
                     StateChange::noop(state)
