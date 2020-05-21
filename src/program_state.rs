@@ -8,7 +8,7 @@ use std::ops::Add;
 
 pub struct RiscVProgram {
     pub insts: Vec<ConcreteInst>,
-    pub state: UserProgState,
+    pub state: ProgramState,
     // TODO add symbol table, relocation data, etc.?
 }
 
@@ -22,14 +22,15 @@ impl RiscVProgram {
     /// The stack pointer is initialized to STACK_START.
 
     pub fn new(insts: Vec<ConcreteInst>) -> RiscVProgram {
-        let mut state = UserProgState::new();
-        state
+        let mut state = ProgramState::new();
+        let ref mut user_state = &mut state.user_state;
+        user_state
             .regfile
             .set(IRegister::SP, DataWord::from(RiscVProgram::STACK_START));
-        state.pc = RiscVProgram::TEXT_START;
-        let mut next_addr = state.pc.to_word_address();
+        user_state.pc = RiscVProgram::TEXT_START;
+        let mut next_addr = user_state.pc.to_word_address();
         for inst in &insts {
-            state
+            user_state
                 .memory
                 .set_word(next_addr, DataWord::from(inst.to_machine_code()));
             next_addr += 1
@@ -62,7 +63,7 @@ impl RiscVProgram {
         for inst in &self.insts {
             self.state.apply_inst(inst);
         }
-        i32::from(self.state.regfile.read(IRegister::A0))
+        i32::from(self.state.user_state.regfile.read(IRegister::A0))
     }
 }
 
@@ -480,6 +481,104 @@ impl Memory {
     }
 }
 
+pub struct ProgramState {
+    /// Holds the contents of all bytes that have been printed to stdout (used mostly for testing)
+    pub stdout: Vec<u8>,
+    /// TODO add kernel thread information (tid, file descriptors, etc.)
+    user_state: UserProgState,
+}
+
+/// Syscall numbers for x86_64.
+/// See https://fedora.juszkiewicz.com.pl/syscalls.html
+#[allow(dead_code)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum SyscallNumber {
+    Read = 0,
+    Write,
+    Open,
+    Close,
+}
+
+impl SyscallNumber {
+    const SYSCALL_LIST: [SyscallNumber; 4] = [
+        SyscallNumber::Read,
+        SyscallNumber::Write,
+        SyscallNumber::Open,
+        SyscallNumber::Close,
+    ];
+    /// Returns the syscall identified by number N, or none if no such syscall exists.
+    pub fn get(n: u32) -> Option<SyscallNumber> {
+        if (n as usize) < SyscallNumber::SYSCALL_LIST.len() {
+            Some(SyscallNumber::SYSCALL_LIST[n as usize])
+        } else {
+            None
+        }
+    }
+}
+
+/// Implements functions that require OS privileges to perform, such as reading/writing files.
+/// Per the RISCV calling convention (see http://man7.org/linux/man-pages/man2/syscall.2.html),
+/// the a7 register determines which syscall is being performed, and the arguments are stored
+/// in the argument registers of user space.
+/// See [SyscallNumber] for syscall codes.
+/// TODO make these return diffs so they're reversible.
+impl ProgramState {
+    pub fn dispatch_syscall(&mut self) {
+        use IRegister::*;
+        if let Some(nr) = SyscallNumber::get(u32::from(self.user_state.regfile.read(A7))) {
+            match nr {
+                SyscallNumber::Write => self.syscall_write(),
+                _ => self.syscall_unknown(),
+            }
+        }
+    }
+
+    /// Writes contents to a specified file descriptor.
+    /// TODO for now, this is hardcoded to print to stdout regardless of the provided FD.
+    /// * a0 - file descriptor
+    /// * a1 - pointer to the buffer to be written
+    /// * a2 - the number of bytes to write
+    fn syscall_write(&mut self) {
+        use IRegister::*;
+        let regfile = &mut self.user_state.regfile;
+        let memory = &self.user_state.memory;
+        // let fd = regfile.read(A0);
+        let buf_addr = u32::from(regfile.read(A1));
+        let count = u32::from(regfile.read(A2));
+        let bytes: Vec<u8> = (0..count)
+            .map(|i| u8::from(memory.get_byte(ByteAddress::from(buf_addr.wrapping_add(i)))))
+            .collect();
+        self.stdout.extend(&bytes);
+        print!("{}", String::from_utf8_lossy(&bytes));
+        regfile.set(A0, DataWord::from(count));
+    }
+
+    /// Handles an unknown syscall.
+    fn syscall_unknown(&mut self) {
+        panic!("Unknown syscall");
+    }
+}
+
+impl Default for ProgramState {
+    fn default() -> Self {
+        ProgramState::new()
+    }
+}
+
+impl ProgramState {
+    pub fn new() -> ProgramState {
+        ProgramState {
+            stdout: Vec::new(),
+            user_state: UserProgState::new(),
+        }
+    }
+
+    pub fn apply_inst(&mut self, inst: &ConcreteInst) {
+        self.user_state.apply_inst(inst);
+    }
+}
+
+/// Contains program state that is visible to the user.
 pub struct UserProgState {
     pub pc: ByteAddress,
     pub regfile: RegFile,
