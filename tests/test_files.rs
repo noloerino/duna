@@ -2,13 +2,16 @@ use mars::program_state::RiscVProgram;
 use std::path::Path;
 
 fn program_from_file(filename: &str) -> RiscVProgram {
-    RiscVProgram::from_file(
+    let program = RiscVProgram::from_file(
         Path::new("tests/asm_files")
             .join(filename)
             .to_str()
             .unwrap(),
     )
-    .unwrap()
+    .unwrap();
+    // stdout is suppressed unless a test fails
+    program.dump_insts();
+    program
 }
 
 #[test]
@@ -23,7 +26,6 @@ fn test_simple() {
 /// Tests basic aligned loads and stores.
 fn test_basic_mem() {
     let mut program = program_from_file("basic_mem.s");
-    program.dump_insts();
     let result = program.run();
     assert_eq!(result as u32, 0xABCD_0123u32);
 }
@@ -31,10 +33,18 @@ fn test_basic_mem() {
 #[test]
 /// Tests li, mv, and nop pseudo-instructions.
 fn test_pseudo() {
-    let mut program = program_from_file("test_pseudo.s");
-    program.dump_insts();
+    let mut program = program_from_file("pseudo.s");
     let result = program.run();
     assert_eq!(result as u32, 0xFFEE_DDCCu32);
+}
+
+#[test]
+/// Tests j, ret, and the non-pseudo version of jalr.
+/// Uses only relative offsets.
+fn test_pseudo_jumps() {
+    let mut program = program_from_file("pseudo_jumps.s");
+    let result = program.run();
+    assert_eq!(result as u32, 0xDEAD);
 }
 
 // #[test]

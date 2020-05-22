@@ -92,8 +92,8 @@ enum ParseType {
     MemL(&'static dyn Fn(IRegister, IRegister, DataWord) -> ConcreteInst),
     MemS(&'static dyn Fn(IRegister, IRegister, DataWord) -> ConcreteInst),
     B,
-    Jal,
-    Jalr,
+    Jal(&'static dyn Fn(IRegister, DataWord) -> ConcreteInst),
+    // Jalr,
     U(&'static dyn Fn(IRegister, DataWord) -> ConcreteInst),
 }
 
@@ -102,6 +102,8 @@ enum PseudoParseType {
     RegImm(&'static dyn Fn(IRegister, DataWord) -> Vec<ConcreteInst>),
     RegReg(&'static dyn Fn(IRegister, IRegister) -> Vec<ConcreteInst>),
     NoArgs(&'static dyn Fn() -> Vec<ConcreteInst>),
+    OneReg(&'static dyn Fn(IRegister) -> Vec<ConcreteInst>),
+    OneImm(&'static dyn Fn(DataWord) -> Vec<ConcreteInst>),
 }
 
 struct ParserData {
@@ -136,8 +138,9 @@ impl RiscVParser {
             ("bne", B),
             ("ebreak", Env),
             ("ecall", Env),
-            ("jal", ParseType::Jal),
-            ("jalr", ParseType::Jalr),
+            // TODO allow jal/jalr pseudo-ops
+            ("jal", ParseType::Jal(&isa::Jal::new)),
+            ("jalr", Arith(&isa::Jalr::new)),
             ("lb", MemL(&Lb::new)),
             ("lbu", MemL(&Lbu::new)),
             ("lh", MemL(&Lh::new)),
@@ -171,6 +174,9 @@ impl RiscVParser {
             ("li", RegImm(&Li::expand)),
             ("mv", RegReg(&Mv::expand)),
             ("nop", NoArgs(&Nop::expand)),
+            ("j", OneImm(&J::expand)),
+            ("jr", OneReg(&Jr::expand)),
+            ("ret", NoArgs(&Ret::expand)),
         ]
         .iter()
         .cloned()
@@ -231,6 +237,33 @@ struct LineParser<'a> {
 }
 
 impl LineParser<'_> {
+    /// Checks this line's iterator to ensure that there are no more tokens remaining, save
+    /// for a possible comment.
+    /// This is used for situations where a fixed number of arguments is expected, as we're
+    /// free to consume the iterator since more tokens would be an error regardless.
+    fn check_no_more_args(
+        &mut self,
+        head_loc: Location,
+        head_name: String,
+    ) -> Result<(), ParseError> {
+        let next = self.iter.next();
+        if let Some(tok) = next {
+            if let TokenType::Comment(_) = tok.data {
+                Ok(())
+            } else {
+                Err(ParseError::unexpected(
+                    head_loc,
+                    format!(
+                        "{:?} (too many arguments for instruction {})",
+                        tok, head_name
+                    ),
+                ))
+            }
+        } else {
+            Ok(())
+        }
+    }
+
     /// Attempts to consume exactly N arguments from the iterator, possibly comma-separated.
     /// The first and last tokens cannot be commas. If repeated commas appear anywhere,
     /// an error is returned.
@@ -243,18 +276,8 @@ impl LineParser<'_> {
     ) -> Result<Vec<Token>, ParseError> {
         use TokenType::*;
         if n == 0 {
-            if self.iter.peek().is_some() {
-                Err(ParseError::unexpected(
-                    head_loc,
-                    format!(
-                        "{:?} (too many arguments for instruction {})",
-                        self.iter.next().unwrap(),
-                        head_name
-                    ),
-                ))
-            } else {
-                Ok(Vec::new())
-            }
+            self.check_no_more_args(head_loc, head_name)
+                .and(Ok(Vec::new()))
         } else {
             match self.iter.next() {
                 Some(tok) => match tok.data {
@@ -320,11 +343,13 @@ impl LineParser<'_> {
                 ));
             }
         }
-        Ok(MemArgs {
-            first_reg,
-            second_reg,
-            imm,
-        })
+        // Any trailing token must be a comment
+        self.check_no_more_args(head_loc, head_name)
+            .and(Ok(MemArgs {
+                first_reg,
+                second_reg,
+                imm,
+            }))
     }
 
     /// Attempts to advance the next token of the iterator, returning a ParseError if there are none.
@@ -364,16 +389,21 @@ impl LineParser<'_> {
     /// If the provided immediate is a negative, then the upper (32 - n + 1) bits must all be 1.
     fn try_parse_imm(&self, n: u8, token: &Token) -> Result<DataWord, ParseError> {
         match &token.data {
-            // Check lower 12 bits
+            // Check lower n bits
             // We give a pass to negative numbers with high bits set
             TokenType::Immediate(val, radix) => {
-                let mask = (-1i32)
-                    << (if *val < 0 {
-                        // Allow the sign bit to be part of the mask
-                        n - 1
-                    } else {
-                        n
-                    });
+                let mask = if n == 32 {
+                    // Prevent shift overflow
+                    0
+                } else {
+                    (-1i32)
+                        << (if *val < 0 {
+                            // Allow the sign bit to be part of the mask
+                            n - 1
+                        } else {
+                            n
+                        })
+                };
                 let mask_result = *val & mask;
                 if mask_result != 0 && mask_result != mask {
                     Err(ParseError::imm_too_big(token.location, radix.format(*val)))
@@ -432,10 +462,19 @@ impl LineParser<'_> {
                     Ok(inst_new(rs1, rs2, imm))
                 }
                 // B => ,
-                // Jal => ,
+                // TODO jal and jalr must be parsed differently
+                // because they can also be used as pseudo-instructions
+                Jal(inst_new) => {
+                    let args = self.consume_commasep_args(head_loc, name, 2)?;
+                    debug_assert!(args.len() == 2);
+                    let rd = self.try_parse_reg(&args[0])?;
+                    let imm = self.try_parse_imm(20, &args[1])?;
+                    Ok(inst_new(rd, imm))
+                }
                 // Jalr => ,
                 U(inst_new) => {
                     let args = self.consume_commasep_args(head_loc, name, 2)?;
+                    debug_assert!(args.len() == 2);
                     let rd = self.try_parse_reg(&args[0])?;
                     let imm = self.try_parse_imm(20, &args[1])?;
                     Ok(inst_new(rd, imm))
@@ -465,6 +504,19 @@ impl LineParser<'_> {
                     let rd = self.try_parse_reg(&args[0])?;
                     let rs = self.try_parse_reg(&args[1])?;
                     Ok(inst_expand(rd, rs))
+                }
+                OneImm(inst_expand) => {
+                    let args = self.consume_commasep_args(head_loc, name, 1)?;
+                    debug_assert!(args.len() == 1);
+                    // j expands to J-type, so 20-bit immediate
+                    let imm = self.try_parse_imm(20, &args[0])?;
+                    Ok(inst_expand(imm))
+                }
+                OneReg(inst_expand) => {
+                    let args = self.consume_commasep_args(head_loc, name, 1)?;
+                    debug_assert!(args.len() == 1);
+                    let rs = self.try_parse_reg(&args[0])?;
+                    Ok(inst_expand(rs))
                 }
 
                 // _ => Err(ParseError::unexpected(

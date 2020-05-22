@@ -69,7 +69,7 @@ pub enum TokenType {
     RParen,
 }
 
-const DELIMS: [char; 5] = ['#', ':', ',', '(', ')'];
+const DELIMS: [char; 6] = ['#', ':', ',', '(', ')', ' '];
 
 pub type TokenStream = Vec<Token>;
 pub type LineTokenStream = Vec<TokenStream>;

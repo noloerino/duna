@@ -1,4 +1,4 @@
-use crate::instruction::{ConcreteInst, ITypeArith, UType};
+use crate::instruction::*;
 use crate::isa::*;
 use crate::program_state::IRegister::*;
 use crate::program_state::*;
@@ -15,9 +15,18 @@ pub trait RegImm {
 
 /// Represents pseudo-instructions taking two registers.
 pub trait RegReg {
-    fn expand(rd: IRegister, rs: IRegister) -> Vec<ConcreteInst> {
-        vec![Addi::new(rd, rs, DataWord::zero())]
-    }
+    fn expand(rd: IRegister, rs: IRegister) -> Vec<ConcreteInst>;
+}
+
+/// Represents psuedo-instructions that take a single immediate.
+/// Bounds on the size of the DataWord should be handled during parsing.
+pub trait OneImm {
+    fn expand(data: DataWord) -> Vec<ConcreteInst>;
+}
+
+/// Represents pseudo-instructions that take a single register.
+pub trait OneReg {
+    fn expand(reg: IRegister) -> Vec<ConcreteInst>;
 }
 
 pub struct Nop;
@@ -55,6 +64,27 @@ pub struct Mv;
 impl RegReg for Mv {
     fn expand(rd: IRegister, rs: IRegister) -> Vec<ConcreteInst> {
         vec![Addi::new(rd, rs, DataWord::zero())]
+    }
+}
+
+pub struct J;
+impl OneImm for J {
+    fn expand(offs: DataWord) -> Vec<ConcreteInst> {
+        vec![Jal::new(ZERO, offs)]
+    }
+}
+
+pub struct Jr;
+impl OneReg for Jr {
+    fn expand(rs: IRegister) -> Vec<ConcreteInst> {
+        vec![Jalr::new(ZERO, rs, DataWord::zero())]
+    }
+}
+
+pub struct Ret;
+impl NoArgs for Ret {
+    fn expand() -> Vec<ConcreteInst> {
+        vec![Jalr::new(ZERO, RA, DataWord::zero())]
     }
 }
 
