@@ -14,37 +14,36 @@ fn program_from_file(filename: &str) -> RiscVProgram {
     program
 }
 
+/// Runs a test that checks the value left in register a0 after running the program.
+fn check_a0_at_end(filename: &str, exp_a0: u32) {
+    let mut program = program_from_file(filename);
+    let result = program.run();
+    assert_eq!(result as u32, exp_a0);
+}
+
 #[test]
 /// Tests some basic I-type instructions.
 fn test_simple() {
-    let mut program = program_from_file("simple.s");
-    let result = program.run();
-    assert_eq!(result, 4);
+    check_a0_at_end("simple.s", 4);
 }
 
 #[test]
 /// Tests basic aligned loads and stores.
 fn test_basic_mem() {
-    let mut program = program_from_file("basic_mem.s");
-    let result = program.run();
-    assert_eq!(result as u32, 0xABCD_0123u32);
+    check_a0_at_end("basic_mem.s", 0xABCD_0123u32);
 }
 
 #[test]
 /// Tests li, mv, and nop pseudo-instructions.
 fn test_pseudo() {
-    let mut program = program_from_file("pseudo.s");
-    let result = program.run();
-    assert_eq!(result as u32, 0xFFEE_DDCCu32);
+    check_a0_at_end("pseudo.s", 0xFFEE_DDCCu32);
 }
 
 #[test]
 /// Tests j, ret, and the non-pseudo version of jalr.
 /// Uses only relative offsets.
 fn test_pseudo_jumps() {
-    let mut program = program_from_file("pseudo_jumps.s");
-    let result = program.run();
-    assert_eq!(result as u32, 0xDEAD);
+    check_a0_at_end("pseudo_jumps.s", 0xDEAD);
 }
 
 // #[test]
