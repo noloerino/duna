@@ -32,7 +32,7 @@ impl RType for Add {
 }
 
 pub struct Addi;
-impl ITypeArith for Addi {
+impl IType for Addi {
     fn inst_fields() -> IInstFields {
         IInstFields {
             funct3: f3(0),
@@ -40,6 +40,11 @@ impl ITypeArith for Addi {
         }
     }
 
+    fn eval_wrapper() -> ITypeEval {
+        ITypeEval::Arith(Addi::eval)
+    }
+}
+impl ITypeArith for Addi {
     fn eval(rs1_val: DataWord, imm: BitStr32) -> DataWord {
         DataWord::from(i32::from(rs1_val).wrapping_add(imm.as_i32()))
     }
@@ -61,7 +66,7 @@ impl RType for And {
 }
 
 pub struct Andi;
-impl ITypeArith for Andi {
+impl IType for Andi {
     fn inst_fields() -> IInstFields {
         IInstFields {
             funct3: f3(0b111),
@@ -69,6 +74,11 @@ impl ITypeArith for Andi {
         }
     }
 
+    fn eval_wrapper() -> ITypeEval {
+        ITypeEval::Arith(Andi::eval)
+    }
+}
+impl ITypeArith for Andi {
     fn eval(rs1_val: DataWord, imm: BitStr32) -> DataWord {
         DataWord::from(i32::from(rs1_val) & imm.as_i32())
     }
@@ -216,6 +226,12 @@ impl IType for Jalr {
             funct3: f3(0b000),
         }
     }
+
+    fn eval_wrapper() -> ITypeEval {
+        ITypeEval::Generic(Jalr::eval)
+    }
+}
+impl ITypeGeneric for Jalr {
     fn eval(state: &UserProgState, rd: IRegister, rs1: IRegister, imm: BitStr32) -> StateChange {
         StateChange::reg_write_op(
             state,
@@ -227,7 +243,7 @@ impl IType for Jalr {
 }
 
 pub struct Lb;
-impl ITypeLoad for Lb {
+impl IType for Lb {
     fn inst_fields() -> IInstFields {
         IInstFields {
             opcode: I_OPCODE_LOAD,
@@ -235,13 +251,18 @@ impl ITypeLoad for Lb {
         }
     }
 
+    fn eval_wrapper() -> ITypeEval {
+        ITypeEval::Load(Lb::eval)
+    }
+}
+impl ITypeLoad for Lb {
     fn eval(mem: &Memory, addr: ByteAddress) -> DataWord {
         mem.get_byte(addr).sign_extend()
     }
 }
 
 pub struct Lbu;
-impl ITypeLoad for Lbu {
+impl IType for Lbu {
     fn inst_fields() -> IInstFields {
         IInstFields {
             opcode: I_OPCODE_LOAD,
@@ -249,13 +270,18 @@ impl ITypeLoad for Lbu {
         }
     }
 
+    fn eval_wrapper() -> ITypeEval {
+        ITypeEval::Load(Lbu::eval)
+    }
+}
+impl ITypeLoad for Lbu {
     fn eval(mem: &Memory, addr: ByteAddress) -> DataWord {
         mem.get_byte(addr).zero_pad()
     }
 }
 
 pub struct Lh;
-impl ITypeLoad for Lh {
+impl IType for Lh {
     fn inst_fields() -> IInstFields {
         IInstFields {
             opcode: I_OPCODE_LOAD,
@@ -263,6 +289,11 @@ impl ITypeLoad for Lh {
         }
     }
 
+    fn eval_wrapper() -> ITypeEval {
+        ITypeEval::Load(Lh::eval)
+    }
+}
+impl ITypeLoad for Lh {
     // TODO define alignment behavior
     fn eval(mem: &Memory, addr: ByteAddress) -> DataWord {
         let second_byte_addr = ByteAddress::from(u32::from(addr).wrapping_add(1));
@@ -274,7 +305,7 @@ impl ITypeLoad for Lh {
 }
 
 pub struct Lhu;
-impl ITypeLoad for Lhu {
+impl IType for Lhu {
     fn inst_fields() -> IInstFields {
         IInstFields {
             opcode: I_OPCODE_LOAD,
@@ -282,6 +313,11 @@ impl ITypeLoad for Lhu {
         }
     }
 
+    fn eval_wrapper() -> ITypeEval {
+        ITypeEval::Load(Lhu::eval)
+    }
+}
+impl ITypeLoad for Lhu {
     // TODO define alignment behavior
     fn eval(mem: &Memory, addr: ByteAddress) -> DataWord {
         let second_byte_addr = ByteAddress::from(u32::from(addr).wrapping_add(1));
@@ -306,7 +342,7 @@ impl UType for Lui {
 }
 
 pub struct Lw;
-impl ITypeLoad for Lw {
+impl IType for Lw {
     fn inst_fields() -> IInstFields {
         IInstFields {
             opcode: I_OPCODE_LOAD,
@@ -314,6 +350,11 @@ impl ITypeLoad for Lw {
         }
     }
 
+    fn eval_wrapper() -> ITypeEval {
+        ITypeEval::Load(Lw::eval)
+    }
+}
+impl ITypeLoad for Lw {
     // TODO define alignment behavior
     fn eval(mem: &Memory, addr: ByteAddress) -> DataWord {
         mem.get_word(addr.to_word_address())
