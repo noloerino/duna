@@ -276,7 +276,6 @@ impl From<DataByte> for i8 {
     }
 }
 
-#[allow(dead_code)]
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum IRegister {
     ZERO = 0,
