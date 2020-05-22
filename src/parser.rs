@@ -86,30 +86,30 @@ impl fmt::Display for ParseError {
 
 #[derive(Clone)]
 enum ParseType {
-    R(&'static dyn Fn(IRegister, IRegister, IRegister) -> ConcreteInst),
-    Arith(&'static dyn Fn(IRegister, IRegister, DataWord) -> ConcreteInst),
+    R(fn(IRegister, IRegister, IRegister) -> ConcreteInst),
+    Arith(fn(IRegister, IRegister, DataWord) -> ConcreteInst),
     Env,
-    MemL(&'static dyn Fn(IRegister, IRegister, DataWord) -> ConcreteInst),
-    MemS(&'static dyn Fn(IRegister, IRegister, DataWord) -> ConcreteInst),
+    MemL(fn(IRegister, IRegister, DataWord) -> ConcreteInst),
+    MemS(fn(IRegister, IRegister, DataWord) -> ConcreteInst),
     B,
-    Jal(&'static dyn Fn(IRegister, DataWord) -> ConcreteInst),
+    Jal(fn(IRegister, DataWord) -> ConcreteInst),
     // Jalr,
-    U(&'static dyn Fn(IRegister, DataWord) -> ConcreteInst),
+    U(fn(IRegister, DataWord) -> ConcreteInst),
 }
 
 #[derive(Clone)]
 enum PseudoParseType {
-    RegImm(&'static dyn Fn(IRegister, DataWord) -> Vec<ConcreteInst>),
-    RegReg(&'static dyn Fn(IRegister, IRegister) -> Vec<ConcreteInst>),
-    NoArgs(&'static dyn Fn() -> Vec<ConcreteInst>),
-    OneReg(&'static dyn Fn(IRegister) -> Vec<ConcreteInst>),
-    OneImm(&'static dyn Fn(DataWord) -> Vec<ConcreteInst>),
+    RegImm(fn(IRegister, DataWord) -> Vec<ConcreteInst>),
+    RegReg(fn(IRegister, IRegister) -> Vec<ConcreteInst>),
+    NoArgs(fn() -> Vec<ConcreteInst>),
+    OneReg(fn(IRegister) -> Vec<ConcreteInst>),
+    OneImm(fn(DataWord) -> Vec<ConcreteInst>),
 }
 
 struct ParserData {
-    inst_expansion_table: HashMap<String, ParseType>,
-    pseudo_expansion_table: HashMap<String, PseudoParseType>,
-    reg_expansion_table: HashMap<String, IRegister>,
+    inst_expansion_table: &'static HashMap<String, ParseType>,
+    pseudo_expansion_table: &'static HashMap<String, PseudoParseType>,
+    reg_expansion_table: &'static HashMap<String, IRegister>,
 }
 
 pub struct RiscVParser {
@@ -119,17 +119,16 @@ pub struct RiscVParser {
 
 type TokenIter<'a> = Peekable<IntoIter<Token>>;
 
-impl RiscVParser {
-    pub fn from_tokens(lines: LineTokenStream) -> Self {
+lazy_static! {
+    static ref INST_EXPANSION_TABLE: HashMap<String, ParseType> = {
         use isa::*;
         use ParseType::*;
-        use PseudoParseType::*;
-        let inst_expansion_table = [
-            ("add", R(&Add::new)),
-            ("addi", Arith(&Addi::new)),
-            ("and", R(&And::new)),
-            ("andi", Arith(&Andi::new)),
-            ("auipc", U(&Auipc::new)),
+        [
+            ("add", R(Add::new)),
+            ("addi", Arith(Addi::new)),
+            ("and", R(And::new)),
+            ("andi", Arith(Andi::new)),
+            ("auipc", U(Auipc::new)),
             ("beq", B),
             ("bge", B),
             ("bgeu", B),
@@ -139,18 +138,18 @@ impl RiscVParser {
             ("ebreak", Env),
             ("ecall", Env),
             // TODO allow jal/jalr pseudo-ops
-            ("jal", ParseType::Jal(&isa::Jal::new)),
-            ("jalr", Arith(&isa::Jalr::new)),
-            ("lb", MemL(&Lb::new)),
-            ("lbu", MemL(&Lbu::new)),
-            ("lh", MemL(&Lh::new)),
-            ("lhu", MemL(&Lhu::new)),
-            ("lui", U(&Lui::new)),
-            ("lw", MemL(&Lw::new)),
+            ("jal", ParseType::Jal(isa::Jal::new)),
+            ("jalr", Arith(isa::Jalr::new)),
+            ("lb", MemL(Lb::new)),
+            ("lbu", MemL(Lbu::new)),
+            ("lh", MemL(Lh::new)),
+            ("lhu", MemL(Lhu::new)),
+            ("lui", U(Lui::new)),
+            ("lw", MemL(Lw::new)),
             // ("or", R),
             // ("ori", Arith),
-            ("sb", MemS(&Sb::new)),
-            ("sh", MemS(&Sh::new)),
+            ("sb", MemS(Sb::new)),
+            ("sh", MemS(Sh::new)),
             // ("sll", R),
             // ("slli", Arith),
             // ("slt", R),
@@ -162,26 +161,31 @@ impl RiscVParser {
             // ("srl", R),
             // ("srli", Arith),
             // ("sub", R),
-            ("sw", MemS(&Sw::new)),
+            ("sw", MemS(Sw::new)),
             // ("xor", R),
             // ("xori", Arith),
         ]
         .iter()
         .cloned()
         .map(|(s, t)| (s.to_string(), t))
-        .collect();
-        let pseudo_expansion_table = [
-            ("li", RegImm(&Li::expand)),
-            ("mv", RegReg(&Mv::expand)),
-            ("nop", NoArgs(&Nop::expand)),
-            ("j", OneImm(&J::expand)),
-            ("jr", OneReg(&Jr::expand)),
-            ("ret", NoArgs(&Ret::expand)),
+        .collect()
+    };
+    static ref PSEUDO_EXPANSION_TABLE: HashMap<String, PseudoParseType> = {
+        use PseudoParseType::*;
+        [
+            ("li", RegImm(Li::expand)),
+            ("mv", RegReg(Mv::expand)),
+            ("nop", NoArgs(Nop::expand)),
+            ("j", OneImm(J::expand)),
+            ("jr", OneReg(Jr::expand)),
+            ("ret", NoArgs(Ret::expand)),
         ]
         .iter()
         .cloned()
         .map(|(s, t)| (s.to_string(), t))
-        .collect();
+        .collect()
+    };
+    static ref REG_EXPANSION_TABLE: HashMap<String, IRegister> = {
         let mut reg_expansion_table: HashMap<String, IRegister> = IRegister::REG_ARRAY
             .iter()
             .map(|r| (r.to_string(), *r))
@@ -191,11 +195,17 @@ impl RiscVParser {
         }
         // don't forget FP
         reg_expansion_table.insert("fp".to_string(), IRegister::FP);
+        reg_expansion_table
+    };
+}
+
+impl RiscVParser {
+    pub fn from_tokens(lines: LineTokenStream) -> Self {
         RiscVParser {
             parser_data: ParserData {
-                inst_expansion_table,
-                pseudo_expansion_table,
-                reg_expansion_table,
+                inst_expansion_table: &INST_EXPANSION_TABLE,
+                pseudo_expansion_table: &PSEUDO_EXPANSION_TABLE,
+                reg_expansion_table: &REG_EXPANSION_TABLE,
             },
             lines,
         }

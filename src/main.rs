@@ -1,4 +1,6 @@
 // #![allow(dead_code)]
+#[macro_use]
+extern crate lazy_static;
 use crate::program_state::RiscVProgram;
 use clap::{App, Arg};
 use std::process;
