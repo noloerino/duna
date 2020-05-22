@@ -46,6 +46,12 @@ fn test_pseudo_jumps() {
     check_a0_at_end("pseudo_jumps.s", 0xDEAD);
 }
 
+#[test]
+/// Tests some branches to offsets, again using only relative offsets.
+fn test_offset_branches() {
+    check_a0_at_end("offset_branches.s", 0xABCD_0123u32)
+}
+
 // #[test]
 // /// Tests the write syscall with some nice happy ASCII characters.
 // fn test_write_stdout() {

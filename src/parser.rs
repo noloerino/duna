@@ -91,7 +91,7 @@ enum ParseType {
     Env,
     MemL(fn(IRegister, IRegister, DataWord) -> ConcreteInst),
     MemS(fn(IRegister, IRegister, DataWord) -> ConcreteInst),
-    B,
+    B(fn(IRegister, IRegister, DataWord) -> ConcreteInst),
     Jal(fn(IRegister, DataWord) -> ConcreteInst),
     // Jalr,
     U(fn(IRegister, DataWord) -> ConcreteInst),
@@ -129,12 +129,12 @@ lazy_static! {
             ("and", R(And::new)),
             ("andi", Arith(Andi::new)),
             ("auipc", U(Auipc::new)),
-            ("beq", B),
-            ("bge", B),
-            ("bgeu", B),
-            ("blt", B),
-            ("bltu", B),
-            ("bne", B),
+            ("beq", B(Beq::new)),
+            ("bge", B(Bge::new)),
+            ("bgeu", B(Bgeu::new)),
+            ("blt", B(Blt::new)),
+            ("bltu", B(Bltu::new)),
+            ("bne", B(Bne::new)),
             ("ebreak", Env),
             ("ecall", Env),
             // TODO allow jal/jalr pseudo-ops
@@ -471,7 +471,24 @@ impl LineParser<'_> {
                     let imm = args.imm;
                     Ok(inst_new(rs1, rs2, imm))
                 }
-                // B => ,
+                B(inst_new) => {
+                    let args = self.consume_commasep_args(head_loc, name, 3)?;
+                    debug_assert!(args.len() == 3);
+                    let rs1 = self.try_parse_reg(&args[0])?;
+                    let rs2 = self.try_parse_reg(&args[1])?;
+                    // Becuse branches actually chop off the LSB, we can take up to 13b
+                    let imm = self.try_parse_imm(13, &args[2])?;
+                    if u32::from(imm) & 1 > 0 {
+                        Err(ParseError::new(
+                            head_loc,
+                            "Branch immediates must be multiples of two".to_string(),
+                            imm.to_string(),
+                        ))
+                    } else {
+                        // LSB chopping is handled by instruction
+                        Ok(inst_new(rs1, rs2, imm))
+                    }
+                }
                 // TODO jal and jalr must be parsed differently
                 // because they can also be used as pseudo-instructions
                 Jal(inst_new) => {

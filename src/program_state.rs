@@ -67,7 +67,15 @@ impl RiscVProgram {
 
     /// Runs the program to completion, returning the value in register a0.
     pub fn run(&mut self) -> i32 {
-        for inst in &self.insts {
+        // for now, just use the instruction vec to determine the next instruction
+        let pc_start = RiscVProgram::TEXT_START;
+        // for now, if we're out of instructions just call it a day
+        // if pc dipped below pc_start, panic for now is also fine
+        while let Some(inst) = self.insts.get(
+            ByteAddress::from(u32::from(self.state.user_state.pc) - u32::from(pc_start))
+                .to_word_address() as usize,
+        ) {
+            println!("{:?}", inst);
             self.state.apply_inst(inst);
         }
         i32::from(self.state.user_state.regfile.read(IRegister::A0))
