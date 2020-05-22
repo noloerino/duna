@@ -1,3 +1,4 @@
+// #![allow(dead_code)]
 use crate::program_state::RiscVProgram;
 use clap::{App, Arg};
 use std::process;

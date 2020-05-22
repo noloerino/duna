@@ -308,10 +308,10 @@ impl LineParser<'_> {
             let maybe_rparen = self.try_next_tok(head_loc, &head_name)?;
             if let TokenType::RParen = maybe_rparen.data {
             } else {
-                Err(ParseError::unclosed_paren(
+                return Err(ParseError::unclosed_paren(
                     maybe_rparen.location,
                     format!("{:?}", maybe_rparen.data),
-                ))?
+                ));
             }
         }
         Ok(MemArgs {

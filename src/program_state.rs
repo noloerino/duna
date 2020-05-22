@@ -23,7 +23,7 @@ impl RiscVProgram {
 
     pub fn new(insts: Vec<ConcreteInst>) -> RiscVProgram {
         let mut state = ProgramState::new();
-        let ref mut user_state = &mut state.user_state;
+        let mut user_state = &mut state.user_state;
         user_state
             .regfile
             .set(IRegister::SP, DataWord::from(RiscVProgram::STACK_START));

@@ -449,7 +449,7 @@ mod test {
         const ADD_HEX: u32 = 0x0124_8433;
         assert_eq!(Add::new(IRegister::S0, S1, S2).to_machine_code(), ADD_HEX);
         // addi T1, T1, -1075
-        const ADDI_HEX: u32 = 0xBCD30313;
+        const ADDI_HEX: u32 = 0xBCD3_0313;
         assert_eq!(
             Addi::new(T1, T1, DataWord::from(-1075)).to_machine_code(),
             ADDI_HEX
@@ -467,7 +467,7 @@ mod test {
             BNE_HEX
         );
         // jal ra, 16
-        const JAL_HEX: u32 = 0x010000EF;
+        const JAL_HEX: u32 = 0x0100_00EF;
         assert_eq!(Jal::new(RA, DataWord::from(16)).to_machine_code(), JAL_HEX);
     }
 
@@ -475,8 +475,8 @@ mod test {
     /// The RISCV spec defines all arithmetic to be wrapping.
     fn test_add_overflow() {
         let mut state = get_init_state();
-        let rs1_val = 1107296010i32;
-        let rs2_val = 1242434058i32;
+        let rs1_val = 11_0729_6010_i32;
+        let rs2_val = 12_4243_4058_i32;
         state.regfile.set(RS1, DataWord::from(rs1_val));
         state.regfile.set(RS2_POS, DataWord::from(rs2_val));
         test_r_type::<Add>(
@@ -584,7 +584,7 @@ mod test {
 
     /// Tests a branch instruction. Taken jumps move forward by 0x100, or backwards by 0x100.
     fn test_b_type<T: BType>(state: &mut UserProgState, args: Vec<BTestData>) {
-        for dist in vec![0x100, -0x100] {
+        for &dist in &[0x100, -0x100] {
             let offs = DataWord::from(dist);
             for &BTestData {
                 rs1_val,
@@ -858,9 +858,7 @@ mod test {
             state.apply_inst(&Sh::new(RS1, RS2_POS, DataWord::from(offs)));
             state.apply_inst(&Sh::new(RS1, RS2_NEG, DataWord::from(offs + 2)));
             assert_eq!(
-                state
-                    .memory
-                    .get_word(((i32::from(addr) + offs) >> 2) as u32),
+                state.memory.get_word(((addr + offs) >> 2) as u32),
                 DataWord::from(rs2_val)
             );
         }
@@ -877,12 +875,7 @@ mod test {
             state.regfile.set(RS1, DataWord::from(addr));
             state.regfile.set(RS2, rs2_val);
             state.apply_inst(&Sw::new(RS1, RS2, DataWord::from(offs)));
-            assert_eq!(
-                state
-                    .memory
-                    .get_word(((i32::from(addr) + offs) >> 2) as u32),
-                rs2_val
-            );
+            assert_eq!(state.memory.get_word(((addr + offs) >> 2) as u32), rs2_val);
         }
     }
 }

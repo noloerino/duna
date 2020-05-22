@@ -1,3 +1,4 @@
+// #![allow(dead_code)]
 pub mod instruction;
 pub mod isa;
 mod lexer;

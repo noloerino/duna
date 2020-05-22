@@ -256,7 +256,7 @@ impl LineLexer<'_> {
         } else {
             Err(ParseError::new(
                 state.location,
-                format!("Malformed base {} immediate", fmt.radix()).to_string(),
+                format!("Malformed base {} immediate", fmt.radix()),
                 digit_str,
             ))
         }
