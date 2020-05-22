@@ -38,6 +38,13 @@ impl RiscVProgram {
         RiscVProgram { insts, state }
     }
 
+    /// Prints out all the instructions that this program contains.
+    pub fn dump_insts(&self) {
+        for inst in &self.insts {
+            println!("{:?}", inst);
+        }
+    }
+
     pub fn from_file(path: &str) -> Result<RiscVProgram, Vec<ParseError>> {
         RiscVProgram::call_parser(Lexer::from_file(path))
     }
@@ -85,6 +92,10 @@ impl BitStr32 {
             value: truncated,
             len,
         }
+    }
+
+    pub const fn is_zero(self) -> bool {
+        self.value == 0
     }
 
     pub const fn concat(self, o: BitStr32) -> BitStr32 {

@@ -7,6 +7,7 @@ mod isa;
 mod lexer;
 mod parser;
 mod program_state;
+mod pseudo_inst;
 
 fn main() {
     let matches = App::new("emulator")

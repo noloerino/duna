@@ -292,6 +292,19 @@ impl ITypeLoad for Lhu {
     }
 }
 
+pub struct Lui;
+impl UType for Lui {
+    fn inst_fields() -> UInstFields {
+        UInstFields {
+            opcode: BitStr32::new(0b011_0111, 7),
+        }
+    }
+
+    fn eval(state: &UserProgState, rd: IRegister, imm: BitStr32) -> StateChange {
+        StateChange::reg_write_pc_p4(state, rd, DataWord::from(imm.zero_pad_lsb().as_u32()))
+    }
+}
+
 pub struct Lw;
 impl ITypeLoad for Lw {
     fn inst_fields() -> IInstFields {
@@ -435,10 +448,10 @@ mod test {
         // add s0, s1, s2
         const ADD_HEX: u32 = 0x0124_8433;
         assert_eq!(Add::new(IRegister::S0, S1, S2).to_machine_code(), ADD_HEX);
-        // addi t1, t2, -10
-        const ADDI_HEX: u32 = 0xFF63_8313;
+        // addi T1, T1, -1075
+        const ADDI_HEX: u32 = 0xBCD30313;
         assert_eq!(
-            Addi::new(T1, T2, DataWord::from(-10)).to_machine_code(),
+            Addi::new(T1, T1, DataWord::from(-1075)).to_machine_code(),
             ADDI_HEX
         );
         // auipc s1, 10
@@ -524,6 +537,10 @@ mod test {
                     imm: 1024,
                     result: RS1_VAL + 1024,
                 },
+                IArithTestData {
+                    imm: -1075,
+                    result: RS1_VAL - 1075,
+                },
             ],
         );
         test_i_type_arith::<Andi>(
@@ -542,7 +559,7 @@ mod test {
     }
 
     #[test]
-    fn test_u_type_insts() {
+    fn test_auipc() {
         let mut state = get_init_state();
         state.pc = ByteAddress::from(0x10FC_0000);
         state.apply_inst(&Auipc::new(RD, DataWord::from(0x10)));
@@ -550,6 +567,13 @@ mod test {
             u32::from(state.regfile.read(RD)),
             0x10FC_0000 + (0x10 << 12)
         );
+    }
+
+    #[test]
+    fn test_lui() {
+        let mut state = get_init_state();
+        state.apply_inst(&Lui::new(RD, DataWord::from(0xD_EADC)));
+        assert_eq!(u32::from(state.regfile.read(RD)), 0xDEAD_C000);
     }
 
     struct BTestData {
@@ -868,7 +892,6 @@ pub enum Instruction {
     Ebreak,
     Ecall,
     Ld,
-    Lui,
     Lwu,
     Or,
     Ori,
