@@ -47,8 +47,8 @@ impl ImmRenderType {
 
     pub fn format(self, n: i32) -> String {
         match self {
-            Bin => format!("{}", n),
-            Dec => format!("{:#b}", n),
+            Bin => format!("{:#b}", n),
+            Dec => format!("{}", n),
             Hex => format!("{:#X}", n),
         }
     }
@@ -183,20 +183,24 @@ impl LineLexer<'_> {
                 }
             }
         };
+        // check if we should keep going after first 2 chars
+        let mut consume_done = false;
         match self.iter.peek() {
             // if only one char, return it as base 10 literal
             None => digits.push(c1),
             Some((_, c_ref)) => {
                 let c = *c_ref;
                 // possibly look for format specifier
-                if c1 == '0' {
-                    if c == 'x' {
-                        fmt = Hex;
-                    } else if c == 'b' {
-                        fmt = Bin;
+                if c1 == '0' && c == 'x' {
+                    fmt = Hex;
+                } else if c1 == '0' && c == 'b' {
+                    fmt = Bin;
+                } else {
+                    // definitely base 10
+                    digits.push(c1);
+                    if DELIMS.contains(&c) {
+                        consume_done = true;
                     } else {
-                        // assume base 10
-                        digits.push(c1);
                         digits.push(c);
                         if !c.is_ascii_digit() {
                             return Err(ParseError::new(
@@ -206,52 +210,55 @@ impl LineLexer<'_> {
                             ));
                         }
                     }
-                } else {
-                    // definitely base 10
-                    digits.push(c1);
+                }
+            }
+        }
+        if !consume_done {
+            self.iter.next();
+            while let Some((_, c_ref)) = self.iter.peek() {
+                let c = *c_ref;
+                let push: bool = match fmt {
+                    Bin => c == '0' || c == '1',
+                    Hex => c.is_ascii_hexdigit(),
+                    Dec => c.is_ascii_digit(),
+                };
+                if push {
                     digits.push(c);
-                    if !c.is_ascii_digit() {
+                    self.iter.next();
+                } else {
+                    // allow separators for hex literals
+                    if fmt == Hex && c == '_' {
+                        self.iter.next();
+                    } else if DELIMS.contains(&c) {
+                        break;
+                    } else {
                         return Err(ParseError::new(
                             state.location,
-                            "Error parsing base 10 integer literal".to_string(),
+                            format!(
+                                "Error parsing {} integer literal",
+                                match fmt {
+                                    Bin => "binary",
+                                    Hex => "hexademical",
+                                    Dec => "decimal",
+                                }
+                            ),
                             digits.into_iter().collect(),
                         ));
                     }
                 }
             }
         }
-        self.iter.next();
-        while let Some((_, c_ref)) = self.iter.peek() {
-            let c = *c_ref;
-            let push: bool = match fmt {
-                Bin => c == '0' || c == '1',
-                Hex => c.is_ascii_hexdigit(),
-                Dec => c.is_ascii_digit(),
-            };
-            if push {
-                digits.push(c);
-                self.iter.next();
-            } else {
-                return Err(ParseError::new(
-                    state.location,
-                    format!(
-                        "Error parsing {} integer literal",
-                        match fmt {
-                            Bin => "binary",
-                            Hex => "hexademical",
-                            Dec => "decimal",
-                        }
-                    ),
-                    digits.into_iter().collect(),
-                ));
-            }
-        }
-        if let Ok(val) =
-            i32::from_str_radix(digits.into_iter().collect::<String>().as_str(), fmt.radix())
-        {
+        let digit_str = digits.into_iter().collect::<String>();
+        // We need to use u32 to avoid overflow for large literals like 0xFFFF_FFFF
+        if let Ok(unsgn_val) = u32::from_str_radix(&digit_str, fmt.radix()) {
+            let val = unsgn_val as i32;
             Ok(TokenType::Immediate(if negate { -val } else { val }, fmt))
         } else {
-            unimplemented!()
+            Err(ParseError::new(
+                state.location,
+                format!("Malformed base {} immediate", fmt.radix()).to_string(),
+                digit_str,
+            ))
         }
     }
 
@@ -365,6 +372,7 @@ mod tests {
             ("-0b101", Bin, -0b101),
             ("-3", Dec, -3),
             ("-874", Dec, -874),
+            ("0xABCD_0123", Hex, 0xABCD_0123u32 as i32),
         ];
         for (line, fmt, exp) in cases {
             let mut iter = line.chars().enumerate().peekable();

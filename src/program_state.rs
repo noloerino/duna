@@ -485,7 +485,7 @@ pub struct ProgramState {
     /// Holds the contents of all bytes that have been printed to stdout (used mostly for testing)
     pub stdout: Vec<u8>,
     /// TODO add kernel thread information (tid, file descriptors, etc.)
-    user_state: UserProgState,
+    pub user_state: UserProgState,
 }
 
 /// Syscall numbers for x86_64.
@@ -521,15 +521,17 @@ impl SyscallNumber {
 /// the a7 register determines which syscall is being performed, and the arguments are stored
 /// in the argument registers of user space.
 /// See [SyscallNumber] for syscall codes.
-/// TODO make these return diffs so they're reversible.
+/// TODO create diffs on privileged state so they're reversible.
 impl ProgramState {
-    pub fn dispatch_syscall(&mut self) {
+    pub fn dispatch_syscall(&mut self) -> StateChange {
         use IRegister::*;
         if let Some(nr) = SyscallNumber::get(u32::from(self.user_state.regfile.read(A7))) {
             match nr {
                 SyscallNumber::Write => self.syscall_write(),
                 _ => self.syscall_unknown(),
             }
+        } else {
+            self.syscall_unknown()
         }
     }
 
@@ -538,9 +540,9 @@ impl ProgramState {
     /// * a0 - file descriptor
     /// * a1 - pointer to the buffer to be written
     /// * a2 - the number of bytes to write
-    fn syscall_write(&mut self) {
+    fn syscall_write(&mut self) -> StateChange {
         use IRegister::*;
-        let regfile = &mut self.user_state.regfile;
+        let regfile = &self.user_state.regfile;
         let memory = &self.user_state.memory;
         // let fd = regfile.read(A0);
         let buf_addr = u32::from(regfile.read(A1));
@@ -548,14 +550,14 @@ impl ProgramState {
         let bytes: Vec<u8> = (0..count)
             .map(|i| u8::from(memory.get_byte(ByteAddress::from(buf_addr.wrapping_add(i)))))
             .collect();
-        self.stdout.extend(&bytes);
         print!("{}", String::from_utf8_lossy(&bytes));
-        regfile.set(A0, DataWord::from(count));
+        self.stdout.extend(&bytes);
+        StateChange::reg_write_pc_p4(&self.user_state, A0, DataWord::from(count))
     }
 
     /// Handles an unknown syscall.
-    fn syscall_unknown(&mut self) {
-        panic!("Unknown syscall");
+    fn syscall_unknown(&self) -> StateChange {
+        panic!("Unknown syscall")
     }
 }
 
@@ -574,7 +576,8 @@ impl ProgramState {
     }
 
     pub fn apply_inst(&mut self, inst: &ConcreteInst) {
-        self.user_state.apply_inst(inst);
+        self.user_state.apply_inst(inst)
+        // self.user_state.apply_diff(&(*inst.eval)(self));
     }
 }
 

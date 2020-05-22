@@ -12,6 +12,7 @@ fn f7(val: u32) -> BitStr32 {
 const R_OPCODE: BitStr32 = BitStr32::new(0b011_0011, 7);
 const I_OPCODE_ARITH: BitStr32 = BitStr32::new(0b001_0011, 7);
 const I_OPCODE_LOAD: BitStr32 = BitStr32::new(0b000_0011, 7);
+const SYS_OPCODE: BitStr32 = BitStr32::new(0b111_0011, 7);
 const B_OPCODE: BitStr32 = BitStr32::new(0b110_0011, 7);
 const J_OPCODE: BitStr32 = BitStr32::new(0b110_1111, 7);
 const S_OPCODE: BitStr32 = BitStr32::new(0b010_0011, 7);
@@ -174,6 +175,23 @@ impl BType for Bne {
     }
 }
 
+// pub struct Ecall;
+// impl EnvironInst for Ecall {
+//     fn inst_fields() -> IInstFields {
+//         IInstFields {
+//             opcode: SYS_OPCODE,
+//             funct3: f3(0b000),
+//         }
+//     }
+
+//     fn eval_priv(state: &mut ProgramState) -> StateChange;
+//     fn eval_user(state: &UserProgState) -> StateChange;
+
+//     fn eval(state: &ProgramState) -> StateChange {
+//         state.dispatch_syscall()
+//     }
+// }
+
 pub struct Jal;
 impl JType for Jal {
     fn inst_fields() -> JInstFields {
@@ -289,11 +307,59 @@ impl ITypeLoad for Lw {
     }
 }
 
+pub struct Sb;
+impl SType for Sb {
+    fn inst_fields() -> SInstFields {
+        SInstFields {
+            funct3: f3(0b000),
+            opcode: S_OPCODE,
+        }
+    }
+
+    fn eval(state: &UserProgState, rs1: IRegister, rs2: IRegister, imm: BitStr32) -> StateChange {
+        // TODO implement more granular diffs
+        let byte_addr = ByteAddress::from(i32::from(state.regfile.read(rs1)) + imm.as_i32());
+        let new_word = state.memory.get_word(byte_addr.to_word_address()).set_byte(
+            byte_addr.get_word_offset(),
+            state.regfile.read(rs2).get_byte(0),
+        );
+        StateChange::mem_write_op(state, byte_addr.to_word_address(), new_word)
+    }
+}
+
+pub struct Sh;
+impl SType for Sh {
+    fn inst_fields() -> SInstFields {
+        SInstFields {
+            funct3: f3(0b001),
+            opcode: S_OPCODE,
+        }
+    }
+
+    fn eval(state: &UserProgState, rs1: IRegister, rs2: IRegister, imm: BitStr32) -> StateChange {
+        // TODO implement more granular diffs
+        let byte_addr = ByteAddress::from(i32::from(state.regfile.read(rs1)) + imm.as_i32());
+        let new_word = state
+            .memory
+            .get_word(byte_addr.to_word_address())
+            .set_byte(
+                byte_addr.get_word_offset(),
+                state.regfile.read(rs2).get_byte(0),
+            )
+            .set_byte(
+                // will panic if not properly aligned, but we don't care yet
+                byte_addr.get_word_offset() + 1,
+                state.regfile.read(rs2).get_byte(1),
+            );
+        StateChange::mem_write_op(state, byte_addr.to_word_address(), new_word)
+    }
+}
+
 pub struct Sw;
 impl SType for Sw {
     fn inst_fields() -> SInstFields {
         SInstFields {
-            funct3: BitStr32::new(0b010, 3),
+            funct3: f3(0b010),
             opcode: S_OPCODE,
         }
     }
@@ -728,21 +794,70 @@ mod test {
     }
 
     #[test]
-    fn test_sw() {
+    fn test_sb() {
+        let mut state = get_init_state();
+        let addr = 0x1000_0000;
+        // black out the upper bytes to make sure it only touches the lowest word
+        let byte = 0xFFFF_FFDEu32;
+        state.regfile.set(RS1, DataWord::from(addr));
+        state.regfile.set(RS2, DataWord::from(byte));
+        // don't store msb yet
+        for i in 0..3 {
+            state.apply_inst(&Sb::new(RS1, RS2, DataWord::from(i)));
+        }
+        assert_eq!(
+            state
+                .memory
+                .get_word(ByteAddress::from(addr).to_word_address()),
+            DataWord::from(0x00DE_DEDEu32)
+        );
+        state.apply_inst(&Sb::new(RS1, RS2, DataWord::from(3)));
+        assert_eq!(
+            state
+                .memory
+                .get_word(ByteAddress::from(addr).to_word_address()),
+            DataWord::from(0xDEDE_DEDEu32)
+        );
+    }
+
+    #[test]
+    fn test_sh_aligned() {
+        let mut state = get_init_state();
+        let test_data = vec![
+            (0x1000_0000, 0, 0xABCD_0123u32),
+            (0x0000_0014, 0, 0xFFEE_DDEEu32),
+        ];
+        for (addr, offs, rs2_val) in test_data {
+            state.regfile.set(RS1, DataWord::from(addr));
+            state.regfile.set(RS2_POS, DataWord::from(rs2_val));
+            state.regfile.set(RS2_NEG, DataWord::from(rs2_val >> 16));
+            state.apply_inst(&Sh::new(RS1, RS2_POS, DataWord::from(offs)));
+            state.apply_inst(&Sh::new(RS1, RS2_NEG, DataWord::from(offs + 2)));
+            assert_eq!(
+                state
+                    .memory
+                    .get_word(((i32::from(addr) + offs) >> 2) as u32),
+                DataWord::from(rs2_val)
+            );
+        }
+    }
+
+    #[test]
+    fn test_sw_aligned() {
         let mut state = get_init_state();
         let test_data = vec![
             (0x1000_0000, 0, DataWord::from(100)),
             (0x0000_0014, 0, DataWord::from(-4)),
         ];
-        for (addr, offs, rs1_val) in test_data {
+        for (addr, offs, rs2_val) in test_data {
             state.regfile.set(RS1, DataWord::from(addr));
-            state.regfile.set(RS2, rs1_val);
+            state.regfile.set(RS2, rs2_val);
             state.apply_inst(&Sw::new(RS1, RS2, DataWord::from(offs)));
             assert_eq!(
                 state
                     .memory
                     .get_word(((i32::from(addr) + offs) >> 2) as u32),
-                rs1_val
+                rs2_val
             );
         }
     }

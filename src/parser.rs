@@ -48,12 +48,28 @@ impl ParseError {
         ParseError::new(location, "Expected register name".to_string(), reg_name)
     }
 
-    fn not_enough_args(location: Location, contents: String) -> Self {
-        ParseError::new(location, "Not enough arguments".to_string(), contents)
+    fn not_enough_args(location: Location, inst_name: String) -> Self {
+        ParseError::new(
+            location,
+            "Not enough arguments".to_string(),
+            format!("while parsing instruction {}", inst_name),
+        )
+    }
+
+    fn imm_too_big(location: Location, imm_str: String) -> Self {
+        ParseError::new(location, "Immediate too large".to_string(), imm_str)
     }
 
     fn unexpected(location: Location, contents: String) -> Self {
         ParseError::new(location, "Unexpected token".to_string(), contents)
+    }
+
+    fn unclosed_paren(location: Location, contents: String) -> Self {
+        ParseError::new(
+            location,
+            "Expected closing parentheses".to_string(),
+            contents,
+        )
     }
 }
 
@@ -72,8 +88,8 @@ enum ParseType {
     R(&'static dyn Fn(IRegister, IRegister, IRegister) -> ConcreteInst),
     Arith(&'static dyn Fn(IRegister, IRegister, DataWord) -> ConcreteInst),
     Env,
-    MemL,
-    MemS,
+    MemL(&'static dyn Fn(IRegister, IRegister, DataWord) -> ConcreteInst),
+    MemS(&'static dyn Fn(IRegister, IRegister, DataWord) -> ConcreteInst),
     B,
     Jal,
     Jalr,
@@ -112,16 +128,16 @@ impl RiscVParser {
             ("ecall", Env),
             ("jal", ParseType::Jal),
             ("jalr", ParseType::Jalr),
-            ("lb", MemL),
-            ("lbu", MemL),
-            ("lh", MemL),
-            ("lhu", MemL),
+            ("lb", MemL(&Lb::new)),
+            ("lbu", MemL(&Lbu::new)),
+            ("lh", MemL(&Lh::new)),
+            ("lhu", MemL(&Lhu::new)),
             ("lui", U),
-            ("lw", MemL),
+            ("lw", MemL(&Lw::new)),
             // ("or", R),
             // ("ori", Arith),
-            ("sb", MemS),
-            ("sh", MemS),
+            ("sb", MemS(&Sb::new)),
+            ("sh", MemS(&Sh::new)),
             // ("sll", R),
             // ("slli", Arith),
             // ("slt", R),
@@ -133,7 +149,7 @@ impl RiscVParser {
             // ("srl", R),
             // ("srli", Arith),
             // ("sub", R),
-            ("sw", MemS),
+            ("sw", MemS(&Sw::new)),
             // ("xor", R),
             // ("xori", Arith),
         ]
@@ -178,6 +194,15 @@ fn find_first_err<T, E>(lst: Vec<Result<T, E>>) -> Option<E> {
         Err(e) => Some(e),
         _ => None,
     })
+}
+
+/// Contains arguments for a memory operation (load or store).
+/// The registers correspond to the order in which they appear: for stores, RS2 precedes RS1;
+/// for loads, RD preceds RS1.
+struct MemArgs {
+    first_reg: IRegister,
+    second_reg: IRegister,
+    imm: DataWord,
 }
 
 struct LineParser<'a> {
@@ -230,11 +255,73 @@ impl LineParser<'_> {
                     }
                     _ => Err(ParseError::bad_arg(tok.location, format!("{:?}", tok.data))),
                 },
-                None => Err(ParseError::not_enough_args(
-                    head_loc,
-                    format!("for instruction {}", head_name),
-                )),
+                None => Err(ParseError::not_enough_args(head_loc, head_name)),
             }
+        }
+    }
+
+    /// Consumes tokens for arguments for a memory operation.
+    /// These are either of the form "inst reg, imm, reg)" e.g. "lw x1 -4 x2"
+    /// or "inst reg, (imm)reg" e.g "lw x1, 4(x2)" (commas optional in both cases)
+    fn consume_mem_args(
+        &mut self,
+        head_loc: Location,
+        head_name: String,
+    ) -> Result<MemArgs, ParseError> {
+        // first consumed token must be register name
+        let first_tok = self.try_next_tok(head_loc, &head_name)?;
+        let first_reg = self.try_parse_reg(&first_tok)?;
+        // check for comma
+        let maybe_comma = self.try_peek_tok(head_loc, &head_name)?;
+        if let TokenType::Comma = maybe_comma.data {
+            self.iter.next();
+        }
+        // must be immediate here
+        let imm_tok = self.try_next_tok(head_loc, &head_name)?;
+        let imm = self.try_parse_imm_12b(&imm_tok)?;
+        // check for lparen
+        let maybe_lparen = self.try_peek_tok(head_loc, &head_name)?;
+        let is_lparen = if let TokenType::LParen = maybe_lparen.data {
+            self.iter.next();
+            true
+        } else {
+            false
+        };
+        // must be a register here
+        let reg2_tok = self.try_next_tok(head_loc, &head_name)?;
+        let second_reg = self.try_parse_reg(&reg2_tok)?;
+        if is_lparen {
+            let maybe_rparen = self.try_next_tok(head_loc, &head_name)?;
+            if let TokenType::RParen = maybe_rparen.data {
+            } else {
+                Err(ParseError::unclosed_paren(
+                    maybe_rparen.location,
+                    format!("{:?}", maybe_rparen.data),
+                ))?
+            }
+        }
+        Ok(MemArgs {
+            first_reg,
+            second_reg,
+            imm,
+        })
+    }
+
+    /// Attempts to advance the next token of the iterator, returning a ParseError if there are none.
+    fn try_next_tok(&mut self, head_loc: Location, inst_name: &str) -> Result<Token, ParseError> {
+        if let Some(tok) = self.iter.next() {
+            Ok(tok)
+        } else {
+            Err(ParseError::not_enough_args(head_loc, inst_name.to_string()))
+        }
+    }
+
+    /// Attempts to peek the next token of the iterator, returning a ParseError if there are none.
+    fn try_peek_tok(&mut self, head_loc: Location, inst_name: &str) -> Result<&Token, ParseError> {
+        if let Some(tok) = self.iter.peek() {
+            Ok(tok)
+        } else {
+            Err(ParseError::not_enough_args(head_loc, inst_name.to_string()))
         }
     }
 
@@ -253,9 +340,20 @@ impl LineParser<'_> {
         }
     }
 
-    fn try_parse_imm(&self, token: &Token) -> Result<DataWord, ParseError> {
+    /// Attempts to parse a 12-bit immediate.
+    /// If the provided immediate is a negative
+    fn try_parse_imm_12b(&self, token: &Token) -> Result<DataWord, ParseError> {
         match &token.data {
-            TokenType::Immediate(val, ..) => Ok(DataWord::from(*val)),
+            // Check lower 12 bits
+            // We give a pass to negative numbers with high bits set
+            TokenType::Immediate(val, radix) => {
+                let mask_result = (*val as u32) & (0xFFFF_F800u32);
+                if mask_result != 0 && mask_result != 0xFFFF_F800 {
+                    Err(ParseError::imm_too_big(token.location, radix.format(*val)))
+                } else {
+                    Ok(DataWord::from(*val))
+                }
+            }
             _ => Err(ParseError::unexpected(
                 token.location,
                 format!("Expected immediate, found {:?}", token.data),
@@ -287,11 +385,24 @@ impl LineParser<'_> {
                     debug_assert!(args.len() == 3);
                     let rd = self.try_parse_reg(&args[0])?;
                     let rs1 = self.try_parse_reg(&args[1])?;
-                    let imm = self.try_parse_imm(&args[2])?;
+                    let imm = self.try_parse_imm_12b(&args[2])?;
                     Ok(vec![inst_new(rd, rs1, imm)])
                 }
                 // // Env => ,
-                // Mem => ,
+                MemL(inst_new) => {
+                    let args = self.consume_mem_args(head_loc, name)?;
+                    let rd = args.first_reg;
+                    let rs1 = args.second_reg;
+                    let imm = args.imm;
+                    Ok(vec![inst_new(rd, rs1, imm)])
+                }
+                MemS(inst_new) => {
+                    let args = self.consume_mem_args(head_loc, name)?;
+                    let rs2 = args.first_reg;
+                    let rs1 = args.second_reg;
+                    let imm = args.imm;
+                    Ok(vec![inst_new(rs1, rs2, imm)])
+                }
                 // B => ,
                 // Jal => ,
                 // Jalr => ,
@@ -384,5 +495,16 @@ mod tests {
         assert!(parse_err.is_empty());
         assert_eq!(insts.len(), 1);
         assert_eq!(insts[0], Addi::new(SP, SP, DataWord::from(-4)));
+    }
+
+    #[test]
+    fn test_imm_too_big() {
+        // immediates for instructions like addi can only be 12 bits long
+        let (toks, lex_err) = lexer::Lexer::from_string("addi sp sp 0xF000".to_string()).lex();
+        assert!(lex_err.is_empty());
+        let parser = RiscVParser::from_tokens(toks);
+        let (insts, parse_err) = parser.parse();
+        assert!(!parse_err.is_empty());
+        assert!(insts.is_empty());
     }
 }
