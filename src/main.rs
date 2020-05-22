@@ -1,16 +1,7 @@
 // #![allow(dead_code)]
-#[macro_use]
-extern crate lazy_static;
-use crate::program_state::RiscVProgram;
 use clap::{App, Arg};
+use mars::program_state::RiscVProgram;
 use std::process;
-
-mod instruction;
-mod isa;
-mod lexer;
-mod parser;
-mod program_state;
-mod pseudo_inst;
 
 fn main() {
     let matches = App::new("emulator")

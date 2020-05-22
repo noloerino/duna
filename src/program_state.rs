@@ -75,7 +75,6 @@ impl RiscVProgram {
             ByteAddress::from(u32::from(self.state.user_state.pc) - u32::from(pc_start))
                 .to_word_address() as usize,
         ) {
-            println!("{:?}", inst);
             self.state.apply_inst(inst);
         }
         i32::from(self.state.user_state.regfile.read(IRegister::A0))
