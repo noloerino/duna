@@ -60,8 +60,8 @@ pub enum TokenType {
     Name(String),
     /// A token representing the name of a label, without the trailing colon.
     LabelDef(String),
-    /// A token representing a section label, without the leading period.
-    SectionDef(String),
+    /// A token representing an assembly directive, without the leading period.
+    Directive(String),
     Comment(String),
     Comma,
     Immediate(i32, ImmRenderType),
@@ -114,7 +114,7 @@ impl LineLexer<'_> {
         Ok(TokenType::Comment(string_from_utf8(cs)))
     }
 
-    fn build_section_def(&mut self) -> Result<TokenType, ParseError> {
+    fn build_directive(&mut self) -> Result<TokenType, ParseError> {
         // assume leading . already consumed
         let mut cs = Vec::<u8>::new();
         while let Some((_, c_ref)) = self.iter.peek() {
@@ -125,7 +125,7 @@ impl LineLexer<'_> {
             cs.push(c as u8);
             self.iter.next();
         }
-        Ok(TokenType::SectionDef(string_from_utf8(cs)))
+        Ok(TokenType::Directive(string_from_utf8(cs)))
     }
 
     fn build_name(&mut self, state: &LexState) -> Result<TokenType, ParseError> {
@@ -283,7 +283,7 @@ impl LineLexer<'_> {
                 self.build_imm(&state)
             } else {
                 match c {
-                    '.' => self.build_section_def(),
+                    '.' => self.build_directive(),
                     ',' => Ok(TokenType::Comma),
                     '#' => self.build_comment(),
                     '(' => Ok(TokenType::LParen),

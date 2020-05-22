@@ -3,9 +3,28 @@ use crate::isa::*;
 use crate::program_state::IRegister::*;
 use crate::program_state::*;
 
+/// Represents pseudo-instructions that take no arguments.
+pub trait NoArgs {
+    fn expand() -> Vec<ConcreteInst>;
+}
+
 /// Represents pseudo-instructions that take a register and an immediate as arguments.
 pub trait RegImm {
     fn expand(reg: IRegister, data: DataWord) -> Vec<ConcreteInst>;
+}
+
+/// Represents pseudo-instructions taking two registers.
+pub trait RegReg {
+    fn expand(rd: IRegister, rs: IRegister) -> Vec<ConcreteInst> {
+        vec![Addi::new(rd, rs, DataWord::zero())]
+    }
+}
+
+pub struct Nop;
+impl NoArgs for Nop {
+    fn expand() -> Vec<ConcreteInst> {
+        vec![Addi::new(ZERO, ZERO, DataWord::zero())]
+    }
 }
 
 pub struct Li;
@@ -29,6 +48,13 @@ impl RegImm for Li {
         } else {
             vec![Lui::new(reg, DataWord::from(upper.as_u32())), addi]
         }
+    }
+}
+
+pub struct Mv;
+impl RegReg for Mv {
+    fn expand(rd: IRegister, rs: IRegister) -> Vec<ConcreteInst> {
+        vec![Addi::new(rd, rs, DataWord::zero())]
     }
 }
 

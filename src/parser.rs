@@ -100,6 +100,8 @@ enum ParseType {
 #[derive(Clone)]
 enum PseudoParseType {
     RegImm(&'static dyn Fn(IRegister, DataWord) -> Vec<ConcreteInst>),
+    RegReg(&'static dyn Fn(IRegister, IRegister) -> Vec<ConcreteInst>),
+    NoArgs(&'static dyn Fn() -> Vec<ConcreteInst>),
 }
 
 struct ParserData {
@@ -165,11 +167,15 @@ impl RiscVParser {
         .cloned()
         .map(|(s, t)| (s.to_string(), t))
         .collect();
-        let pseudo_expansion_table = [("li", RegImm(&Li::expand))]
-            .iter()
-            .cloned()
-            .map(|(s, t)| (s.to_string(), t))
-            .collect();
+        let pseudo_expansion_table = [
+            ("li", RegImm(&Li::expand)),
+            ("mv", RegReg(&Mv::expand)),
+            ("nop", NoArgs(&Nop::expand)),
+        ]
+        .iter()
+        .cloned()
+        .map(|(s, t)| (s.to_string(), t))
+        .collect();
         let mut reg_expansion_table: HashMap<String, IRegister> = IRegister::REG_ARRAY
             .iter()
             .map(|r| (r.to_string(), *r))
@@ -430,7 +436,6 @@ impl LineParser<'_> {
                 // Jalr => ,
                 U(inst_new) => {
                     let args = self.consume_commasep_args(head_loc, name, 2)?;
-                    debug_assert!(args.len() == 2);
                     let rd = self.try_parse_reg(&args[0])?;
                     let imm = self.try_parse_imm(20, &args[1])?;
                     Ok(inst_new(rd, imm))
@@ -449,6 +454,19 @@ impl LineParser<'_> {
                     let imm = self.try_parse_imm(32, &args[1])?;
                     Ok(inst_expand(rd, imm))
                 }
+                NoArgs(inst_expand) => {
+                    let args = self.consume_commasep_args(head_loc, name, 0)?;
+                    debug_assert!(args.is_empty());
+                    Ok(inst_expand())
+                }
+                RegReg(inst_expand) => {
+                    let args = self.consume_commasep_args(head_loc, name, 2)?;
+                    debug_assert!(args.len() == 2);
+                    let rd = self.try_parse_reg(&args[0])?;
+                    let rs = self.try_parse_reg(&args[1])?;
+                    Ok(inst_expand(rd, rs))
+                }
+
                 // _ => Err(ParseError::unexpected(
                 //     head_loc,
                 //     "unimplemented".to_string(),
@@ -477,7 +495,7 @@ impl LineParser<'_> {
             match head_tok.data {
                 Name(name) => self.try_expand_inst(head_tok.location, name),
                 LabelDef(_label_name) => Ok(Vec::new()), // TODO
-                SectionDef(_section_name) => Ok(Vec::new()), // TODO
+                Directive(_section_name) => Ok(Vec::new()), // TODO
                 Comment(..) => Ok(Vec::new()),           // deliberate no-op
                 Comma => Err(ParseError::bad_head(head_tok.location, ",".to_string())),
                 Immediate(n, style) => {
