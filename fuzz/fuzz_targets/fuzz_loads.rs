@@ -1,9 +1,9 @@
 #![no_main]
 use libfuzzer_sys::arbitrary;
 use libfuzzer_sys::fuzz_target;
-use mars::instruction::ITypeLoad;
-use mars::isa::Lw;
-use mars::program_state::{ByteAddress, DataWord, IRegister, ProgramState};
+use duna::instruction::ITypeLoad;
+use duna::isa::Lw;
+use duna::program_state::{ByteAddress, DataWord, IRegister, ProgramState};
 
 #[derive(Clone, Debug, arbitrary::Arbitrary)]
 struct FuzzData {

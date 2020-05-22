@@ -1,6 +1,6 @@
 
 [package]
-name = "mars-fuzz"
+name = "duna-fuzz"
 version = "0.0.0"
 authors = ["Automatically generated"]
 publish = false
@@ -12,7 +12,7 @@ cargo-fuzz = true
 [dependencies]
 libfuzzer-sys = { version = "0.3", features = ["arbitrary-derive"] }
 
-[dependencies.mars]
+[dependencies.duna]
 path = ".."
 
 # Prevent this from interfering with workspaces

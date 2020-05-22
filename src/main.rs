@@ -1,6 +1,6 @@
 // #![allow(dead_code)]
 use clap::{App, Arg};
-use mars::program_state::RiscVProgram;
+use duna::program_state::RiscVProgram;
 use std::process;
 
 fn main() {
