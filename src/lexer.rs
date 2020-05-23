@@ -110,7 +110,7 @@ impl LineLexer<'_> {
         for (_, c) in &mut self.iter {
             cs.push(c as u8);
         }
-        // TODO reimplement this uzing unzip
+        // TODO reimplement this using unzip
         Ok(TokenType::Comment(string_from_utf8(cs)))
     }
 

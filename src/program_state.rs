@@ -543,8 +543,7 @@ impl Default for ProgramState {
 /// in the argument registers of user space.
 /// See [Syscall] for syscall codes.
 /// TODO put custom types for syscall args
-/// TODO create diffs on privileged state so they're reversible.
-/// TODO put errno on user state (although it's at a thread-local statically known location)
+/// TODO put errno on user state at a thread-local statically known location
 impl ProgramState {
     pub fn get_stdout(&self) -> &[u8] {
         self.priv_state.stdout.as_slice()
