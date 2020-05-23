@@ -747,7 +747,7 @@ mod test {
         let inst = Ecall::new();
         state.apply_inst(&inst);
         // beware of endianness
-        assert_eq!(state.priv_state.stdout, vec![0xEF, 0xBE, 0xAD, 0xDE]);
+        assert_eq!(state.get_stdout(), &[0xEF, 0xBE, 0xAD, 0xDE]);
     }
 
     #[test]

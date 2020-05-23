@@ -52,16 +52,16 @@ fn test_offset_branches() {
     check_a0_at_end("offset_branches.s", 0xABCD_0123u32)
 }
 
-// #[test]
-// /// Tests the write syscall with some nice happy ASCII characters.
-// fn test_write_stdout() {
-//     // this will print "deadbeef\n" to stdout
-//     let mut program = program_from_file("write_stdout.s");
-//     // should have written 9 bytes
-//     let result = program.run();
-//     assert_eq!(result, 9);
-//     assert_eq!(
-//         String::from_utf8(program.state.stdout),
-//         Ok("deadbeef\n".to_string())
-//     );
-// }
+#[test]
+/// Tests the write syscall with some nice happy ASCII characters.
+fn test_write_stdout() {
+    // this will print "deadbeef\n" to stdout
+    let mut program = program_from_file("write_stdout.s");
+    // should have written 9 bytes
+    let result = program.run();
+    assert_eq!(result, 9);
+    assert_eq!(
+        String::from_utf8(program.state.get_stdout().to_vec()),
+        Ok("deadbeef\n".to_string())
+    );
+}

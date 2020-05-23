@@ -88,7 +88,7 @@ impl fmt::Display for ParseError {
 enum ParseType {
     R(fn(IRegister, IRegister, IRegister) -> ConcreteInst),
     Arith(fn(IRegister, IRegister, DataWord) -> ConcreteInst),
-    Env,
+    Env(fn() -> ConcreteInst),
     MemL(fn(IRegister, IRegister, DataWord) -> ConcreteInst),
     MemS(fn(IRegister, IRegister, DataWord) -> ConcreteInst),
     B(fn(IRegister, IRegister, DataWord) -> ConcreteInst),
@@ -135,8 +135,8 @@ lazy_static! {
             ("blt", B(Blt::new)),
             ("bltu", B(Bltu::new)),
             ("bne", B(Bne::new)),
-            ("ebreak", Env),
-            ("ecall", Env),
+            // ("ebreak", Env),
+            ("ecall", Env(Ecall::new)),
             // TODO allow jal/jalr pseudo-ops
             ("jal", ParseType::Jal(isa::Jal::new)),
             ("jalr", Arith(isa::Jalr::new)),
@@ -456,7 +456,11 @@ impl LineParser<'_> {
                     let imm = self.try_parse_imm(12, &args[2])?;
                     Ok(inst_new(rd, rs1, imm))
                 }
-                // // Env => ,
+                Env(inst_new) => {
+                    let args = self.consume_commasep_args(head_loc, name, 0)?;
+                    debug_assert!(args.is_empty());
+                    Ok(inst_new())
+                }
                 MemL(inst_new) => {
                     let args = self.consume_mem_args(head_loc, name)?;
                     let rd = args.first_reg;
@@ -506,10 +510,6 @@ impl LineParser<'_> {
                     let imm = self.try_parse_imm(20, &args[1])?;
                     Ok(inst_new(rd, imm))
                 }
-                _ => Err(ParseError::unexpected(
-                    head_loc,
-                    "unimplemented".to_string(),
-                )),
             }?])
         } else if let Some(parse_type) = self.data.pseudo_expansion_table.get(name.as_str()) {
             match parse_type {

@@ -499,8 +499,8 @@ impl Memory {
 }
 
 pub struct ProgramState {
-    pub priv_state: PrivProgState,
-    pub user_state: UserProgState,
+    pub(crate) priv_state: PrivProgState,
+    pub(crate) user_state: UserProgState,
 }
 
 /// Syscall numbers for x86_64.
@@ -546,6 +546,10 @@ impl Default for ProgramState {
 /// TODO create diffs on privileged state so they're reversible.
 /// TODO put errno on user state (although it's at a thread-local statically known location)
 impl ProgramState {
+    pub fn get_stdout(&self) -> &[u8] {
+        self.priv_state.stdout.as_slice()
+    }
+
     pub fn get_user_pc(&self) -> ByteAddress {
         self.user_state.pc
     }
