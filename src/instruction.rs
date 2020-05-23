@@ -26,7 +26,7 @@ pub struct JInstFields {
 }
 
 pub struct ConcreteInst {
-    pub eval: Box<dyn Fn(&UserProgState) -> StateChange>,
+    pub eval: Box<dyn Fn(&UserProgState) -> UserStateChange>,
     data: ConcreteInstData,
 }
 
@@ -159,7 +159,7 @@ pub trait RType {
             eval: Box::new(move |user_state| {
                 let new_rd_val =
                     Self::eval(user_state.regfile.read(rs1), user_state.regfile.read(rs2));
-                StateChange::reg_write_pc_p4(user_state, rd, new_rd_val)
+                UserStateChange::reg_write_pc_p4(user_state, rd, new_rd_val)
             }),
             data: ConcreteInstData::R {
                 fields: Self::inst_fields(),
@@ -186,14 +186,14 @@ pub trait IType {
             //     Generic(eval) => eval(user_state, rd, rs1, imm_vec),
             //     Arith(eval) => {
             //         let new_rd_val = eval(user_state.regfile.read(rs1), imm_vec);
-            //         StateChange::reg_write_pc_p4(user_state, rd, new_rd_val)
+            //         UserStateChange::reg_write_pc_p4(user_state, rd, new_rd_val)
             //     }
             //     Load(eval) => {
             //         let offs = imm_vec.to_sgn_data_word();
             //         let rs1_val = user_state.regfile.read(rs1);
             //         let addr = DataWord::from(i32::from(rs1_val).wrapping_add(i32::from(offs)));
             //         let new_rd_val = eval(&user_state.memory, ByteAddress::from(addr));
-            //         StateChange::reg_write_pc_p4(user_state, rd, new_rd_val)
+            //         UserStateChange::reg_write_pc_p4(user_state, rd, new_rd_val)
             //     }
             // }),
             data: ConcreteInstData::I {
@@ -205,7 +205,7 @@ pub trait IType {
         }
     }
     fn inst_fields() -> IInstFields;
-    fn eval(state: &UserProgState, rd: IRegister, rs1: IRegister, imm: BitStr32) -> StateChange;
+    fn eval(state: &UserProgState, rd: IRegister, rs1: IRegister, imm: BitStr32) -> UserStateChange;
 }
 
 pub trait ITypeArith: IType {
@@ -231,7 +231,7 @@ pub trait ITypeLoad: IType {
 //         }
 //     }
 //     fn inst_fields() -> IInstFields;
-//     fn eval(state: &ProgramState) -> StateChange;
+//     fn eval(state: &ProgramState) -> UserStateChange;
 // }
 
 pub trait SType {
@@ -248,7 +248,7 @@ pub trait SType {
         }
     }
     fn inst_fields() -> SInstFields;
-    fn eval(state: &UserProgState, rs1: IRegister, rs2: IRegister, imm: BitStr32) -> StateChange;
+    fn eval(state: &UserProgState, rs1: IRegister, rs2: IRegister, imm: BitStr32) -> UserStateChange;
 }
 
 pub trait BType {
@@ -257,12 +257,12 @@ pub trait BType {
         ConcreteInst {
             eval: Box::new(move |user_state| {
                 if Self::eval(user_state.regfile.read(rs1), user_state.regfile.read(rs2)) {
-                    StateChange::pc_update_op(
+                    UserStateChange::pc_update_op(
                         user_state,
                         ByteAddress::from(i32::from(user_state.pc).wrapping_add(imm_vec.as_i32())),
                     )
                 } else {
-                    StateChange::noop(user_state)
+                    UserStateChange::noop(user_state)
                 }
             }),
             data: ConcreteInstData::B {
@@ -294,7 +294,7 @@ pub trait UType {
     }
 
     fn inst_fields() -> UInstFields;
-    fn eval(state: &UserProgState, rd: IRegister, imm: BitStr32) -> StateChange;
+    fn eval(state: &UserProgState, rd: IRegister, imm: BitStr32) -> UserStateChange;
 }
 
 pub trait JType {
@@ -310,5 +310,5 @@ pub trait JType {
         }
     }
     fn inst_fields() -> JInstFields;
-    fn eval(state: &UserProgState, rd: IRegister, imm: BitStr32) -> StateChange;
+    fn eval(state: &UserProgState, rd: IRegister, imm: BitStr32) -> UserStateChange;
 }

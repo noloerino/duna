@@ -540,7 +540,7 @@ impl SyscallNumber {
 /// See [SyscallNumber] for syscall codes.
 /// TODO create diffs on privileged state so they're reversible.
 impl ProgramState {
-    pub fn dispatch_syscall(&mut self) -> StateChange {
+    pub fn dispatch_syscall(&mut self) -> UserStateChange {
         use IRegister::*;
         if let Some(nr) = SyscallNumber::get(u32::from(self.user_state.regfile.read(A7))) {
             match nr {
@@ -557,7 +557,7 @@ impl ProgramState {
     /// * a0 - file descriptor
     /// * a1 - pointer to the buffer to be written
     /// * a2 - the number of bytes to write
-    fn syscall_write(&mut self) -> StateChange {
+    fn syscall_write(&mut self) -> UserStateChange {
         use IRegister::*;
         let regfile = &self.user_state.regfile;
         let memory = &self.user_state.memory;
@@ -569,11 +569,11 @@ impl ProgramState {
             .collect();
         print!("{}", String::from_utf8_lossy(&bytes));
         self.stdout.extend(&bytes);
-        StateChange::reg_write_pc_p4(&self.user_state, A0, DataWord::from(count))
+        UserStateChange::reg_write_pc_p4(&self.user_state, A0, DataWord::from(count))
     }
 
     /// Handles an unknown syscall.
-    fn syscall_unknown(&self) -> StateChange {
+    fn syscall_unknown(&self) -> UserStateChange {
         panic!("Unknown syscall")
     }
 }
@@ -624,36 +624,36 @@ impl UserProgState {
         self.apply_diff(&(*inst.eval)(self));
     }
 
-    pub fn apply_diff(&mut self, diff: &StateChange) {
+    pub fn apply_diff(&mut self, diff: &UserStateChange) {
         self.pc = diff.new_pc;
         match diff.change_type {
-            StateChangeType::Reg(reg, WordChange { new_value, .. }) => {
+            UserStateChangeType::Reg(reg, WordChange { new_value, .. }) => {
                 self.regfile.set(reg, new_value)
             }
-            StateChangeType::Mem(addr, WordChange { new_value, .. }) => {
+            UserStateChangeType::Mem(addr, WordChange { new_value, .. }) => {
                 self.memory.set_word(addr, new_value)
             }
-            StateChangeType::NoRegOrMem => (),
+            UserStateChangeType::NoRegOrMem => (),
         }
     }
 
     #[allow(dead_code)]
-    pub fn revert_diff(&mut self, diff: &StateChange) {
+    pub fn revert_diff(&mut self, diff: &UserStateChange) {
         self.pc = diff.old_pc;
         match diff.change_type {
-            StateChangeType::Reg(reg, WordChange { old_value, .. }) => {
+            UserStateChangeType::Reg(reg, WordChange { old_value, .. }) => {
                 self.regfile.set(reg, old_value)
             }
-            StateChangeType::Mem(addr, WordChange { old_value, .. }) => {
+            UserStateChangeType::Mem(addr, WordChange { old_value, .. }) => {
                 self.memory.set_word(addr, old_value)
             }
-            StateChangeType::NoRegOrMem => (),
+            UserStateChangeType::NoRegOrMem => (),
         }
     }
 }
 
 #[derive(Copy, Clone)]
-enum StateChangeType {
+enum UserStateChangeType {
     NoRegOrMem,
     Reg(IRegister, WordChange),
     Mem(WordAddress, WordChange),
@@ -665,31 +665,31 @@ struct WordChange {
     new_value: DataWord,
 }
 
-pub struct StateChange {
+pub struct UserStateChange {
     old_pc: ByteAddress,
     new_pc: ByteAddress,
-    change_type: StateChangeType,
+    change_type: UserStateChangeType,
 }
 
-impl StateChange {
-    fn new(state: &UserProgState, new_pc: ByteAddress, tgt: StateChangeType) -> StateChange {
-        StateChange {
+impl UserStateChange {
+    fn new(state: &UserProgState, new_pc: ByteAddress, tgt: UserStateChangeType) -> UserStateChange {
+        UserStateChange {
             old_pc: state.pc,
             new_pc,
             change_type: tgt,
         }
     }
 
-    fn new_pc_p4(state: &UserProgState, tgt: StateChangeType) -> StateChange {
-        StateChange::new(state, state.pc.plus_4(), tgt)
+    fn new_pc_p4(state: &UserProgState, tgt: UserStateChangeType) -> UserStateChange {
+        UserStateChange::new(state, state.pc.plus_4(), tgt)
     }
 
-    pub fn noop(state: &UserProgState) -> StateChange {
-        StateChange::new_pc_p4(state, StateChangeType::NoRegOrMem)
+    pub fn noop(state: &UserProgState) -> UserStateChange {
+        UserStateChange::new_pc_p4(state, UserStateChangeType::NoRegOrMem)
     }
 
-    pub fn pc_update_op(state: &UserProgState, new_pc: ByteAddress) -> StateChange {
-        StateChange::new(state, new_pc, StateChangeType::NoRegOrMem)
+    pub fn pc_update_op(state: &UserProgState, new_pc: ByteAddress) -> UserStateChange {
+        UserStateChange::new(state, new_pc, UserStateChangeType::NoRegOrMem)
     }
 
     pub fn reg_write_op(
@@ -697,11 +697,11 @@ impl StateChange {
         new_pc: ByteAddress,
         reg: IRegister,
         val: DataWord,
-    ) -> StateChange {
-        StateChange::new(
+    ) -> UserStateChange {
+        UserStateChange::new(
             state,
             new_pc,
-            StateChangeType::Reg(
+            UserStateChangeType::Reg(
                 reg,
                 WordChange {
                     old_value: state.regfile.read(reg),
@@ -711,10 +711,10 @@ impl StateChange {
         )
     }
 
-    pub fn reg_write_pc_p4(state: &UserProgState, reg: IRegister, val: DataWord) -> StateChange {
-        StateChange::new_pc_p4(
+    pub fn reg_write_pc_p4(state: &UserProgState, reg: IRegister, val: DataWord) -> UserStateChange {
+        UserStateChange::new_pc_p4(
             state,
-            StateChangeType::Reg(
+            UserStateChangeType::Reg(
                 reg,
                 WordChange {
                     old_value: state.regfile.read(reg),
@@ -724,10 +724,10 @@ impl StateChange {
         )
     }
 
-    pub fn mem_write_op(state: &UserProgState, addr: WordAddress, val: DataWord) -> StateChange {
-        StateChange::new_pc_p4(
+    pub fn mem_write_op(state: &UserProgState, addr: WordAddress, val: DataWord) -> UserStateChange {
+        UserStateChange::new_pc_p4(
             state,
-            StateChangeType::Mem(
+            UserStateChangeType::Mem(
                 addr,
                 WordChange {
                     old_value: state.memory.get_word(addr),
