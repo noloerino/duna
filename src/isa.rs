@@ -85,8 +85,8 @@ impl UType for Auipc {
         }
     }
 
-    fn eval(state: &UserProgState, rd: IRegister, imm: BitStr32) -> UserOnly {
-        UserStateChange::reg_write_pc_p4(
+    fn eval(state: &UserProgState, rd: IRegister, imm: BitStr32) -> UserDiff {
+        UserDiff::reg_write_pc_p4(
             state,
             rd,
             DataWord::from(u32::from(state.pc).wrapping_add(imm.zero_pad_lsb().as_u32())),
@@ -202,8 +202,8 @@ impl JType for Jal {
         JInstFields { opcode: J_OPCODE }
     }
 
-    fn eval(state: &UserProgState, rd: IRegister, imm: BitStr32) -> UserOnly {
-        UserStateChange::reg_write_op(
+    fn eval(state: &UserProgState, rd: IRegister, imm: BitStr32) -> UserDiff {
+        UserDiff::reg_write_op(
             state,
             ByteAddress::from(i32::from(state.pc).wrapping_add(imm.as_i32())),
             rd,
@@ -221,8 +221,8 @@ impl IType for Jalr {
         }
     }
 
-    fn eval(state: &UserProgState, rd: IRegister, rs1: IRegister, imm: BitStr32) -> UserOnly {
-        UserStateChange::reg_write_op(
+    fn eval(state: &UserProgState, rd: IRegister, rs1: IRegister, imm: BitStr32) -> UserDiff {
+        UserDiff::reg_write_op(
             state,
             ByteAddress::from(i32::from(state.regfile.read(rs1)).wrapping_add(imm.as_i32())),
             rd,
@@ -309,8 +309,8 @@ impl UType for Lui {
         }
     }
 
-    fn eval(state: &UserProgState, rd: IRegister, imm: BitStr32) -> UserOnly {
-        UserStateChange::reg_write_pc_p4(state, rd, DataWord::from(imm.zero_pad_lsb().as_u32()))
+    fn eval(state: &UserProgState, rd: IRegister, imm: BitStr32) -> UserDiff {
+        UserDiff::reg_write_pc_p4(state, rd, DataWord::from(imm.zero_pad_lsb().as_u32()))
     }
 }
 
@@ -339,14 +339,14 @@ impl SType for Sb {
         }
     }
 
-    fn eval(state: &UserProgState, rs1: IRegister, rs2: IRegister, imm: BitStr32) -> UserOnly {
+    fn eval(state: &UserProgState, rs1: IRegister, rs2: IRegister, imm: BitStr32) -> UserDiff {
         // TODO implement more granular diffs
         let byte_addr = ByteAddress::from(i32::from(state.regfile.read(rs1)) + imm.as_i32());
         let new_word = state.memory.get_word(byte_addr.to_word_address()).set_byte(
             byte_addr.get_word_offset(),
             state.regfile.read(rs2).get_byte(0),
         );
-        UserStateChange::mem_write_op(state, byte_addr.to_word_address(), new_word)
+        UserDiff::mem_write_op(state, byte_addr.to_word_address(), new_word)
     }
 }
 
@@ -359,7 +359,7 @@ impl SType for Sh {
         }
     }
 
-    fn eval(state: &UserProgState, rs1: IRegister, rs2: IRegister, imm: BitStr32) -> UserOnly {
+    fn eval(state: &UserProgState, rs1: IRegister, rs2: IRegister, imm: BitStr32) -> UserDiff {
         // TODO implement more granular diffs
         let byte_addr = ByteAddress::from(i32::from(state.regfile.read(rs1)) + imm.as_i32());
         let new_word = state
@@ -374,7 +374,7 @@ impl SType for Sh {
                 byte_addr.get_word_offset() + 1,
                 state.regfile.read(rs2).get_byte(1),
             );
-        UserStateChange::mem_write_op(state, byte_addr.to_word_address(), new_word)
+        UserDiff::mem_write_op(state, byte_addr.to_word_address(), new_word)
     }
 }
 
@@ -387,8 +387,8 @@ impl SType for Sw {
         }
     }
 
-    fn eval(state: &UserProgState, rs1: IRegister, rs2: IRegister, imm: BitStr32) -> UserOnly {
-        UserStateChange::mem_write_op(
+    fn eval(state: &UserProgState, rs1: IRegister, rs2: IRegister, imm: BitStr32) -> UserDiff {
+        UserDiff::mem_write_op(
             state,
             ByteAddress::from(i32::from(state.regfile.read(rs1)) + imm.as_i32()).to_word_address(),
             state.regfile.read(rs2),
@@ -398,7 +398,8 @@ impl SType for Sw {
 
 #[cfg(test)]
 mod test {
-    use crate::isa::*;
+    use super::*;
+    use crate::program_state::IRegister;
     use crate::program_state::IRegister::*;
 
     const RS1_VAL: i32 = 1023;

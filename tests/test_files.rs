@@ -49,7 +49,7 @@ fn test_pseudo_jumps() {
 #[test]
 /// Tests some branches to offsets, again using only relative offsets.
 fn test_offset_branches() {
-    check_a0_at_end("offset_branches.s", 0xABCD_0123u32)
+    check_a0_at_end("offset_branches.s", 0xABCD_0123u32);
 }
 
 #[test]

@@ -23,9 +23,9 @@ fn impl_itype_arith_derive(ast: &syn::DeriveInput) -> TokenStream {
                 <#name as ITypeArith>::inst_fields()
             }
 
-            fn eval(state: &UserProgState, rd: IRegister, rs1: IRegister, imm: BitStr32) -> UserOnly {
+            fn eval(state: &UserProgState, rd: IRegister, rs1: IRegister, imm: BitStr32) -> UserDiff {
                 let new_rd_val = <#name as ITypeArith>::eval(state.regfile.read(rs1), imm);
-                UserStateChange::reg_write_pc_p4(state, rd, new_rd_val)
+                UserDiff::reg_write_pc_p4(state, rd, new_rd_val)
             }
         }
     };
@@ -40,12 +40,12 @@ fn impl_itype_load_derive(ast: &syn::DeriveInput) -> TokenStream {
                 <#name as ITypeLoad>::inst_fields()
             }
 
-            fn eval(state: &UserProgState, rd: IRegister, rs1: IRegister, imm: BitStr32) -> UserOnly {
+            fn eval(state: &UserProgState, rd: IRegister, rs1: IRegister, imm: BitStr32) -> UserDiff {
                 let offs = imm.to_sgn_data_word();
                 let rs1_val = state.regfile.read(rs1);
                 let addr = DataWord::from(i32::from(rs1_val).wrapping_add(i32::from(offs)));
                 let new_rd_val = <#name as ITypeLoad>::eval(&state.memory, ByteAddress::from(addr));
-                UserStateChange::reg_write_pc_p4(state, rd, new_rd_val)
+                UserDiff::reg_write_pc_p4(state, rd, new_rd_val)
             }
         }
     };

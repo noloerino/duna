@@ -625,14 +625,14 @@ impl ProgramState {
 
     /// Performs the described operation.
     /// The privileged operation is applied first, followed by the user operation.
-    pub fn apply_diff(&mut self, diff: &UserStateChange) {
+    pub fn apply_diff(&mut self, diff: &InstResult) {
         match diff {
-            UserStateChange::Trap(trap_kind) => {
+            InstResult::Trap(trap_kind) => {
                 let priv_diff = &self.handle_trap(trap_kind);
                 let user_diff = self.priv_state.apply_diff(&self.user_state, priv_diff);
                 self.user_state.apply_diff(&user_diff);
             }
-            UserStateChange::UserOnly(user_diff) => self.user_state.apply_diff(&user_diff),
+            InstResult::UserStateChange(user_diff) => self.user_state.apply_diff(&user_diff),
         };
     }
 
@@ -668,10 +668,10 @@ impl PrivProgState {
         PrivProgState { stdout: Vec::new() }
     }
 
-    pub fn apply_diff(&mut self, user_state: &UserProgState, diff: &PrivStateChange) -> UserOnly {
+    pub fn apply_diff(&mut self, user_state: &UserProgState, diff: &PrivStateChange) -> UserDiff {
         use PrivStateChange::*;
         match diff {
-            NoChange => UserStateChange::noop(user_state),
+            NoChange => UserDiff::noop(user_state),
             FileWrite { fd: _, buf, len } => {
                 let memory = &user_state.memory;
                 let count = u32::from(*len);
@@ -685,7 +685,7 @@ impl PrivProgState {
                 // TODO impl for other files
                 print!("{}", String::from_utf8_lossy(&bytes));
                 self.stdout.extend(bytes);
-                UserStateChange::reg_write_pc_p4(user_state, IRegister::A0, *len)
+                UserDiff::reg_write_pc_p4(user_state, IRegister::A0, *len)
             }
             Exit => unimplemented!(),
         }
@@ -730,7 +730,7 @@ impl UserProgState {
         }
     }
 
-    pub fn apply_diff(&mut self, diff: &UserOnly) {
+    pub fn apply_diff(&mut self, diff: &UserDiff) {
         self.pc = diff.pc.new_pc;
         if let Some(RegDiff {
             reg,
@@ -748,7 +748,7 @@ impl UserProgState {
         }
     }
 
-    pub fn revert_diff(&mut self, diff: &UserOnly) {
+    pub fn revert_diff(&mut self, diff: &UserDiff) {
         self.pc = diff.pc.old_pc;
         if let Some(RegDiff {
             reg,
@@ -821,62 +821,59 @@ pub enum TrapKind {
 
 /// Encodes a change that occurs within the user space of a program, which entails a write to the
 /// PC and possibly a register or memory operation.
-/// TODO rename to InstResult
-pub enum UserStateChange {
+pub enum InstResult {
     Trap(TrapKind),
-    UserOnly(UserOnly),
+    UserStateChange(UserDiff),
 }
 
 /// Represents a diff as it is applied to a program.
 pub enum ProgramDiff {
     PrivOnly(PrivStateChange),
-    UserOnly(UserOnly),
+    UserOnly(UserDiff),
 }
 
 /// Represents a diff that is applied only to the user state of a program.
-pub struct UserOnly {
+pub struct UserDiff {
     pc: PcDiff,
     reg: Option<RegDiff>,
     mem: Option<MemDiff>,
 }
 
-impl UserOnly {
-    fn new(pc: PcDiff, reg: Option<RegDiff>, mem: Option<MemDiff>) -> UserOnly {
-        UserOnly { pc, reg, mem }
+impl UserDiff {
+    pub fn to_inst_result(self) -> InstResult {
+        InstResult::UserStateChange(self)
     }
-}
 
-impl UserStateChange {
-    fn new_user_only(
+    fn new(
         state: &UserProgState,
         new_pc: ByteAddress,
         reg_change: Option<RegDiff>,
         mem_change: Option<MemDiff>,
-    ) -> UserOnly {
-        UserOnly::new(
-            PcDiff {
+    ) -> UserDiff {
+        UserDiff {
+            pc: PcDiff {
                 old_pc: state.pc,
                 new_pc,
             },
-            reg_change,
-            mem_change,
-        )
+            reg: reg_change,
+            mem: mem_change,
+        }
     }
 
     fn new_pc_p4(
         state: &UserProgState,
         reg_change: Option<RegDiff>,
         mem_change: Option<MemDiff>,
-    ) -> UserOnly {
-        UserStateChange::new_user_only(state, state.pc.plus_4(), reg_change, mem_change)
+    ) -> UserDiff {
+        UserDiff::new(state, state.pc.plus_4(), reg_change, mem_change)
     }
 
-    pub fn noop(state: &UserProgState) -> UserOnly {
-        UserStateChange::new_pc_p4(state, None, None)
+    pub fn noop(state: &UserProgState) -> UserDiff {
+        UserDiff::new_pc_p4(state, None, None)
     }
 
-    pub fn pc_update_op(state: &UserProgState, new_pc: ByteAddress) -> UserOnly {
-        UserStateChange::new_user_only(state, new_pc, None, None)
+    pub fn pc_update_op(state: &UserProgState, new_pc: ByteAddress) -> UserDiff {
+        UserDiff::new(state, new_pc, None, None)
     }
 
     pub fn reg_write_op(
@@ -884,8 +881,8 @@ impl UserStateChange {
         new_pc: ByteAddress,
         reg: IRegister,
         val: DataWord,
-    ) -> UserOnly {
-        UserStateChange::new_user_only(
+    ) -> UserDiff {
+        UserDiff::new(
             state,
             new_pc,
             Some(RegDiff {
@@ -899,14 +896,14 @@ impl UserStateChange {
         )
     }
 
-    pub fn reg_write_pc_p4(state: &UserProgState, reg: IRegister, val: DataWord) -> UserOnly {
-        UserStateChange::reg_write_op(state, state.pc.plus_4(), reg, val)
+    pub fn reg_write_pc_p4(state: &UserProgState, reg: IRegister, val: DataWord) -> UserDiff {
+        UserDiff::reg_write_op(state, state.pc.plus_4(), reg, val)
     }
 
     /// Performs a memory write operation.
     /// This may trap to the OS in the event of exceptional events like a page fault.
-    pub fn mem_write_op(state: &UserProgState, addr: WordAddress, val: DataWord) -> UserOnly {
-        UserStateChange::new_pc_p4(
+    pub fn mem_write_op(state: &UserProgState, addr: WordAddress, val: DataWord) -> UserDiff {
+        UserDiff::new_pc_p4(
             state,
             None,
             Some(MemDiff {
