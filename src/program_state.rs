@@ -507,27 +507,27 @@ pub struct ProgramState {
 /// See https://fedora.juszkiewicz.com.pl/syscalls.html
 #[allow(dead_code)]
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum SyscallNumber {
+pub enum Syscall {
     Read = 0,
     Write,
     Open,
     Close,
 }
 
-impl SyscallNumber {
-    const SYSCALL_LIST: [SyscallNumber; 4] = [
-        SyscallNumber::Read,
-        SyscallNumber::Write,
-        SyscallNumber::Open,
-        SyscallNumber::Close,
-    ];
+impl Syscall {
+    const SYSCALL_LIST: [Syscall; 4] =
+        [Syscall::Read, Syscall::Write, Syscall::Open, Syscall::Close];
     /// Returns the syscall identified by number N, or none if no such syscall exists.
-    pub fn get(n: u32) -> Option<SyscallNumber> {
-        if (n as usize) < SyscallNumber::SYSCALL_LIST.len() {
-            Some(SyscallNumber::SYSCALL_LIST[n as usize])
+    pub fn from_number(n: u32) -> Option<Syscall> {
+        if (n as usize) < Syscall::SYSCALL_LIST.len() {
+            Some(Syscall::SYSCALL_LIST[n as usize])
         } else {
             None
         }
+    }
+
+    pub fn to_number(self) -> DataWord {
+        DataWord::from(self as u32)
     }
 }
 
@@ -541,7 +541,7 @@ impl Default for ProgramState {
 /// Per the RISCV calling convention (see http://man7.org/linux/man-pages/man2/syscall.2.html),
 /// the a7 register determines which syscall is being performed, and the arguments are stored
 /// in the argument registers of user space.
-/// See [SyscallNumber] for syscall codes.
+/// See [Syscall] for syscall codes.
 /// TODO put custom types for syscall args
 /// TODO create diffs on privileged state so they're reversible.
 /// TODO put errno on user state (although it's at a thread-local statically known location)
@@ -584,9 +584,9 @@ impl ProgramState {
         let a0 = rf.read(A0);
         let a1 = rf.read(A1);
         let a2 = rf.read(A2);
-        if let Some(nr) = SyscallNumber::get(u32::from(self.user_state.regfile.read(A7))) {
+        if let Some(nr) = Syscall::from_number(u32::from(self.user_state.regfile.read(A7))) {
             match nr {
-                SyscallNumber::Write => self.syscall_write(a0, ByteAddress::from(a1), a2),
+                Syscall::Write => self.syscall_write(a0, ByteAddress::from(a1), a2),
                 _ => self.syscall_unknown(),
             }
         } else {

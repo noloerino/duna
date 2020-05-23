@@ -228,21 +228,22 @@ pub(crate) trait ITypeLoad: IType {
     fn eval(mem: &Memory, addr: ByteAddress) -> DataWord;
 }
 
-// pub trait EnvironInst {
-//     fn new(f12: BitStr32) -> ConcreteInst {
-//         ConcreteInst {
-//             eval: Box::new(|state| Self::eval(state)),
-//             data: ConcreteInstData::I {
-//                 fields: Self::inst_fields(),
-//                 rd: IRegister::ZERO,
-//                 rs1: IRegister::ZERO,
-//                 imm: f12,
-//             },
-//         }
-//     }
-//     fn inst_fields() -> IInstFields;
-//     fn eval(state: &ProgramState) -> UserStateChange;
-// }
+pub trait EnvironInst {
+    fn new() -> ConcreteInst {
+        ConcreteInst {
+            eval: Box::new(|state| UserStateChange::Trap(Self::eval(state))),
+            data: ConcreteInstData::I {
+                fields: Self::inst_fields(),
+                rd: IRegister::ZERO,
+                rs1: IRegister::ZERO,
+                imm: Self::funct12(),
+            },
+        }
+    }
+    fn funct12() -> BitStr32;
+    fn inst_fields() -> IInstFields;
+    fn eval(state: &ProgramState) -> TrapKind;
+}
 
 pub trait SType {
     fn new(rs1: IRegister, rs2: IRegister, imm: DataWord) -> ConcreteInst {

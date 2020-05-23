@@ -178,22 +178,23 @@ impl BType for Bne {
     }
 }
 
-// pub struct Ecall;
-// impl EnvironInst for Ecall {
-//     fn inst_fields() -> IInstFields {
-//         IInstFields {
-//             opcode: SYS_OPCODE,
-//             funct3: f3(0b000),
-//         }
-//     }
+pub struct Ecall;
+impl EnvironInst for Ecall {
+    fn inst_fields() -> IInstFields {
+        IInstFields {
+            opcode: SYS_OPCODE,
+            funct3: f3(0b000),
+        }
+    }
 
-//     fn eval_priv(state: &mut ProgramState) -> UserStateChange;
-//     fn eval_user(state: &UserProgState) -> UserStateChange;
+    fn eval(_state: &ProgramState) -> TrapKind {
+        TrapKind::Ecall
+    }
 
-//     fn eval(state: &ProgramState) -> UserStateChange {
-//         state.dispatch_syscall()
-//     }
-// }
+    fn funct12() -> BitStr32 {
+        BitStr32::new(0, 12)
+    }
+}
 
 pub struct Jal;
 impl JType for Jal {
@@ -453,6 +454,8 @@ mod test {
     }
 
     #[test]
+    /// Tests machine code conversions of instructions.
+    /// These conversions were done by typing the instruction into Venus.
     fn test_to_machine_code() {
         // add s0, s1, s2
         const ADD_HEX: u32 = 0x0124_8433;
@@ -475,6 +478,9 @@ mod test {
             Bne::new(S1, S2, DataWord::from(4)).to_machine_code(),
             BNE_HEX
         );
+        // ecall
+        const ECALL_HEX: u32 = 0x0000_0073;
+        assert_eq!(Ecall::new().to_machine_code(), ECALL_HEX);
         // jal ra, 16
         const JAL_HEX: u32 = 0x0100_00EF;
         assert_eq!(Jal::new(RA, DataWord::from(16)).to_machine_code(), JAL_HEX);
@@ -728,6 +734,23 @@ mod test {
     }
 
     #[test]
+    fn test_ecall() {
+        let mut state = get_init_state();
+        let addr = ByteAddress::from(state.regfile_read(SP));
+        state.memory_set_word(addr.to_word_address(), DataWord::from(0xDEAD_BEEFu32));
+        // Set ecall code
+        state.regfile_set(A7, Syscall::Write.to_number());
+        // We're writing 4 bytes to stdout, which has fd 1
+        state.regfile_set(A0, DataWord::from(1));
+        state.regfile_set(A1, DataWord::from(addr));
+        state.regfile_set(A2, DataWord::from(4));
+        let inst = Ecall::new();
+        state.apply_inst(&inst);
+        // beware of endianness
+        assert_eq!(state.priv_state.stdout, vec![0xEF, 0xBE, 0xAD, 0xDE]);
+    }
+
+    #[test]
     fn test_jal() {
         let mut state = get_init_state();
         let starting_pc_val = 0x10FC_0000;
@@ -890,7 +913,6 @@ mod test {
 
 // pub enum Instruction {
 //     Ebreak,
-//     Ecall,
 //     Ld,
 //     Lwu,
 //     Or,
