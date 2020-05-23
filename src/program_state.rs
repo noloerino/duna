@@ -531,6 +531,12 @@ impl SyscallNumber {
     }
 }
 
+impl Default for ProgramState {
+    fn default() -> Self {
+        ProgramState::new()
+    }
+}
+
 /// Implements functions that require OS privileges to perform, such as reading/writing files.
 /// Per the RISCV calling convention (see http://man7.org/linux/man-pages/man2/syscall.2.html),
 /// the a7 register determines which syscall is being performed, and the arguments are stored
@@ -540,7 +546,39 @@ impl SyscallNumber {
 /// TODO create diffs on privileged state so they're reversible.
 /// TODO put errno on user state (although it's at a thread-local statically known location)
 impl ProgramState {
-    pub fn dispatch_syscall(&self) -> ProgramStateChange {
+    pub fn get_user_pc(&self) -> ByteAddress {
+        self.user_state.pc
+    }
+
+    pub fn set_user_pc(&mut self, addr: ByteAddress) {
+        self.user_state.pc = addr
+    }
+
+    pub fn regfile_read(&self, reg: IRegister) -> DataWord {
+        self.user_state.regfile.read(reg)
+    }
+
+    pub fn regfile_set(&mut self, reg: IRegister, val: DataWord) {
+        self.user_state.regfile.set(reg, val);
+    }
+
+    pub fn memory_get_word(&self, addr: WordAddress) -> DataWord {
+        self.user_state.memory.get_word(addr)
+    }
+
+    pub fn memory_set_word(&mut self, addr: WordAddress, val: DataWord) {
+        self.user_state.memory.set_word(addr, val);
+    }
+
+    pub fn handle_trap(&self, trap_kind: &TrapKind) -> PrivStateChange {
+        use TrapKind::*;
+        match trap_kind {
+            Ecall => self.dispatch_syscall(),
+            _ => unimplemented!(),
+        }
+    }
+
+    pub fn dispatch_syscall(&self) -> PrivStateChange {
         use IRegister::*;
         let rf = &self.user_state.regfile;
         let a0 = rf.read(A0);
@@ -561,31 +599,15 @@ impl ProgramState {
     /// * a0 - file descriptor
     /// * a1 - pointer to the buffer to be written
     /// * a2 - the number of bytes to write
-    fn syscall_write(&self, fd: DataWord, buf: ByteAddress, len: DataWord) -> ProgramStateChange {
-        ProgramStateChange {
-            privileged: PrivStateChange::FileWrite(fd, buf, len),
-            /* TODO
-            Technically, the value of len can't be known until the computation is actually done
-            PrivStateChange should therefore evaluate to a UserStateChange
-            and the two should coexist in an enum.
-            */
-            user: UserStateChange::reg_write_pc_p4(&self.user_state, IRegister::A0, len),
-        }
+    fn syscall_write(&self, fd: DataWord, buf: ByteAddress, len: DataWord) -> PrivStateChange {
+        PrivStateChange::FileWrite { fd, buf, len }
     }
 
     /// Handles an unknown syscall.
-    fn syscall_unknown(&self) -> ProgramStateChange {
+    fn syscall_unknown(&self) -> PrivStateChange {
         panic!("Unknown syscall")
     }
-}
 
-impl Default for ProgramState {
-    fn default() -> Self {
-        ProgramState::new()
-    }
-}
-
-impl ProgramState {
     pub fn new() -> ProgramState {
         ProgramState {
             priv_state: PrivProgState::new(),
@@ -594,25 +616,33 @@ impl ProgramState {
     }
 
     pub fn apply_inst(&mut self, inst: &ConcreteInst) {
-        self.user_state.apply_inst(inst)
-        // self.user_state.apply_diff(&(*inst.eval)(self));
+        self.apply_diff(&(*inst.eval)(self));
     }
 
     /// Performs the described operation.
     /// The privileged operation is applied first, followed by the user operation.
-    pub fn apply_diff(&mut self, diff: &ProgramStateChange) {
-        self.priv_state
-            .apply_diff(&self.user_state, &diff.privileged);
-        self.user_state.apply_diff(&diff.user);
+    pub fn apply_diff(&mut self, diff: &UserStateChange) {
+        match diff {
+            UserStateChange::Trap(trap_kind) => {
+                let priv_diff = &self.handle_trap(trap_kind);
+                let user_diff = self.priv_state.apply_diff(&self.user_state, priv_diff);
+                self.user_state.apply_diff(&user_diff);
+            }
+            UserStateChange::UserOnly(user_diff) => self.user_state.apply_diff(&user_diff),
+        };
     }
 
     /// Reverts the described operation.
     /// Since the privileged diff is applied first during execution, the user diff should
     /// be applied first during a revert.
-    pub fn revert_diff(&mut self, diff: &ProgramStateChange) {
-        self.user_state.revert_diff(&diff.user);
-        self.priv_state
-            .revert_diff(&self.user_state, &diff.privileged);
+    /// TODO figure out how to implement that...
+    pub fn revert_diff(&mut self, diff: &ProgramDiff) {
+        match diff {
+            ProgramDiff::UserOnly(user_only) => self.user_state.revert_diff(user_only),
+            ProgramDiff::PrivOnly(priv_only) => {
+                self.priv_state.revert_diff(&self.user_state, priv_only)
+            }
+        }
     }
 }
 
@@ -634,15 +664,11 @@ impl PrivProgState {
         PrivProgState { stdout: Vec::new() }
     }
 
-    // pub fn apply_inst(&mut self, inst: &PrivStateChange) {
-    //     self.apply_diff(&(*inst.eval)(self));
-    // }
-
-    pub fn apply_diff(&mut self, user_state: &UserProgState, diff: &PrivStateChange) {
+    pub fn apply_diff(&mut self, user_state: &UserProgState, diff: &PrivStateChange) -> UserOnly {
         use PrivStateChange::*;
         match diff {
-            NoChange => {}
-            FileWrite(_fd, buf, len) => {
+            NoChange => UserStateChange::noop(user_state),
+            FileWrite { fd: _, buf, len } => {
                 let memory = &user_state.memory;
                 let count = u32::from(*len);
                 let bytes: Vec<u8> = (0..count)
@@ -655,15 +681,24 @@ impl PrivProgState {
                 // TODO impl for other files
                 print!("{}", String::from_utf8_lossy(&bytes));
                 self.stdout.extend(bytes);
+                UserStateChange::reg_write_pc_p4(user_state, IRegister::A0, *len)
             }
-            _ => unimplemented!(),
+            Exit => unimplemented!(),
         }
     }
 
+    /// Reverts a privileged state change.
+    /// The originally produced UserOnly diff MUST have already been applied.
     pub fn revert_diff(&mut self, _user_state: &UserProgState, diff: &PrivStateChange) {
         use PrivStateChange::*;
         match diff {
             NoChange => {}
+            // TODO delete last len bytes from fd
+            FileWrite {
+                fd: _,
+                buf: _,
+                len: _,
+            } => {}
             _ => unimplemented!(),
         }
     }
@@ -691,43 +726,41 @@ impl UserProgState {
         }
     }
 
-    pub fn apply_inst(&mut self, inst: &ConcreteInst) {
-        self.apply_diff(&(*inst.eval)(self));
-    }
-
-    pub fn apply_diff(&mut self, diff: &UserStateChange) {
-        self.pc = diff.new_pc;
-        match diff.change_type {
-            UserStateChangeType::Reg(reg, WordChange { new_value, .. }) => {
-                self.regfile.set(reg, new_value)
-            }
-            UserStateChangeType::Mem(addr, WordChange { new_value, .. }) => {
-                self.memory.set_word(addr, new_value)
-            }
-            UserStateChangeType::NoRegOrMem => (),
+    pub fn apply_diff(&mut self, diff: &UserOnly) {
+        self.pc = diff.pc.new_pc;
+        if let Some(RegDiff {
+            reg,
+            val: WordChange { new_value, .. },
+        }) = diff.reg
+        {
+            self.regfile.set(reg, new_value);
+        }
+        if let Some(MemDiff {
+            addr,
+            val: WordChange { new_value, .. },
+        }) = diff.mem
+        {
+            self.memory.set_word(addr, new_value);
         }
     }
 
-    pub fn revert_diff(&mut self, diff: &UserStateChange) {
-        self.pc = diff.old_pc;
-        match diff.change_type {
-            UserStateChangeType::Reg(reg, WordChange { old_value, .. }) => {
-                self.regfile.set(reg, old_value)
-            }
-            UserStateChangeType::Mem(addr, WordChange { old_value, .. }) => {
-                self.memory.set_word(addr, old_value)
-            }
-            UserStateChangeType::NoRegOrMem => (),
+    pub fn revert_diff(&mut self, diff: &UserOnly) {
+        self.pc = diff.pc.old_pc;
+        if let Some(RegDiff {
+            reg,
+            val: WordChange { old_value, .. },
+        }) = diff.reg
+        {
+            self.regfile.set(reg, old_value);
+        }
+        if let Some(MemDiff {
+            addr,
+            val: WordChange { old_value, .. },
+        }) = diff.mem
+        {
+            self.memory.set_word(addr, old_value);
         }
     }
-}
-
-/// Encodes a change to an instance of ProgramState that occurred after the execution of
-/// an instruction.
-/// The privileged state change should always be applied before the user state change.
-pub struct ProgramStateChange {
-    privileged: PrivStateChange,
-    user: UserStateChange,
 }
 
 #[derive(Copy, Clone)]
@@ -735,20 +768,18 @@ pub struct ProgramStateChange {
 /// such as a write to a file.
 pub enum PrivStateChange {
     /// Indicates that the program should terminate.
-    /// TODO implement exit codes,
+    /// TODO implement exit codes
     Exit,
     NoChange,
-    // takes FD, buf, and len
-    /// Because a write operation does not modify user memory, we can replay a write just by looking
-    /// at the contents of the provided buffer.
-    FileWrite(DataWord, ByteAddress, DataWord),
-}
-
-#[derive(Copy, Clone)]
-enum UserStateChangeType {
-    NoRegOrMem,
-    Reg(IRegister, WordChange),
-    Mem(WordAddress, WordChange),
+    /// Represents a file write.
+    /// * fd: the file descriptor
+    /// * buf: user pointer to the data written
+    /// * len: the number of bytes written
+    FileWrite {
+        fd: DataWord,
+        buf: ByteAddress,
+        len: DataWord,
+    },
 }
 
 #[derive(Copy, Clone)]
@@ -757,37 +788,91 @@ struct WordChange {
     new_value: DataWord,
 }
 
-/// Encodes a change that occurs within the user space of a program, which entails a write to the
-/// PC and possibly a register or memory operation.
-pub struct UserStateChange {
+/// A change to the program counter.
+struct PcDiff {
     old_pc: ByteAddress,
     new_pc: ByteAddress,
-    change_type: UserStateChangeType,
+}
+
+/// A change to a register.
+struct RegDiff {
+    reg: IRegister,
+    val: WordChange,
+}
+
+/// A change to memory.
+struct MemDiff {
+    addr: WordAddress,
+    val: WordChange,
+}
+
+/// Represents the type of trap being raised from user mode.
+/// See "Machine Cause Register" in the RISCV privileged spec for details.
+pub enum TrapKind {
+    /// Corresponds to an ecall instruction issued from user mode.
+    Ecall,
+    /// TODO
+    PageFault,
+}
+
+/// Encodes a change that occurs within the user space of a program, which entails a write to the
+/// PC and possibly a register or memory operation.
+/// TODO rename to InstResult
+pub enum UserStateChange {
+    Trap(TrapKind),
+    UserOnly(UserOnly),
+}
+
+/// Represents a diff as it is applied to a program.
+pub enum ProgramDiff {
+    PrivOnly(PrivStateChange),
+    UserOnly(UserOnly),
+}
+
+/// Represents a diff that is applied only to the user state of a program.
+pub struct UserOnly {
+    pc: PcDiff,
+    reg: Option<RegDiff>,
+    mem: Option<MemDiff>,
+}
+
+impl UserOnly {
+    fn new(pc: PcDiff, reg: Option<RegDiff>, mem: Option<MemDiff>) -> UserOnly {
+        UserOnly { pc, reg, mem }
+    }
 }
 
 impl UserStateChange {
-    fn new(
+    fn new_user_only(
         state: &UserProgState,
         new_pc: ByteAddress,
-        tgt: UserStateChangeType,
-    ) -> UserStateChange {
-        UserStateChange {
-            old_pc: state.pc,
-            new_pc,
-            change_type: tgt,
-        }
+        reg_change: Option<RegDiff>,
+        mem_change: Option<MemDiff>,
+    ) -> UserOnly {
+        UserOnly::new(
+            PcDiff {
+                old_pc: state.pc,
+                new_pc,
+            },
+            reg_change,
+            mem_change,
+        )
     }
 
-    fn new_pc_p4(state: &UserProgState, tgt: UserStateChangeType) -> UserStateChange {
-        UserStateChange::new(state, state.pc.plus_4(), tgt)
+    fn new_pc_p4(
+        state: &UserProgState,
+        reg_change: Option<RegDiff>,
+        mem_change: Option<MemDiff>,
+    ) -> UserOnly {
+        UserStateChange::new_user_only(state, state.pc.plus_4(), reg_change, mem_change)
     }
 
-    pub fn noop(state: &UserProgState) -> UserStateChange {
-        UserStateChange::new_pc_p4(state, UserStateChangeType::NoRegOrMem)
+    pub fn noop(state: &UserProgState) -> UserOnly {
+        UserStateChange::new_pc_p4(state, None, None)
     }
 
-    pub fn pc_update_op(state: &UserProgState, new_pc: ByteAddress) -> UserStateChange {
-        UserStateChange::new(state, new_pc, UserStateChangeType::NoRegOrMem)
+    pub fn pc_update_op(state: &UserProgState, new_pc: ByteAddress) -> UserOnly {
+        UserStateChange::new_user_only(state, new_pc, None, None)
     }
 
     pub fn reg_write_op(
@@ -795,51 +880,38 @@ impl UserStateChange {
         new_pc: ByteAddress,
         reg: IRegister,
         val: DataWord,
-    ) -> UserStateChange {
-        UserStateChange::new(
+    ) -> UserOnly {
+        UserStateChange::new_user_only(
             state,
             new_pc,
-            UserStateChangeType::Reg(
+            Some(RegDiff {
                 reg,
-                WordChange {
+                val: WordChange {
                     old_value: state.regfile.read(reg),
                     new_value: val,
                 },
-            ),
+            }),
+            None,
         )
     }
 
-    pub fn reg_write_pc_p4(
-        state: &UserProgState,
-        reg: IRegister,
-        val: DataWord,
-    ) -> UserStateChange {
-        UserStateChange::new_pc_p4(
-            state,
-            UserStateChangeType::Reg(
-                reg,
-                WordChange {
-                    old_value: state.regfile.read(reg),
-                    new_value: val,
-                },
-            ),
-        )
+    pub fn reg_write_pc_p4(state: &UserProgState, reg: IRegister, val: DataWord) -> UserOnly {
+        UserStateChange::reg_write_op(state, state.pc.plus_4(), reg, val)
     }
 
-    pub fn mem_write_op(
-        state: &UserProgState,
-        addr: WordAddress,
-        val: DataWord,
-    ) -> UserStateChange {
+    /// Performs a memory write operation.
+    /// This may trap to the OS in the event of exceptional events like a page fault.
+    pub fn mem_write_op(state: &UserProgState, addr: WordAddress, val: DataWord) -> UserOnly {
         UserStateChange::new_pc_p4(
             state,
-            UserStateChangeType::Mem(
+            None,
+            Some(MemDiff {
                 addr,
-                WordChange {
+                val: WordChange {
                     old_value: state.memory.get_word(addr),
                     new_value: val,
                 },
-            ),
+            }),
         )
     }
 }

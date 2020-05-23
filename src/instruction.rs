@@ -26,7 +26,7 @@ pub struct JInstFields {
 }
 
 pub struct ConcreteInst {
-    pub eval: Box<dyn Fn(&UserProgState) -> UserStateChange>,
+    pub eval: Box<dyn Fn(&ProgramState) -> UserStateChange>,
     data: ConcreteInstData,
 }
 
@@ -156,10 +156,13 @@ impl fmt::Debug for ConcreteInst {
 pub trait RType {
     fn new(rd: IRegister, rs1: IRegister, rs2: IRegister) -> ConcreteInst {
         ConcreteInst {
-            eval: Box::new(move |user_state| {
+            eval: Box::new(move |state| {
+                let user_state = &state.user_state;
                 let new_rd_val =
                     Self::eval(user_state.regfile.read(rs1), user_state.regfile.read(rs2));
-                UserStateChange::reg_write_pc_p4(user_state, rd, new_rd_val)
+                UserStateChange::UserOnly(UserStateChange::reg_write_pc_p4(
+                    user_state, rd, new_rd_val,
+                ))
             }),
             data: ConcreteInstData::R {
                 fields: Self::inst_fields(),
@@ -181,7 +184,14 @@ pub trait IType {
         let imm_vec = imm.to_bit_str(12);
         ConcreteInst {
             // closure must contain match, since otherwise the types for arms don't match
-            eval: Box::new(move |user_state| <Self as IType>::eval(user_state, rd, rs1, imm_vec)),
+            eval: Box::new(move |state| {
+                UserStateChange::UserOnly(<Self as IType>::eval(
+                    &state.user_state,
+                    rd,
+                    rs1,
+                    imm_vec,
+                ))
+            }),
             // Box::new(move |user_state| match Self::eval_wrapper() {
             //     Generic(eval) => eval(user_state, rd, rs1, imm_vec),
             //     Arith(eval) => {
@@ -205,8 +215,7 @@ pub trait IType {
         }
     }
     fn inst_fields() -> IInstFields;
-    fn eval(state: &UserProgState, rd: IRegister, rs1: IRegister, imm: BitStr32)
-        -> UserStateChange;
+    fn eval(state: &UserProgState, rd: IRegister, rs1: IRegister, imm: BitStr32) -> UserOnly;
 }
 
 pub(crate) trait ITypeArith: IType {
@@ -239,7 +248,9 @@ pub trait SType {
     fn new(rs1: IRegister, rs2: IRegister, imm: DataWord) -> ConcreteInst {
         let imm_vec = imm.to_bit_str(12);
         ConcreteInst {
-            eval: Box::new(move |state| Self::eval(&state, rs1, rs2, imm_vec)),
+            eval: Box::new(move |state| {
+                UserStateChange::UserOnly(Self::eval(&state.user_state, rs1, rs2, imm_vec))
+            }),
             data: ConcreteInstData::S {
                 fields: Self::inst_fields(),
                 rs1,
@@ -249,26 +260,22 @@ pub trait SType {
         }
     }
     fn inst_fields() -> SInstFields;
-    fn eval(
-        state: &UserProgState,
-        rs1: IRegister,
-        rs2: IRegister,
-        imm: BitStr32,
-    ) -> UserStateChange;
+    fn eval(state: &UserProgState, rs1: IRegister, rs2: IRegister, imm: BitStr32) -> UserOnly;
 }
 
 pub trait BType {
     fn new(rs1: IRegister, rs2: IRegister, imm: DataWord) -> ConcreteInst {
         let imm_vec = imm.to_bit_str(13);
         ConcreteInst {
-            eval: Box::new(move |user_state| {
+            eval: Box::new(move |state| {
+                let user_state = &state.user_state;
                 if Self::eval(user_state.regfile.read(rs1), user_state.regfile.read(rs2)) {
-                    UserStateChange::pc_update_op(
+                    UserStateChange::UserOnly(UserStateChange::pc_update_op(
                         user_state,
                         ByteAddress::from(i32::from(user_state.pc).wrapping_add(imm_vec.as_i32())),
-                    )
+                    ))
                 } else {
-                    UserStateChange::noop(user_state)
+                    UserStateChange::UserOnly(UserStateChange::noop(user_state))
                 }
             }),
             data: ConcreteInstData::B {
@@ -290,7 +297,9 @@ pub trait UType {
     fn new(rd: IRegister, imm: DataWord) -> ConcreteInst {
         let imm_vec = imm.to_bit_str(20);
         ConcreteInst {
-            eval: Box::new(move |user_state| Self::eval(user_state, rd, imm_vec)),
+            eval: Box::new(move |state| {
+                UserStateChange::UserOnly(Self::eval(&state.user_state, rd, imm_vec))
+            }),
             data: ConcreteInstData::U {
                 fields: Self::inst_fields(),
                 rd,
@@ -300,14 +309,16 @@ pub trait UType {
     }
 
     fn inst_fields() -> UInstFields;
-    fn eval(state: &UserProgState, rd: IRegister, imm: BitStr32) -> UserStateChange;
+    fn eval(state: &UserProgState, rd: IRegister, imm: BitStr32) -> UserOnly;
 }
 
 pub trait JType {
     fn new(rd: IRegister, imm: DataWord) -> ConcreteInst {
         let imm_vec = imm.to_bit_str(20);
         ConcreteInst {
-            eval: Box::new(move |user_state| Self::eval(user_state, rd, imm_vec)),
+            eval: Box::new(move |state| {
+                UserStateChange::UserOnly(Self::eval(&state.user_state, rd, imm_vec))
+            }),
             data: ConcreteInstData::J {
                 fields: Self::inst_fields(),
                 rd,
@@ -316,5 +327,5 @@ pub trait JType {
         }
     }
     fn inst_fields() -> JInstFields;
-    fn eval(state: &UserProgState, rd: IRegister, imm: BitStr32) -> UserStateChange;
+    fn eval(state: &UserProgState, rd: IRegister, imm: BitStr32) -> UserOnly;
 }
