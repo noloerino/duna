@@ -1,4 +1,7 @@
-use crate::program_state::*;
+use crate::program_state::datatypes::*;
+use crate::program_state::memory::Memory;
+use crate::program_state::program::{InstResult, ProgramState, TrapKind, UserDiff, UserProgState};
+use crate::program_state::registers::IRegister;
 use std::fmt;
 
 pub struct RInstFields {
