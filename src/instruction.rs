@@ -205,15 +205,16 @@ pub trait IType {
         }
     }
     fn inst_fields() -> IInstFields;
-    fn eval(state: &UserProgState, rd: IRegister, rs1: IRegister, imm: BitStr32) -> UserStateChange;
+    fn eval(state: &UserProgState, rd: IRegister, rs1: IRegister, imm: BitStr32)
+        -> UserStateChange;
 }
 
-pub trait ITypeArith: IType {
+pub(crate) trait ITypeArith: IType {
     fn inst_fields() -> IInstFields;
     fn eval(rs1_val: DataWord, imm: BitStr32) -> DataWord;
 }
 
-pub trait ITypeLoad: IType {
+pub(crate) trait ITypeLoad: IType {
     fn inst_fields() -> IInstFields;
     fn eval(mem: &Memory, addr: ByteAddress) -> DataWord;
 }
@@ -248,7 +249,12 @@ pub trait SType {
         }
     }
     fn inst_fields() -> SInstFields;
-    fn eval(state: &UserProgState, rs1: IRegister, rs2: IRegister, imm: BitStr32) -> UserStateChange;
+    fn eval(
+        state: &UserProgState,
+        rs1: IRegister,
+        rs2: IRegister,
+        imm: BitStr32,
+    ) -> UserStateChange;
 }
 
 pub trait BType {
