@@ -1,12 +1,13 @@
 [package]
-name = "duna"
+name = "duna_macro"
 version = "0.1.0"
 authors = ["noloerino <jhshi07@gmail.com>"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+proc-macro = true
 
 [dependencies]
-lazy_static = "1.4.0"
-clap = "2.33.0"
-duna_macro = { path = "duna_macro"}
+syn = "1.0"
+quote = "1.0"

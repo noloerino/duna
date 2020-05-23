@@ -178,24 +178,24 @@ pub trait RType {
 
 pub trait IType {
     fn new(rd: IRegister, rs1: IRegister, imm: DataWord) -> ConcreteInst {
-        use ITypeEval::*;
         let imm_vec = imm.to_bit_str(12);
         ConcreteInst {
             // closure must contain match, since otherwise the types for arms don't match
-            eval: Box::new(move |user_state| match Self::eval_wrapper() {
-                Generic(eval) => eval(user_state, rd, rs1, imm_vec),
-                Arith(eval) => {
-                    let new_rd_val = eval(user_state.regfile.read(rs1), imm_vec);
-                    StateChange::reg_write_pc_p4(user_state, rd, new_rd_val)
-                }
-                Load(eval) => {
-                    let offs = imm_vec.to_sgn_data_word();
-                    let rs1_val = user_state.regfile.read(rs1);
-                    let addr = DataWord::from(i32::from(rs1_val).wrapping_add(i32::from(offs)));
-                    let new_rd_val = eval(&user_state.memory, ByteAddress::from(addr));
-                    StateChange::reg_write_pc_p4(user_state, rd, new_rd_val)
-                }
-            }),
+            eval: Box::new(move |user_state| <Self as IType>::eval(user_state, rd, rs1, imm_vec)),
+            // Box::new(move |user_state| match Self::eval_wrapper() {
+            //     Generic(eval) => eval(user_state, rd, rs1, imm_vec),
+            //     Arith(eval) => {
+            //         let new_rd_val = eval(user_state.regfile.read(rs1), imm_vec);
+            //         StateChange::reg_write_pc_p4(user_state, rd, new_rd_val)
+            //     }
+            //     Load(eval) => {
+            //         let offs = imm_vec.to_sgn_data_word();
+            //         let rs1_val = user_state.regfile.read(rs1);
+            //         let addr = DataWord::from(i32::from(rs1_val).wrapping_add(i32::from(offs)));
+            //         let new_rd_val = eval(&user_state.memory, ByteAddress::from(addr));
+            //         StateChange::reg_write_pc_p4(user_state, rd, new_rd_val)
+            //     }
+            // }),
             data: ConcreteInstData::I {
                 fields: Self::inst_fields(),
                 rd,
@@ -205,26 +205,16 @@ pub trait IType {
         }
     }
     fn inst_fields() -> IInstFields;
-    // Return a wrapper around the eval function for different types of I-type instructions
-    fn eval_wrapper() -> ITypeEval;
-}
-
-/// Used to make deriving IType easier
-pub enum ITypeEval {
-    Generic(fn(&UserProgState, IRegister, IRegister, BitStr32) -> StateChange),
-    Arith(fn(DataWord, BitStr32) -> DataWord),
-    Load(fn(&Memory, ByteAddress) -> DataWord),
-}
-
-pub trait ITypeGeneric: IType {
     fn eval(state: &UserProgState, rd: IRegister, rs1: IRegister, imm: BitStr32) -> StateChange;
 }
 
 pub trait ITypeArith: IType {
+    fn inst_fields() -> IInstFields;
     fn eval(rs1_val: DataWord, imm: BitStr32) -> DataWord;
 }
 
 pub trait ITypeLoad: IType {
+    fn inst_fields() -> IInstFields;
     fn eval(mem: &Memory, addr: ByteAddress) -> DataWord;
 }
 

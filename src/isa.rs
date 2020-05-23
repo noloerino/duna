@@ -1,5 +1,6 @@
 use crate::instruction::*;
 use crate::program_state::*;
+use duna_macro::*;
 
 fn f3(val: u32) -> BitStr32 {
     BitStr32::new(val, 3)
@@ -31,8 +32,9 @@ impl RType for Add {
     }
 }
 
+#[derive(ITypeArith)]
 pub struct Addi;
-impl IType for Addi {
+impl ITypeArith for Addi {
     fn inst_fields() -> IInstFields {
         IInstFields {
             funct3: f3(0),
@@ -40,11 +42,6 @@ impl IType for Addi {
         }
     }
 
-    fn eval_wrapper() -> ITypeEval {
-        ITypeEval::Arith(Addi::eval)
-    }
-}
-impl ITypeArith for Addi {
     fn eval(rs1_val: DataWord, imm: BitStr32) -> DataWord {
         DataWord::from(i32::from(rs1_val).wrapping_add(imm.as_i32()))
     }
@@ -65,8 +62,9 @@ impl RType for And {
     }
 }
 
+#[derive(ITypeArith)]
 pub struct Andi;
-impl IType for Andi {
+impl ITypeArith for Andi {
     fn inst_fields() -> IInstFields {
         IInstFields {
             funct3: f3(0b111),
@@ -74,11 +72,6 @@ impl IType for Andi {
         }
     }
 
-    fn eval_wrapper() -> ITypeEval {
-        ITypeEval::Arith(Andi::eval)
-    }
-}
-impl ITypeArith for Andi {
     fn eval(rs1_val: DataWord, imm: BitStr32) -> DataWord {
         DataWord::from(i32::from(rs1_val) & imm.as_i32())
     }
@@ -227,11 +220,6 @@ impl IType for Jalr {
         }
     }
 
-    fn eval_wrapper() -> ITypeEval {
-        ITypeEval::Generic(Jalr::eval)
-    }
-}
-impl ITypeGeneric for Jalr {
     fn eval(state: &UserProgState, rd: IRegister, rs1: IRegister, imm: BitStr32) -> StateChange {
         StateChange::reg_write_op(
             state,
@@ -242,8 +230,9 @@ impl ITypeGeneric for Jalr {
     }
 }
 
+#[derive(ITypeLoad)]
 pub struct Lb;
-impl IType for Lb {
+impl ITypeLoad for Lb {
     fn inst_fields() -> IInstFields {
         IInstFields {
             opcode: I_OPCODE_LOAD,
@@ -251,18 +240,14 @@ impl IType for Lb {
         }
     }
 
-    fn eval_wrapper() -> ITypeEval {
-        ITypeEval::Load(Lb::eval)
-    }
-}
-impl ITypeLoad for Lb {
     fn eval(mem: &Memory, addr: ByteAddress) -> DataWord {
         mem.get_byte(addr).sign_extend()
     }
 }
 
+#[derive(ITypeLoad)]
 pub struct Lbu;
-impl IType for Lbu {
+impl ITypeLoad for Lbu {
     fn inst_fields() -> IInstFields {
         IInstFields {
             opcode: I_OPCODE_LOAD,
@@ -270,18 +255,14 @@ impl IType for Lbu {
         }
     }
 
-    fn eval_wrapper() -> ITypeEval {
-        ITypeEval::Load(Lbu::eval)
-    }
-}
-impl ITypeLoad for Lbu {
     fn eval(mem: &Memory, addr: ByteAddress) -> DataWord {
         mem.get_byte(addr).zero_pad()
     }
 }
 
+#[derive(ITypeLoad)]
 pub struct Lh;
-impl IType for Lh {
+impl ITypeLoad for Lh {
     fn inst_fields() -> IInstFields {
         IInstFields {
             opcode: I_OPCODE_LOAD,
@@ -289,11 +270,6 @@ impl IType for Lh {
         }
     }
 
-    fn eval_wrapper() -> ITypeEval {
-        ITypeEval::Load(Lh::eval)
-    }
-}
-impl ITypeLoad for Lh {
     // TODO define alignment behavior
     fn eval(mem: &Memory, addr: ByteAddress) -> DataWord {
         let second_byte_addr = ByteAddress::from(u32::from(addr).wrapping_add(1));
@@ -304,8 +280,9 @@ impl ITypeLoad for Lh {
     }
 }
 
+#[derive(ITypeLoad)]
 pub struct Lhu;
-impl IType for Lhu {
+impl ITypeLoad for Lhu {
     fn inst_fields() -> IInstFields {
         IInstFields {
             opcode: I_OPCODE_LOAD,
@@ -313,11 +290,6 @@ impl IType for Lhu {
         }
     }
 
-    fn eval_wrapper() -> ITypeEval {
-        ITypeEval::Load(Lhu::eval)
-    }
-}
-impl ITypeLoad for Lhu {
     // TODO define alignment behavior
     fn eval(mem: &Memory, addr: ByteAddress) -> DataWord {
         let second_byte_addr = ByteAddress::from(u32::from(addr).wrapping_add(1));
@@ -341,8 +313,9 @@ impl UType for Lui {
     }
 }
 
+#[derive(ITypeLoad)]
 pub struct Lw;
-impl IType for Lw {
+impl ITypeLoad for Lw {
     fn inst_fields() -> IInstFields {
         IInstFields {
             opcode: I_OPCODE_LOAD,
@@ -350,11 +323,6 @@ impl IType for Lw {
         }
     }
 
-    fn eval_wrapper() -> ITypeEval {
-        ITypeEval::Load(Lw::eval)
-    }
-}
-impl ITypeLoad for Lw {
     // TODO define alignment behavior
     fn eval(mem: &Memory, addr: ByteAddress) -> DataWord {
         mem.get_word(addr.to_word_address())
