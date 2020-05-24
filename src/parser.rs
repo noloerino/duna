@@ -22,55 +22,50 @@ pub struct ParseError {
 }
 
 impl ParseError {
-    pub fn new(location: Location, msg: String, contents: String) -> Self {
+    pub fn new(location: Location, msg: &str, contents: &str) -> Self {
         ParseError {
             location,
-            data: ParseErrorData { msg, contents },
+            data: ParseErrorData {
+                msg: msg.to_string(),
+                contents: contents.to_string(),
+            },
         }
     }
 
-    fn bad_head(location: Location, contents: String) -> Self {
+    fn bad_head(location: Location, contents: &str) -> Self {
         ParseError::new(
             location,
-            "Expected label, section, or instruction".to_string(),
+            "Expected label, section, or instruction",
             contents,
         )
     }
 
-    fn bad_arg(location: Location, contents: String) -> Self {
+    fn bad_arg(location: Location, contents: &str) -> Self {
+        ParseError::new(location, "Expected register name or immediate", contents)
+    }
+
+    fn bad_reg(location: Location, reg_name: &str) -> Self {
+        ParseError::new(location, "Expected register name", reg_name)
+    }
+
+    fn not_enough_args(location: Location, inst_name: &str) -> Self {
         ParseError::new(
             location,
-            "Expected register name or immediate".to_string(),
-            contents,
+            "Not enough arguments",
+            &format!("while parsing instruction {}", inst_name),
         )
     }
 
-    fn bad_reg(location: Location, reg_name: String) -> Self {
-        ParseError::new(location, "Expected register name".to_string(), reg_name)
+    fn imm_too_big(location: Location, imm_str: &str) -> Self {
+        ParseError::new(location, "Immediate too large", imm_str)
     }
 
-    fn not_enough_args(location: Location, inst_name: String) -> Self {
-        ParseError::new(
-            location,
-            "Not enough arguments".to_string(),
-            format!("while parsing instruction {}", inst_name),
-        )
+    fn unexpected(location: Location, contents: &str) -> Self {
+        ParseError::new(location, "Unexpected token", contents)
     }
 
-    fn imm_too_big(location: Location, imm_str: String) -> Self {
-        ParseError::new(location, "Immediate too large".to_string(), imm_str)
-    }
-
-    fn unexpected(location: Location, contents: String) -> Self {
-        ParseError::new(location, "Unexpected token".to_string(), contents)
-    }
-
-    fn unclosed_paren(location: Location, contents: String) -> Self {
-        ParseError::new(
-            location,
-            "Expected closing parentheses".to_string(),
-            contents,
-        )
+    fn unclosed_paren(location: Location, contents: &str) -> Self {
+        ParseError::new(location, "Expected closing parentheses", contents)
     }
 }
 
@@ -224,14 +219,6 @@ impl RiscVParser {
     }
 }
 
-/// Returns the first error found in lst, or none if there are no such errors.
-fn find_first_err<T, E>(lst: Vec<Result<T, E>>) -> Option<E> {
-    lst.into_iter().find_map(|r| match r {
-        Err(e) => Some(e),
-        _ => None,
-    })
-}
-
 /// Contains arguments for a memory operation (load or store).
 /// The registers correspond to the order in which they appear: for stores, RS2 precedes RS1;
 /// for loads, RD preceds RS1.
@@ -254,7 +241,7 @@ impl LineParser<'_> {
     fn check_no_more_args(
         &mut self,
         head_loc: Location,
-        head_name: String,
+        head_name: &str,
     ) -> Result<(), ParseError> {
         let next = self.iter.next();
         if let Some(tok) = next {
@@ -263,7 +250,7 @@ impl LineParser<'_> {
             } else {
                 Err(ParseError::unexpected(
                     head_loc,
-                    format!(
+                    &format!(
                         "{:?} (too many arguments for instruction {})",
                         tok, head_name
                     ),
@@ -281,7 +268,7 @@ impl LineParser<'_> {
     fn consume_commasep_args(
         &mut self,
         head_loc: Location,
-        head_name: String,
+        head_name: &str,
         n: usize,
     ) -> Result<Vec<Token>, ParseError> {
         use TokenType::*;
@@ -306,7 +293,10 @@ impl LineParser<'_> {
                                 Ok(args)
                             })
                     }
-                    _ => Err(ParseError::bad_arg(tok.location, format!("{:?}", tok.data))),
+                    _ => Err(ParseError::bad_arg(
+                        tok.location,
+                        &format!("{:?}", tok.data),
+                    )),
                 },
                 None => Err(ParseError::not_enough_args(head_loc, head_name)),
             }
@@ -319,7 +309,7 @@ impl LineParser<'_> {
     fn consume_mem_args(
         &mut self,
         head_loc: Location,
-        head_name: String,
+        head_name: &str,
     ) -> Result<MemArgs, ParseError> {
         // first consumed token must be register name
         let first_tok = self.try_next_tok(head_loc, &head_name)?;
@@ -349,7 +339,7 @@ impl LineParser<'_> {
             } else {
                 return Err(ParseError::unclosed_paren(
                     maybe_rparen.location,
-                    format!("{:?}", maybe_rparen.data),
+                    &format!("{:?}", maybe_rparen.data),
                 ));
             }
         }
@@ -367,7 +357,7 @@ impl LineParser<'_> {
         if let Some(tok) = self.iter.next() {
             Ok(tok)
         } else {
-            Err(ParseError::not_enough_args(head_loc, inst_name.to_string()))
+            Err(ParseError::not_enough_args(head_loc, inst_name))
         }
     }
 
@@ -376,7 +366,7 @@ impl LineParser<'_> {
         if let Some(tok) = self.iter.peek() {
             Ok(tok)
         } else {
-            Err(ParseError::not_enough_args(head_loc, inst_name.to_string()))
+            Err(ParseError::not_enough_args(head_loc, inst_name))
         }
     }
 
@@ -387,10 +377,10 @@ impl LineParser<'_> {
                 .reg_expansion_table
                 .get(name)
                 .cloned()
-                .ok_or_else(|| ParseError::bad_reg(token.location, name.to_string())),
+                .ok_or_else(|| ParseError::bad_reg(token.location, name)),
             _ => Err(ParseError::unexpected(
                 token.location,
-                format!("Expected register name, found {:?}", token.data),
+                &format!("Expected register name, found {:?}", token.data),
             )),
         }
     }
@@ -416,145 +406,157 @@ impl LineParser<'_> {
                 };
                 let mask_result = *val & mask;
                 if mask_result != 0 && mask_result != mask {
-                    Err(ParseError::imm_too_big(token.location, radix.format(*val)))
+                    Err(ParseError::imm_too_big(token.location, &radix.format(*val)))
                 } else {
                     Ok(DataWord::from(*val))
                 }
             }
             _ => Err(ParseError::unexpected(
                 token.location,
-                format!("Expected immediate, found {:?}", token.data),
+                &format!("Expected immediate, found {:?}", token.data),
             )),
+        }
+    }
+
+    /// Expands a real instruction.
+    fn try_expand_real_inst(
+        &mut self,
+        head_loc: Location,
+        name: &str,
+        parse_type: &ParseType,
+    ) -> Result<ConcreteInst, ParseError> {
+        use ParseType::*;
+        match parse_type {
+            R(inst_new) => {
+                // R-types are always "inst rd, rs1, rs2" with one or no commas in between
+                let args = self.consume_commasep_args(head_loc, name, 3)?;
+                debug_assert!(args.len() == 3);
+                let rd = self.try_parse_reg(&args[0])?;
+                let rs1 = self.try_parse_reg(&args[1])?;
+                let rs2 = self.try_parse_reg(&args[2])?;
+                Ok(inst_new(rd, rs1, rs2))
+            }
+            Arith(inst_new) => {
+                let args = self.consume_commasep_args(head_loc, name, 3)?;
+                debug_assert!(args.len() == 3);
+                let rd = self.try_parse_reg(&args[0])?;
+                let rs1 = self.try_parse_reg(&args[1])?;
+                let imm = self.try_parse_imm(12, &args[2])?;
+                Ok(inst_new(rd, rs1, imm))
+            }
+            Env(inst_new) => {
+                let args = self.consume_commasep_args(head_loc, name, 0)?;
+                debug_assert!(args.is_empty());
+                Ok(inst_new())
+            }
+            MemL(inst_new) => {
+                let args = self.consume_mem_args(head_loc, name)?;
+                let rd = args.first_reg;
+                let rs1 = args.second_reg;
+                let imm = args.imm;
+                Ok(inst_new(rd, rs1, imm))
+            }
+            MemS(inst_new) => {
+                let args = self.consume_mem_args(head_loc, name)?;
+                let rs2 = args.first_reg;
+                let rs1 = args.second_reg;
+                let imm = args.imm;
+                Ok(inst_new(rs1, rs2, imm))
+            }
+            B(inst_new) => {
+                let args = self.consume_commasep_args(head_loc, name, 3)?;
+                debug_assert!(args.len() == 3);
+                let rs1 = self.try_parse_reg(&args[0])?;
+                let rs2 = self.try_parse_reg(&args[1])?;
+                // Becuse branches actually chop off the LSB, we can take up to 13b
+                let imm = self.try_parse_imm(13, &args[2])?;
+                if u32::from(imm) & 1 > 0 {
+                    Err(ParseError::new(
+                        head_loc,
+                        "Branch immediates must be multiples of two",
+                        &imm.to_string(),
+                    ))
+                } else {
+                    // LSB chopping is handled by instruction
+                    Ok(inst_new(rs1, rs2, imm))
+                }
+            }
+            // TODO jal and jalr must be parsed differently
+            // because they can also be used as pseudo-instructions
+            Jal(inst_new) => {
+                let args = self.consume_commasep_args(head_loc, name, 2)?;
+                debug_assert!(args.len() == 2);
+                let rd = self.try_parse_reg(&args[0])?;
+                let imm = self.try_parse_imm(20, &args[1])?;
+                Ok(inst_new(rd, imm))
+            }
+            // Jalr => ,
+            U(inst_new) => {
+                let args = self.consume_commasep_args(head_loc, name, 2)?;
+                debug_assert!(args.len() == 2);
+                let rd = self.try_parse_reg(&args[0])?;
+                let imm = self.try_parse_imm(20, &args[1])?;
+                Ok(inst_new(rd, imm))
+            }
+        }
+    }
+
+    fn try_expand_pseudo_inst(
+        &mut self,
+        head_loc: Location,
+        name: &str,
+        parse_type: &PseudoParseType,
+    ) -> Result<Vec<ConcreteInst>, ParseError> {
+        use PseudoParseType::*;
+        match parse_type {
+            RegImm(inst_expand) => {
+                let args = self.consume_commasep_args(head_loc, name, 2)?;
+                debug_assert!(args.len() == 2);
+                let rd = self.try_parse_reg(&args[0])?;
+                let imm = self.try_parse_imm(32, &args[1])?;
+                Ok(inst_expand(rd, imm))
+            }
+            NoArgs(inst_expand) => {
+                let args = self.consume_commasep_args(head_loc, name, 0)?;
+                debug_assert!(args.is_empty());
+                Ok(inst_expand())
+            }
+            RegReg(inst_expand) => {
+                let args = self.consume_commasep_args(head_loc, name, 2)?;
+                debug_assert!(args.len() == 2);
+                let rd = self.try_parse_reg(&args[0])?;
+                let rs = self.try_parse_reg(&args[1])?;
+                Ok(inst_expand(rd, rs))
+            }
+            OneImm(inst_expand) => {
+                let args = self.consume_commasep_args(head_loc, name, 1)?;
+                debug_assert!(args.len() == 1);
+                // j expands to J-type, so 20-bit immediate
+                let imm = self.try_parse_imm(20, &args[0])?;
+                Ok(inst_expand(imm))
+            }
+            OneReg(inst_expand) => {
+                let args = self.consume_commasep_args(head_loc, name, 1)?;
+                debug_assert!(args.len() == 1);
+                let rs = self.try_parse_reg(&args[0])?;
+                Ok(inst_expand(rs))
+            }
         }
     }
 
     fn try_expand_inst(
         &mut self,
         head_loc: Location,
-        name: String,
+        name: &str,
     ) -> Result<Vec<ConcreteInst>, ParseError> {
-        use ParseType::*;
-        use PseudoParseType::*;
-        if let Some(parse_type) = self.data.inst_expansion_table.get(name.as_str()) {
-            Ok(vec![match parse_type {
-                R(inst_new) => {
-                    // R-types are always "inst rd, rs1, rs2" with one or no commas in between
-                    let args = self.consume_commasep_args(head_loc, name, 3)?;
-                    debug_assert!(args.len() == 3);
-                    let regs: Vec<Result<IRegister, ParseError>> =
-                        args.iter().map(|arg| self.try_parse_reg(arg)).collect();
-                    match regs.as_slice() {
-                        [Ok(rd), Ok(rs1), Ok(rs2)] => Ok(inst_new(*rd, *rs1, *rs2)),
-                        _ => Err(find_first_err(regs).unwrap()),
-                    }
-                }
-                Arith(inst_new) => {
-                    let args = self.consume_commasep_args(head_loc, name, 3)?;
-                    debug_assert!(args.len() == 3);
-                    let rd = self.try_parse_reg(&args[0])?;
-                    let rs1 = self.try_parse_reg(&args[1])?;
-                    let imm = self.try_parse_imm(12, &args[2])?;
-                    Ok(inst_new(rd, rs1, imm))
-                }
-                Env(inst_new) => {
-                    let args = self.consume_commasep_args(head_loc, name, 0)?;
-                    debug_assert!(args.is_empty());
-                    Ok(inst_new())
-                }
-                MemL(inst_new) => {
-                    let args = self.consume_mem_args(head_loc, name)?;
-                    let rd = args.first_reg;
-                    let rs1 = args.second_reg;
-                    let imm = args.imm;
-                    Ok(inst_new(rd, rs1, imm))
-                }
-                MemS(inst_new) => {
-                    let args = self.consume_mem_args(head_loc, name)?;
-                    let rs2 = args.first_reg;
-                    let rs1 = args.second_reg;
-                    let imm = args.imm;
-                    Ok(inst_new(rs1, rs2, imm))
-                }
-                B(inst_new) => {
-                    let args = self.consume_commasep_args(head_loc, name, 3)?;
-                    debug_assert!(args.len() == 3);
-                    let rs1 = self.try_parse_reg(&args[0])?;
-                    let rs2 = self.try_parse_reg(&args[1])?;
-                    // Becuse branches actually chop off the LSB, we can take up to 13b
-                    let imm = self.try_parse_imm(13, &args[2])?;
-                    if u32::from(imm) & 1 > 0 {
-                        Err(ParseError::new(
-                            head_loc,
-                            "Branch immediates must be multiples of two".to_string(),
-                            imm.to_string(),
-                        ))
-                    } else {
-                        // LSB chopping is handled by instruction
-                        Ok(inst_new(rs1, rs2, imm))
-                    }
-                }
-                // TODO jal and jalr must be parsed differently
-                // because they can also be used as pseudo-instructions
-                Jal(inst_new) => {
-                    let args = self.consume_commasep_args(head_loc, name, 2)?;
-                    debug_assert!(args.len() == 2);
-                    let rd = self.try_parse_reg(&args[0])?;
-                    let imm = self.try_parse_imm(20, &args[1])?;
-                    Ok(inst_new(rd, imm))
-                }
-                // Jalr => ,
-                U(inst_new) => {
-                    let args = self.consume_commasep_args(head_loc, name, 2)?;
-                    debug_assert!(args.len() == 2);
-                    let rd = self.try_parse_reg(&args[0])?;
-                    let imm = self.try_parse_imm(20, &args[1])?;
-                    Ok(inst_new(rd, imm))
-                }
-            }?])
-        } else if let Some(parse_type) = self.data.pseudo_expansion_table.get(name.as_str()) {
-            match parse_type {
-                RegImm(inst_expand) => {
-                    let args = self.consume_commasep_args(head_loc, name, 2)?;
-                    debug_assert!(args.len() == 2);
-                    let rd = self.try_parse_reg(&args[0])?;
-                    let imm = self.try_parse_imm(32, &args[1])?;
-                    Ok(inst_expand(rd, imm))
-                }
-                NoArgs(inst_expand) => {
-                    let args = self.consume_commasep_args(head_loc, name, 0)?;
-                    debug_assert!(args.is_empty());
-                    Ok(inst_expand())
-                }
-                RegReg(inst_expand) => {
-                    let args = self.consume_commasep_args(head_loc, name, 2)?;
-                    debug_assert!(args.len() == 2);
-                    let rd = self.try_parse_reg(&args[0])?;
-                    let rs = self.try_parse_reg(&args[1])?;
-                    Ok(inst_expand(rd, rs))
-                }
-                OneImm(inst_expand) => {
-                    let args = self.consume_commasep_args(head_loc, name, 1)?;
-                    debug_assert!(args.len() == 1);
-                    // j expands to J-type, so 20-bit immediate
-                    let imm = self.try_parse_imm(20, &args[0])?;
-                    Ok(inst_expand(imm))
-                }
-                OneReg(inst_expand) => {
-                    let args = self.consume_commasep_args(head_loc, name, 1)?;
-                    debug_assert!(args.len() == 1);
-                    let rs = self.try_parse_reg(&args[0])?;
-                    Ok(inst_expand(rs))
-                }
-
-                // _ => Err(ParseError::unexpected(
-                //     head_loc,
-                //     "unimplemented".to_string(),
-                // )),
-            }
+        if let Some(parse_type) = self.data.inst_expansion_table.get(name) {
+            Ok(vec![self.try_expand_real_inst(head_loc, &name, parse_type)?])
+        } else if let Some(parse_type) = self.data.pseudo_expansion_table.get(name) {
+            self.try_expand_pseudo_inst(head_loc, &name, parse_type)
         } else {
             Err(ParseError::new(
                 head_loc,
-                "No instruction found with name".to_string(),
+                "No instruction found with name",
                 name,
             ))
         }
@@ -572,16 +574,16 @@ impl LineParser<'_> {
         if let Some(head_tok) = self.iter.next() {
             use TokenType::*;
             match head_tok.data {
-                Name(name) => self.try_expand_inst(head_tok.location, name),
+                Name(name) => self.try_expand_inst(head_tok.location, &name),
                 LabelDef(_label_name) => Ok(Vec::new()), // TODO
                 Directive(_section_name) => Ok(Vec::new()), // TODO
                 Comment(..) => Ok(Vec::new()),           // deliberate no-op
-                Comma => Err(ParseError::bad_head(head_tok.location, ",".to_string())),
+                Comma => Err(ParseError::bad_head(head_tok.location, ",")),
                 Immediate(n, style) => {
-                    Err(ParseError::bad_head(head_tok.location, style.format(n)))
+                    Err(ParseError::bad_head(head_tok.location, &style.format(n)))
                 }
-                LParen => Err(ParseError::bad_head(head_tok.location, "(".to_string())),
-                RParen => Err(ParseError::bad_head(head_tok.location, ")".to_string())),
+                LParen => Err(ParseError::bad_head(head_tok.location, "(")),
+                RParen => Err(ParseError::bad_head(head_tok.location, ")")),
             }
         } else {
             Ok(Vec::new())

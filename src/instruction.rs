@@ -163,7 +163,7 @@ pub trait RType {
                 let user_state = &state.user_state;
                 let new_rd_val =
                     Self::eval(user_state.regfile.read(rs1), user_state.regfile.read(rs2));
-                UserDiff::reg_write_pc_p4(user_state, rd, new_rd_val).to_inst_result()
+                UserDiff::reg_write_pc_p4(user_state, rd, new_rd_val).into_inst_result()
             }),
             data: ConcreteInstData::R {
                 fields: Self::inst_fields(),
@@ -279,7 +279,7 @@ pub trait BType {
                 } else {
                     UserDiff::noop(user_state)
                 }
-                .to_inst_result()
+                .into_inst_result()
             }),
             data: ConcreteInstData::B {
                 fields: Self::inst_fields(),

@@ -84,6 +84,10 @@ fn string_from_utf8(cs: Vec<u8>) -> String {
     String::from_utf8(cs).expect("Non-UTF08 token while lexing")
 }
 
+fn string_from_chars(cs: Vec<char>) -> String {
+    cs.into_iter().collect()
+}
+
 fn is_delim(c: char) -> bool {
     c.is_whitespace() || DELIMS.contains(&c)
 }
@@ -169,16 +173,16 @@ impl LineLexer<'_> {
                                 offs: *offs,
                                 ..state.location
                             },
-                            "Cannot parse number literal".to_string(),
-                            string_from_utf8(vec![head as u8, c as u8]),
+                            "Cannot parse number literal",
+                            &string_from_utf8(vec![head as u8, c as u8]),
                         ));
                     }
                 }
                 None => {
                     return Err(ParseError::new(
                         state.location,
-                        "Ran out of characters while parsing number literal".to_string(),
-                        head.to_string(),
+                        "Ran out of characters while parsing number literal",
+                        &head.to_string(),
                     ))
                 }
             }
@@ -205,8 +209,8 @@ impl LineLexer<'_> {
                         if !c.is_ascii_digit() {
                             return Err(ParseError::new(
                                 state.location,
-                                "Error parsing base 10 integer literal".to_string(),
-                                digits.into_iter().collect(),
+                                "Error parsing base 10 integer literal",
+                                &string_from_chars(digits),
                             ));
                         }
                     }
@@ -234,7 +238,7 @@ impl LineLexer<'_> {
                     } else {
                         return Err(ParseError::new(
                             state.location,
-                            format!(
+                            &format!(
                                 "Error parsing {} integer literal",
                                 match fmt {
                                     Bin => "binary",
@@ -242,7 +246,7 @@ impl LineLexer<'_> {
                                     Dec => "decimal",
                                 }
                             ),
-                            digits.into_iter().collect(),
+                            &string_from_chars(digits),
                         ));
                     }
                 }
@@ -256,8 +260,8 @@ impl LineLexer<'_> {
         } else {
             Err(ParseError::new(
                 state.location,
-                format!("Malformed base {} immediate", fmt.radix()),
-                digit_str,
+                &format!("Malformed base {} immediate", fmt.radix()),
+                &digit_str,
             ))
         }
     }

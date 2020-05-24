@@ -422,7 +422,7 @@ pub struct UserDiff {
 }
 
 impl UserDiff {
-    pub fn to_inst_result(self) -> InstResult {
+    pub fn into_inst_result(self) -> InstResult {
         InstResult::UserStateChange(self)
     }
 
