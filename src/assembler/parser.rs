@@ -200,11 +200,23 @@ impl RiscVParser {
         let mut errs = Vec::<ParseError>::new();
         let mut last_label: Option<Label> = None;
         for line in self.lines {
-            let (next_label, parse_result) =
-                LineParser::new(&self.parser_data, line, last_label).parse();
-            last_label = next_label;
+            let (found_label, parse_result) =
+                LineParser::new(&self.parser_data, line, &last_label).parse();
             match parse_result {
-                Ok(new_insts) => insts.extend(new_insts),
+                Ok(mut new_insts) => {
+                    // if insts is not empty, then that means the label was already used
+                    last_label = if new_insts.is_empty() {
+                        found_label
+                    } else {
+                        // stick label onto first inst
+                        if let Some(new_label) = found_label {
+                            let head_inst = new_insts.remove(0).with_label(new_label);
+                            new_insts.insert(0, head_inst);
+                        }
+                        None
+                    };
+                    insts.extend(new_insts);
+                }
                 Err(new_err) => errs.push(new_err),
             }
         }
@@ -578,18 +590,33 @@ impl LineParser<'_> {
     }
 
     /// Creates a LineParser, with a label possibly inherited from the previous line.
-    fn new(data: &ParserData, tokens: TokenStream, maybe_label: Option<Label>) -> LineParser {
+    fn new<'a>(
+        data: &'a ParserData,
+        tokens: TokenStream,
+        maybe_label: &'a Option<Label>,
+    ) -> LineParser<'a> {
         let mut iter = tokens.into_iter().peekable();
+        let label_passed_in = maybe_label.is_some();
         // Check the first token for a label
-        let this_label = maybe_label.or(if let Some(first_tok) = iter.peek() {
-            if let TokenType::LabelDef(label_name) = &first_tok.data {
-                Some(label_name.to_string())
-            } else {
-                None
+        let this_label = match maybe_label {
+            Some(l) => Some(l.clone()),
+            None => {
+                if let Some(first_tok) = iter.peek() {
+                    if let TokenType::LabelDef(label_name) = &first_tok.data {
+                        Some(label_name.to_string())
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
             }
-        } else {
-            None
-        });
+        };
+        // should consume token
+        // can't put this in the above if stmt due to lifetime rules
+        if this_label.is_some() && !label_passed_in {
+            iter.next();
+        }
         LineParser {
             data,
             iter,
@@ -606,9 +633,10 @@ impl LineParser<'_> {
                     Name(name) => self.try_expand_inst(head_tok.location, &name),
                     // first label def is handled by contructor
                     // TODO handle multiple labels on same line
-                    LabelDef(_) => Err(ParseError::bad_head(
+                    LabelDef(label_name) => Err(ParseError::new(
                         head_tok.location,
                         "Multiple labels on the same line is unimplemented",
+                        &label_name,
                     )),
                     Directive(_section_name) => Ok(Vec::new()), // TODO
                     Comment(..) => Ok(Vec::new()),              // deliberate no-op
@@ -642,13 +670,42 @@ mod tests {
 
     /// Parses and lexes the provided string, assuming that there are no errors in either phase.
     /// Assumes that there were no lex errors.
-    fn parse_and_lex(prog: &str) -> Vec<ConcreteInst> {
+    fn parse_and_lex(prog: &str) -> Vec<PartialInst> {
         let (insts, errs) = RiscVParser::from_tokens(lex(prog)).parse();
+        println!("{:?}", errs);
         assert!(errs.is_empty());
         insts
+    }
+
+    /// Parses and lexes a string assuming it contains instructions that don't need expanding.
+    fn parse_and_lex_concr(prog: &str) -> Vec<ConcreteInst> {
+        parse_and_lex(prog)
             .into_iter()
             .map(|inst| inst.try_into_concrete_inst())
             .collect()
+    }
+
+    #[test]
+    /// Tests parsing of a label in the middle and a label at the end.
+    fn test_label_defs() {
+        let insts = parse_and_lex("add a0, sp, fp\nl1: addi sp, sp, -4\naddi sp, sp, 4\nl2:");
+        let expected_concrete = [
+            Add::new(A0, SP, FP),
+            Addi::new(SP, SP, DataWord::from(-4)),
+            Addi::new(SP, SP, DataWord::from(4)),
+        ];
+        assert_eq!(insts.len(), 3);
+        assert_eq!(insts[0].label, None);
+        assert_eq!(insts[1].label, Some("l1".to_string()));
+        assert_eq!(insts[2].label, None);
+        // TODO handle label at end
+        // assert_eq!(insts[3].label, Some("l2".to_string()));
+        for (partial_inst, exp_inst) in insts.into_iter().zip(expected_concrete.iter()) {
+            assert_eq!(
+                partial_inst.try_into_concrete_inst().to_machine_code(),
+                exp_inst.to_machine_code()
+            );
+        }
     }
 
     #[test]
@@ -667,7 +724,7 @@ mod tests {
 
     #[test]
     fn test_r_type_parse() {
-        let insts = parse_and_lex("add x5, sp, fp");
+        let insts = parse_and_lex_concr("add x5, sp, fp");
         assert_eq!(insts.len(), 1);
         assert_eq!(insts[0], Add::new(IRegister::from(5), SP, FP));
     }
@@ -675,14 +732,14 @@ mod tests {
     #[test]
     fn test_i_arith_parse() {
         // lack of commas is deliberate
-        let insts = parse_and_lex("addi sp sp -4");
+        let insts = parse_and_lex_concr("addi sp sp -4");
         assert_eq!(insts.len(), 1);
         assert_eq!(insts[0], Addi::new(SP, SP, DataWord::from(-4)));
     }
 
     #[test]
     fn test_lui_parse() {
-        let insts = parse_and_lex("lui a0, 0xD_EADC");
+        let insts = parse_and_lex_concr("lui a0, 0xD_EADC");
         assert_eq!(insts.len(), 1);
         assert_eq!(insts[0], Lui::new(A0, DataWord::from(0xD_EADC)));
     }
@@ -698,7 +755,7 @@ mod tests {
 
     #[test]
     fn test_pseudo_li() {
-        let insts = parse_and_lex("li a0, 0xDEAD_BEEF");
+        let insts = parse_and_lex_concr("li a0, 0xDEAD_BEEF");
         assert_eq!(insts, Li::expand(A0, DataWord::from(0xDEAD_BEEFu32)));
     }
 }

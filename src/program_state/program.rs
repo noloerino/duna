@@ -58,14 +58,14 @@ impl PartialInst {
         }
     }
 
-    /// Attaches a label to this instruction. Returns None if there's already a label.
-    pub fn with_label(self, label: Label) -> Option<PartialInst> {
+    /// Attaches a label to this instruction. Panics if there's already a label.
+    pub fn with_label(self, label: Label) -> PartialInst {
         match self.label {
-            None => Some(PartialInst {
+            None => PartialInst {
                 tpe: self.tpe,
                 label: Some(label),
-            }),
-            Some(_) => None,
+            },
+            Some(_) => panic!("instruction already had label"),
         }
     }
 
