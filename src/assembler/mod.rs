@@ -29,7 +29,12 @@ impl Assembler {
         let mut all_errs = lex_errs;
         all_errs.extend(parse_errs);
         if all_errs.is_empty() {
-            Ok(RiscVProgram::new(insts))
+            Ok(RiscVProgram::new(
+                insts
+                    .into_iter()
+                    .map(|partial_inst| partial_inst.try_into_concrete_inst())
+                    .collect(),
+            ))
         } else {
             Err(all_errs)
         }

@@ -1,6 +1,9 @@
 use crate::program_state::*;
 use std::fmt;
 
+/// Marker trait for all instructions.
+trait RVInst {}
+
 pub struct RInstFields {
     pub funct7: BitStr32,
     pub funct3: BitStr32,

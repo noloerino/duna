@@ -9,4 +9,5 @@ edition = "2018"
 [dependencies]
 lazy_static = "1.4.0"
 clap = "2.33.0"
+either = "1.5.3"
 duna_macro = { path = "duna_macro"}
