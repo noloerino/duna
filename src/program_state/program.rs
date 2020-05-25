@@ -1,6 +1,5 @@
+use crate::assembler::{Assembler, ParseError};
 use crate::instruction::ConcreteInst;
-use crate::lexer::Lexer;
-use crate::parser::{ParseError, RiscVParser};
 use crate::program_state::memory::Memory;
 use crate::program_state::registers::IRegister;
 use crate::program_state::registers::RegFile;
@@ -48,23 +47,11 @@ impl RiscVProgram {
     }
 
     pub fn from_file(path: &str) -> Result<RiscVProgram, Vec<ParseError>> {
-        RiscVProgram::call_parser(Lexer::from_file(path))
+        Assembler::from_file(path).assemble()
     }
 
     pub fn from_string(contents: String) -> Result<RiscVProgram, Vec<ParseError>> {
-        RiscVProgram::call_parser(Lexer::from_string(contents))
-    }
-
-    fn call_parser(lexer: Lexer) -> Result<RiscVProgram, Vec<ParseError>> {
-        let (toks, lex_errs) = lexer.lex();
-        let (insts, parse_errs) = RiscVParser::from_tokens(toks).parse();
-        let mut all_errs = lex_errs;
-        all_errs.extend(parse_errs);
-        if all_errs.is_empty() {
-            Ok(RiscVProgram::new(insts))
-        } else {
-            Err(all_errs)
-        }
+        Assembler::from_string(contents).assemble()
     }
 
     /// Runs the program to completion, returning the value in register a0.

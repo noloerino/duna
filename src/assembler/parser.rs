@@ -1,8 +1,7 @@
+use crate::assembler::lexer::*;
 use crate::instruction::*;
 use crate::isa;
-use crate::lexer::*;
-use crate::program_state::datatypes::DataWord;
-use crate::program_state::registers::IRegister;
+use crate::program_state::{DataWord, IRegister};
 use crate::pseudo_inst::*;
 use std::collections::HashMap;
 use std::fmt;
@@ -594,9 +593,9 @@ impl LineParser<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::assembler::lexer;
     use crate::isa::*;
-    use crate::lexer;
-    use crate::program_state::registers::IRegister::*;
+    use crate::program_state::IRegister::*;
 
     /// Lexes a program. Asserts that the lex has no errors.
     fn lex(prog: &str) -> Vec<TokenStream> {

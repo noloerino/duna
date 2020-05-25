@@ -1,4 +1,4 @@
-use crate::parser::ParseError;
+use crate::assembler::parser::ParseError;
 use std::fmt;
 use std::fs;
 use std::iter::Enumerate;

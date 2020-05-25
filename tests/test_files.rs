@@ -1,4 +1,4 @@
-use duna::program_state::program::RiscVProgram;
+use duna::program_state::RiscVProgram;
 use std::path::Path;
 
 fn program_from_file(filename: &str) -> RiscVProgram {

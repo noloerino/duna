@@ -1,8 +1,7 @@
 use crate::instruction::*;
 use crate::isa::*;
-use crate::program_state::datatypes::*;
-use crate::program_state::registers::IRegister::*;
-use crate::program_state::registers::*;
+use crate::program_state::{BitStr32, DataWord, IRegister};
+use IRegister::*;
 
 /// Represents pseudo-instructions that take no arguments.
 pub trait NoArgs {

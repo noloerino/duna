@@ -1,8 +1,5 @@
 use crate::instruction::*;
-use crate::program_state::datatypes::*;
-use crate::program_state::memory::Memory;
-use crate::program_state::program::{ProgramState, TrapKind, UserDiff, UserProgState};
-use crate::program_state::registers::IRegister;
+use crate::program_state::*;
 use duna_macro::*;
 
 fn f3(val: u32) -> BitStr32 {
@@ -402,9 +399,9 @@ impl SType for Sw {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::program_state::program::Syscall;
-    use crate::program_state::registers::IRegister;
-    use crate::program_state::registers::IRegister::*;
+    use crate::program_state::IRegister;
+    use crate::program_state::Syscall;
+    use IRegister::*;
 
     const RS1_VAL: i32 = 1023;
     const RS2_VAL_POS: i32 = 49;
