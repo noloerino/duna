@@ -8,7 +8,7 @@ sw t1, 0(sp)
 sw t2, 4(sp)
 sw t3, 8(sp)
 # Set up syscall
-li a7, 1
+li a7, 64
 li a0, 1
 mv a1, sp
 li a2, 9

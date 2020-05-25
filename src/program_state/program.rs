@@ -4,6 +4,7 @@ use crate::parser::{ParseError, RiscVParser};
 use crate::program_state::memory::Memory;
 use crate::program_state::registers::IRegister;
 use crate::program_state::registers::RegFile;
+use std::collections::HashMap;
 
 use crate::program_state::datatypes::*;
 
@@ -143,7 +144,7 @@ impl ProgramState {
         let a0 = rf.read(A0);
         let a1 = rf.read(A1);
         let a2 = rf.read(A2);
-        if let Some(nr) = Syscall::from_number(u32::from(self.user_state.regfile.read(A7))) {
+        if let Some(nr) = Syscall::from_number(i32::from(self.user_state.regfile.read(A7))) {
             match nr {
                 Syscall::Write => self.syscall_write(a0, ByteAddress::from(a1), a2),
                 _ => self.syscall_unknown(),
@@ -204,31 +205,46 @@ impl ProgramState {
         }
     }
 }
-/// Syscall numbers for x86_64.
-/// See https://fedora.juszkiewicz.com.pl/syscalls.html
-#[allow(dead_code)]
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub enum Syscall {
-    Read = 0,
+    Read,
     Write,
     Open,
     Close,
 }
 
+lazy_static! {
+    /// Syscall numbers for RV32.
+    /// See https://github.com/hrw/syscalls-table/blob/master/tables/syscalls-riscv32.
+    /// See https://fedora.juszkiewicz.com.pl/syscalls.html for other ISAs
+    static ref RISCV_SYSCALL_TABLE: HashMap<i32, Syscall> = {
+        use Syscall::*;
+        [
+            (63, Read),
+            (64, Write),
+            (53, Open),
+            (57, Close)
+        ]
+        .iter()
+        .cloned()
+        .collect()
+    };
+    static ref RISCV_SYSCALL_NUMBERS: HashMap<Syscall, i32> =
+        RISCV_SYSCALL_TABLE
+        .iter()
+        .map(|(n, syscall)| {(*syscall, *n)})
+        .collect();
+}
+
 impl Syscall {
-    const SYSCALL_LIST: [Syscall; 4] =
-        [Syscall::Read, Syscall::Write, Syscall::Open, Syscall::Close];
     /// Returns the syscall identified by number N, or none if no such syscall exists.
-    pub fn from_number(n: u32) -> Option<Syscall> {
-        if (n as usize) < Syscall::SYSCALL_LIST.len() {
-            Some(Syscall::SYSCALL_LIST[n as usize])
-        } else {
-            None
-        }
+    pub fn from_number(n: i32) -> Option<Syscall> {
+        RISCV_SYSCALL_TABLE.get(&n).cloned()
     }
 
+    /// Returns the number corresponding to the syscall, or -1 if it is unimplemented.
     pub fn to_number(self) -> DataWord {
-        DataWord::from(self as u32)
+        DataWord::from(RISCV_SYSCALL_NUMBERS.get(&self).copied().unwrap_or(-1))
     }
 }
 
