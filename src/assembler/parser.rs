@@ -80,6 +80,7 @@ impl fmt::Display for ParseError {
 
 #[derive(Clone)]
 enum ParseType {
+    // Base ISA
     R(fn(IRegister, IRegister, IRegister) -> ConcreteInst),
     Arith(fn(IRegister, IRegister, DataWord) -> ConcreteInst),
     Env(fn() -> ConcreteInst),
@@ -87,12 +88,8 @@ enum ParseType {
     MemS(fn(IRegister, IRegister, DataWord) -> ConcreteInst),
     B(fn(IRegister, IRegister, DataWord) -> ConcreteInst),
     Jal(fn(IRegister, DataWord) -> ConcreteInst),
-    // Jalr,
     U(fn(IRegister, DataWord) -> ConcreteInst),
-}
-
-#[derive(Clone)]
-enum PseudoParseType {
+    // Pseudo-instructions
     RegImm(fn(IRegister, DataWord) -> Vec<ConcreteInst>),
     RegReg(fn(IRegister, IRegister) -> Vec<ConcreteInst>),
     NoArgs(fn() -> Vec<ConcreteInst>),
@@ -102,7 +99,6 @@ enum PseudoParseType {
 
 struct ParserData {
     inst_expansion_table: &'static HashMap<String, ParseType>,
-    pseudo_expansion_table: &'static HashMap<String, PseudoParseType>,
     reg_expansion_table: &'static HashMap<String, IRegister>,
 }
 
@@ -158,15 +154,6 @@ lazy_static! {
             ("sw", MemS(Sw::new)),
             // ("xor", R),
             // ("xori", Arith),
-        ]
-        .iter()
-        .cloned()
-        .map(|(s, t)| (s.to_string(), t))
-        .collect()
-    };
-    static ref PSEUDO_EXPANSION_TABLE: HashMap<String, PseudoParseType> = {
-        use PseudoParseType::*;
-        [
             ("li", RegImm(Li::expand)),
             ("mv", RegReg(Mv::expand)),
             ("nop", NoArgs(Nop::expand)),
@@ -198,7 +185,6 @@ impl RiscVParser {
         RiscVParser {
             parser_data: ParserData {
                 inst_expansion_table: &INST_EXPANSION_TABLE,
-                pseudo_expansion_table: &PSEUDO_EXPANSION_TABLE,
                 reg_expansion_table: &REG_EXPANSION_TABLE,
             },
             lines,
@@ -225,6 +211,11 @@ struct MemArgs {
     first_reg: IRegister,
     second_reg: IRegister,
     imm: DataWord,
+}
+
+/// Convenience method to stuff a ConcreteInst into Ok(vec![...])
+fn ok_vec(inst: ConcreteInst) -> Result<Vec<ConcreteInst>, ParseError> {
+    Ok(vec![inst])
 }
 
 struct LineParser<'a> {
@@ -417,13 +408,13 @@ impl LineParser<'_> {
         }
     }
 
-    /// Expands a real instruction.
-    fn try_expand_real_inst(
+    /// Expands an instruction that is known to be in the expansion table.
+    fn try_expand_found_inst(
         &mut self,
         head_loc: Location,
         name: &str,
         parse_type: &ParseType,
-    ) -> Result<ConcreteInst, ParseError> {
+    ) -> Result<Vec<ConcreteInst>, ParseError> {
         use ParseType::*;
         match parse_type {
             R(inst_new) => {
@@ -433,7 +424,7 @@ impl LineParser<'_> {
                 let rd = self.try_parse_reg(&args[0])?;
                 let rs1 = self.try_parse_reg(&args[1])?;
                 let rs2 = self.try_parse_reg(&args[2])?;
-                Ok(inst_new(rd, rs1, rs2))
+                ok_vec(inst_new(rd, rs1, rs2))
             }
             Arith(inst_new) => {
                 let args = self.consume_commasep_args(head_loc, name, 3)?;
@@ -441,26 +432,26 @@ impl LineParser<'_> {
                 let rd = self.try_parse_reg(&args[0])?;
                 let rs1 = self.try_parse_reg(&args[1])?;
                 let imm = self.try_parse_imm(12, &args[2])?;
-                Ok(inst_new(rd, rs1, imm))
+                ok_vec(inst_new(rd, rs1, imm))
             }
             Env(inst_new) => {
                 let args = self.consume_commasep_args(head_loc, name, 0)?;
                 debug_assert!(args.is_empty());
-                Ok(inst_new())
+                ok_vec(inst_new())
             }
             MemL(inst_new) => {
                 let args = self.consume_mem_args(head_loc, name)?;
                 let rd = args.first_reg;
                 let rs1 = args.second_reg;
                 let imm = args.imm;
-                Ok(inst_new(rd, rs1, imm))
+                ok_vec(inst_new(rd, rs1, imm))
             }
             MemS(inst_new) => {
                 let args = self.consume_mem_args(head_loc, name)?;
                 let rs2 = args.first_reg;
                 let rs1 = args.second_reg;
                 let imm = args.imm;
-                Ok(inst_new(rs1, rs2, imm))
+                ok_vec(inst_new(rs1, rs2, imm))
             }
             B(inst_new) => {
                 let args = self.consume_commasep_args(head_loc, name, 3)?;
@@ -477,7 +468,7 @@ impl LineParser<'_> {
                     ))
                 } else {
                     // LSB chopping is handled by instruction
-                    Ok(inst_new(rs1, rs2, imm))
+                    ok_vec(inst_new(rs1, rs2, imm))
                 }
             }
             // TODO jal and jalr must be parsed differently
@@ -487,7 +478,7 @@ impl LineParser<'_> {
                 debug_assert!(args.len() == 2);
                 let rd = self.try_parse_reg(&args[0])?;
                 let imm = self.try_parse_imm(20, &args[1])?;
-                Ok(inst_new(rd, imm))
+                ok_vec(inst_new(rd, imm))
             }
             // Jalr => ,
             U(inst_new) => {
@@ -495,19 +486,8 @@ impl LineParser<'_> {
                 debug_assert!(args.len() == 2);
                 let rd = self.try_parse_reg(&args[0])?;
                 let imm = self.try_parse_imm(20, &args[1])?;
-                Ok(inst_new(rd, imm))
+                ok_vec(inst_new(rd, imm))
             }
-        }
-    }
-
-    fn try_expand_pseudo_inst(
-        &mut self,
-        head_loc: Location,
-        name: &str,
-        parse_type: &PseudoParseType,
-    ) -> Result<Vec<ConcreteInst>, ParseError> {
-        use PseudoParseType::*;
-        match parse_type {
             RegImm(inst_expand) => {
                 let args = self.consume_commasep_args(head_loc, name, 2)?;
                 debug_assert!(args.len() == 2);
@@ -549,9 +529,7 @@ impl LineParser<'_> {
         name: &str,
     ) -> Result<Vec<ConcreteInst>, ParseError> {
         if let Some(parse_type) = self.data.inst_expansion_table.get(name) {
-            Ok(vec![self.try_expand_real_inst(head_loc, &name, parse_type)?])
-        } else if let Some(parse_type) = self.data.pseudo_expansion_table.get(name) {
-            self.try_expand_pseudo_inst(head_loc, &name, parse_type)
+            Ok(self.try_expand_found_inst(head_loc, &name, parse_type)?)
         } else {
             Err(ParseError::new(
                 head_loc,
