@@ -69,6 +69,16 @@ impl PartialInst {
         }
     }
 
+    pub fn get_needed_label(&self) -> Option<&Label> {
+        use PartialInstType::*;
+        match &self.tpe {
+            TwoRegNeedsLabel { needed_label, .. } | OneRegNeedsLabel { needed_label, .. } => {
+                Some(&needed_label)
+            }
+            Complete(..) => None,
+        }
+    }
+
     /// Attempts to coerce this partially-completed instruction into a ConcreteInst.
     pub fn try_into_concrete_inst(self) -> ConcreteInst {
         use PartialInstType::*;

@@ -530,8 +530,13 @@ impl LineParser<'_> {
                 let args = self.consume_commasep_args(head_loc, name, 2)?;
                 debug_assert!(args.len() == 2);
                 let rd = self.try_parse_reg(&args[0])?;
-                let imm = self.try_parse_imm(20, &args[1])?;
-                ok_wrap_concr(inst_new(rd, imm))
+                let last_arg = self.try_parse_imm_or_label_ref(20, &args[1])?;
+                match last_arg {
+                    Either::Left(imm) => ok_wrap_concr(inst_new(rd, imm)),
+                    Either::Right(tgt_label) => {
+                        ok_vec(PartialInst::new_one_reg_needs_label(*inst_new, tgt_label))
+                    }
+                }
             }
             // Jalr => ,
             U(inst_new) => {
@@ -706,6 +711,15 @@ mod tests {
                 exp_inst.to_machine_code()
             );
         }
+    }
+
+    #[test]
+    /// Tests the parsing of labels as an argument.
+    fn test_needed_labels() {
+        let insts = parse_and_lex("bne x0, x0, l1\nl1: jal ra, end\nend: nop");
+        assert_eq!(insts.len(), 3);
+        assert_eq!(insts[0].get_needed_label(), Some(&"l1".to_string()));
+        assert_eq!(insts[1].get_needed_label(), Some(&"end".to_string()));
     }
 
     #[test]
