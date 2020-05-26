@@ -1,7 +1,8 @@
-use crate::assembler::lexer::*;
+use super::assembler::{Label, PartialInst};
+use super::lexer::*;
 use crate::instruction::*;
 use crate::isa;
-use crate::program_state::{DataWord, IRegister, Label, PartialInst};
+use crate::program_state::{DataWord, IRegister};
 use crate::pseudo_inst::*;
 use either::Either;
 use std::collections::HashMap;
