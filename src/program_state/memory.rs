@@ -1,4 +1,4 @@
-use crate::program_state::datatypes::*;
+use super::datatypes::*;
 use std::collections::HashMap;
 
 pub struct Memory {

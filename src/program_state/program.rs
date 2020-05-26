@@ -1,8 +1,8 @@
+use super::datatypes::*;
+use super::memory::Memory;
+use super::registers::{IRegister, RegFile};
 use crate::assembler::{Assembler, ParseError};
 use crate::instruction::ConcreteInst;
-use crate::program_state::datatypes::*;
-use crate::program_state::memory::Memory;
-use crate::program_state::registers::{IRegister, RegFile};
 use std::collections::HashMap;
 
 pub struct RiscVProgram {

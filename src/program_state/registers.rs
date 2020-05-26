@@ -1,4 +1,4 @@
-use crate::program_state::datatypes::*;
+use super::datatypes::*;
 use std::fmt;
 
 #[derive(Copy, Clone, PartialEq, Debug)]

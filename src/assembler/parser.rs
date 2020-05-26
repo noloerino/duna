@@ -663,13 +663,12 @@ impl LineParser<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::assembler::lexer;
     use crate::isa::*;
     use crate::program_state::IRegister::*;
 
     /// Lexes a program. Asserts that the lex has no errors.
     fn lex(prog: &str) -> Vec<TokenStream> {
-        let (toks, errs) = lexer::Lexer::from_string(prog.to_string()).lex();
+        let (toks, errs) = Lexer::from_string(prog.to_string()).lex();
         assert!(errs.is_empty());
         toks
     }
