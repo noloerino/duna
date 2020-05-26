@@ -180,6 +180,10 @@ impl BType for Bne {
 
 pub struct Ecall;
 impl EnvironInst for Ecall {
+    fn funct12() -> BitStr32 {
+        BitStr32::new(0, 12)
+    }
+
     fn inst_fields() -> IInstFields {
         IInstFields {
             opcode: SYS_OPCODE,
@@ -189,10 +193,6 @@ impl EnvironInst for Ecall {
 
     fn eval(_state: &ProgramState) -> TrapKind {
         TrapKind::Ecall
-    }
-
-    fn funct12() -> BitStr32 {
-        BitStr32::new(0, 12)
     }
 }
 
