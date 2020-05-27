@@ -107,6 +107,21 @@ struct LineLexer<'a> {
 }
 
 impl LineLexer<'_> {
+    /// Advances the iterator until a delimiter token or end of line is encountered.
+    /// Returns the tokens that were consumed.
+    fn max_munch_on_error(&mut self) -> Vec<char> {
+        let mut cs = Vec::new();
+        let iter = &mut self.iter;
+        while let Some((_, c)) = iter.peek() {
+            if is_delim(*c) {
+                break;
+            }
+            cs.push(*c);
+            iter.next();
+        }
+        cs
+    }
+
     fn build_comment(&mut self) -> Result<TokenType, ParseError> {
         // assume leading # already consumed
         // just consume the rest of the line
@@ -114,7 +129,6 @@ impl LineLexer<'_> {
         for (_, c) in &mut self.iter {
             cs.push(c as u8);
         }
-        // TODO reimplement this using unzip
         Ok(TokenType::Comment(string_from_utf8(cs)))
     }
 
@@ -162,15 +176,17 @@ impl LineLexer<'_> {
             head
         } else {
             match self.iter.peek() {
-                Some((offs, c_ref)) => {
+                Some((offs_ref, c_ref)) => {
                     let c = *c_ref;
+                    let offs = *offs_ref;
                     if c.is_ascii_digit() {
                         self.iter.next();
                         c
                     } else {
+                        self.max_munch_on_error();
                         return Err(ParseError::new(
                             Location {
-                                offs: *offs,
+                                offs,
                                 ..state.location
                             },
                             "Cannot parse number literal",
@@ -179,11 +195,12 @@ impl LineLexer<'_> {
                     }
                 }
                 None => {
+                    self.max_munch_on_error();
                     return Err(ParseError::new(
                         state.location,
                         "Ran out of characters while parsing number literal",
                         &head.to_string(),
-                    ))
+                    ));
                 }
             }
         };
@@ -207,6 +224,7 @@ impl LineLexer<'_> {
                     } else {
                         digits.push(c);
                         if !c.is_ascii_digit() {
+                            self.max_munch_on_error();
                             return Err(ParseError::new(
                                 state.location,
                                 "Error parsing base 10 integer literal",
@@ -236,6 +254,8 @@ impl LineLexer<'_> {
                     } else if DELIMS.contains(&c) {
                         break;
                     } else {
+                        digits.extend(self.max_munch_on_error());
+                        // TODO separators and format specifier are ignored
                         return Err(ParseError::new(
                             state.location,
                             &format!(
@@ -388,5 +408,18 @@ mod tests {
             });
             assert_eq!(result, Ok(TokenType::Immediate(exp, fmt)));
         }
+    }
+
+    #[test]
+    fn test_bad_imm_recovery() {
+        let line = "addi x1 0xggg1, x2";
+        let (lines, errs) = Lexer::from_string(line.to_string()).lex();
+        assert_eq!(errs.len(), 1);
+        assert_eq!(lines.len(), 1);
+        let parsed = &lines[0];
+        assert_eq!(parsed[0].data, TokenType::Name("addi".to_string()));
+        assert_eq!(parsed[1].data, TokenType::Name("x1".to_string()));
+        assert_eq!(parsed[2].data, TokenType::Comma);
+        assert_eq!(parsed[3].data, TokenType::Name("x2".to_string()));
     }
 }

@@ -10,6 +10,8 @@ impl Nop {
     }
 }
 
+// For 64-bit literals, the literal is stored at a known location
+// and li is emmitted as lui + ld
 pub struct Li;
 impl Li {
     pub fn expand(reg: IRegister, data: DataWord) -> Vec<ConcreteInst> {

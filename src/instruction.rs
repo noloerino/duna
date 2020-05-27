@@ -1,9 +1,6 @@
 use crate::program_state::*;
 use std::fmt;
 
-/// Marker trait for all instructions.
-trait RVInst {}
-
 pub struct RInstFields {
     pub funct7: BitStr32,
     pub funct3: BitStr32,
@@ -153,6 +150,26 @@ impl PartialEq<ConcreteInst> for ConcreteInst {
 impl fmt::Debug for ConcreteInst {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:#010X}", self.to_machine_code())
+    }
+}
+
+impl fmt::Display for ConcreteInst {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use ConcreteInstData::*;
+        let data = &self.data;
+        let args = match data {
+            R { rd, rs1, rs2, .. } => format!("{}, {}, {}", rd, rs1, rs2),
+            I { rd, rs1, imm, .. } => format!("{}, {}, {}", rd, rs1, imm.as_i32()),
+            S { rs1, rs2, imm, .. } => format!("{}, {}({})", rs2, imm.as_i32(), rs1),
+            B { rs1, rs2, imm, .. } => format!("{}, {}, {}", rs1, rs2, imm.as_i32()),
+            U { rd, imm, .. } | J { rd, imm, .. } => format!("{}, {}", rd, imm.as_i32()),
+        };
+        write!(
+            f,
+            "<no instruction name> {} | hex {}",
+            args,
+            self.to_machine_code()
+        )
     }
 }
 
