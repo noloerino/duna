@@ -4,6 +4,7 @@ use super::parser::RiscVParser;
 use crate::instruction::ConcreteInst;
 use crate::program_state::{DataWord, IRegister, RiscVProgram};
 use std::collections::HashMap;
+use std::mem;
 
 pub struct Assembler {
     lexer: Lexer,
@@ -37,20 +38,23 @@ impl Assembler {
 
 pub type Label = String;
 
-enum PartialInstType {
+pub(crate) enum PartialInstType {
     Complete(ConcreteInst),
     TwoRegNeedsLabel {
         assemble: fn(IRegister, IRegister, DataWord) -> ConcreteInst,
+        reg1: IRegister,
+        reg2: IRegister,
         needed_label: Label,
     },
     OneRegNeedsLabel {
         assemble: fn(IRegister, DataWord) -> ConcreteInst,
+        reg: IRegister,
         needed_label: Label,
     },
 }
 
 pub struct PartialInst {
-    tpe: PartialInstType,
+    pub(crate) tpe: PartialInstType,
     pub label: Option<Label>,
 }
 
@@ -64,11 +68,15 @@ impl PartialInst {
 
     pub fn new_two_reg_needs_label(
         assemble: fn(IRegister, IRegister, DataWord) -> ConcreteInst,
+        reg1: IRegister,
+        reg2: IRegister,
         needed: Label,
     ) -> PartialInst {
         PartialInst {
             tpe: PartialInstType::TwoRegNeedsLabel {
                 assemble,
+                reg1,
+                reg2,
                 needed_label: needed,
             },
             label: None,
@@ -77,11 +85,13 @@ impl PartialInst {
 
     pub fn new_one_reg_needs_label(
         assemble: fn(IRegister, DataWord) -> ConcreteInst,
+        reg: IRegister,
         needed: Label,
     ) -> PartialInst {
         PartialInst {
             tpe: PartialInstType::OneRegNeedsLabel {
                 assemble,
+                reg,
                 needed_label: needed,
             },
             label: None,
@@ -118,6 +128,26 @@ impl PartialInst {
             panic!("Failed to coerce into concrete instruction")
         }
     }
+
+    /// Attempts to replace the needed label with the provided immediate
+    pub fn fulfill_label(&self, imm: DataWord) -> ConcreteInst {
+        use PartialInstType::*;
+        match &self.tpe {
+            &TwoRegNeedsLabel {
+                assemble,
+                reg1,
+                reg2,
+                ..
+            } => assemble(reg1, reg2, imm),
+            &OneRegNeedsLabel { assemble, reg, .. } => assemble(reg, imm),
+            Complete(..) => panic!("Cannot fulfill label for complete instruction"),
+        }
+    }
+}
+
+/// Replaces index i of the instruction vector with new_inst
+fn replace_inst(insts: &mut Vec<PartialInst>, i: usize, new_inst: PartialInst) {
+    mem::replace(&mut insts[i], new_inst);
 }
 
 /// The parser must perform two passes in order to locate/process labels.
@@ -125,7 +155,7 @@ impl PartialInst {
 pub struct UnlinkedProgram {
     pub insts: Vec<PartialInst>,
     /// Maps labels to the index of the insts that define them
-    pub local_labels: HashMap<Label, usize>,
+    local_labels: HashMap<Label, usize>,
     /// Maps needed labels to the index of the insts that need them
     pub needed_labels: HashMap<Label, usize>,
     // a potential optimization is to store generated labels and needed labels in independent vecs
@@ -133,6 +163,7 @@ pub struct UnlinkedProgram {
 }
 
 impl UnlinkedProgram {
+    /// Constructs an instance of an UnlinkedProgram from an instruction stream.
     pub fn new(insts: Vec<PartialInst>) -> UnlinkedProgram {
         use PartialInstType::*;
         let local_labels = insts
@@ -159,12 +190,45 @@ impl UnlinkedProgram {
         }
     }
 
+    /// Attempts to match needed labels to locally defined labels.
+    /// Theoretically, this is idempotent, i.e. calling it multiple times will just produce the
+    /// same program.
+    pub fn link_self(self) -> UnlinkedProgram {
+        let UnlinkedProgram {
+            mut insts,
+            local_labels,
+            needed_labels,
+        } = self;
+        let mut unresolved_labels = HashMap::new();
+        for (label, inst_index) in needed_labels.into_iter() {
+            match local_labels.get(&label) {
+                Some(&tgt_index) => {
+                    // Figure out how many instructions we need to jump
+                    let inst_distance = (tgt_index as isize) - (inst_index as isize);
+                    let byte_distance: isize = inst_distance * 4;
+                    let new_inst =
+                        insts[inst_index].fulfill_label(DataWord::from(byte_distance as i32));
+                    replace_inst(&mut insts, inst_index, PartialInst::new_complete(new_inst));
+                }
+                None => {
+                    unresolved_labels.insert(label, inst_index);
+                }
+            }
+        }
+        UnlinkedProgram {
+            insts,
+            local_labels,
+            needed_labels: unresolved_labels,
+        }
+    }
+
     /// Attempts to produce an instance of RiscVProgram. Panics if some labels are needed
     /// but not found within the body of this program.
     pub fn try_into_program(self) -> RiscVProgram {
         use PartialInstType::*;
         RiscVProgram::new(
-            self.insts
+            self.link_self()
+                .insts
                 .into_iter()
                 .map(|partial_inst| match partial_inst.tpe {
                     Complete(inst) => inst,
@@ -172,5 +236,40 @@ impl UnlinkedProgram {
                 })
                 .collect(),
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::instruction::BType;
+    use crate::isa::Beq;
+    use crate::program_state::IRegister::ZERO;
+
+    #[test]
+    fn test_forward_local_label() {
+        let program = "beq x0, x0, l1\nnop\nnop\nl1:nop";
+        let unlinked = Assembler::from_string(program.to_string())
+            .assemble()
+            .expect("Assembler errored out");
+        // should automatically attempt to link
+        let concrete = unlinked.try_into_program();
+        println!("{:?}", concrete.insts);
+        assert_eq!(concrete.insts[0], Beq::new(ZERO, ZERO, DataWord::from(12)));
+    }
+
+    #[test]
+    fn test_backward_local_label() {
+        let program = "\nl1:nop\nnop\nnop\nbeq x0, x0, l1";
+        let unlinked = Assembler::from_string(program.to_string())
+            .assemble()
+            .expect("Assembler errored out");
+        // should automatically attempt to link
+        let concrete = unlinked.try_into_program();
+        println!("{:?}", concrete.insts);
+        assert_eq!(
+            concrete.insts.last().unwrap(),
+            &Beq::new(ZERO, ZERO, DataWord::from(-12))
+        );
     }
 }

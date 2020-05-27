@@ -520,9 +520,9 @@ impl LineParser<'_> {
                             ok_wrap_concr(inst_new(rs1, rs2, imm))
                         }
                     }
-                    Either::Right(tgt_label) => {
-                        ok_vec(PartialInst::new_two_reg_needs_label(*inst_new, tgt_label))
-                    }
+                    Either::Right(tgt_label) => ok_vec(PartialInst::new_two_reg_needs_label(
+                        *inst_new, rs1, rs2, tgt_label,
+                    )),
                 }
             }
             // TODO jal and jalr must be parsed differently
@@ -534,9 +534,9 @@ impl LineParser<'_> {
                 let last_arg = self.try_parse_imm_or_label_ref(20, &args[1])?;
                 match last_arg {
                     Either::Left(imm) => ok_wrap_concr(inst_new(rd, imm)),
-                    Either::Right(tgt_label) => {
-                        ok_vec(PartialInst::new_one_reg_needs_label(*inst_new, tgt_label))
-                    }
+                    Either::Right(tgt_label) => ok_vec(PartialInst::new_one_reg_needs_label(
+                        *inst_new, rd, tgt_label,
+                    )),
                 }
             }
             // Jalr => ,
