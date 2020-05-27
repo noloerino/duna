@@ -92,14 +92,18 @@ enum ParseType {
     MemL(fn(IRegister, IRegister, DataWord) -> ConcreteInst),
     MemS(fn(IRegister, IRegister, DataWord) -> ConcreteInst),
     B(fn(IRegister, IRegister, DataWord) -> ConcreteInst),
+    // Covers "jal ra, label", "jal label", "jal -4" etc.
     Jal(fn(IRegister, DataWord) -> ConcreteInst),
+    // Covers "jalr ra, 0(x1)", "jalr x1", etc.
+    Jalr(fn(IRegister, IRegister, DataWord) -> ConcreteInst),
     U(fn(IRegister, DataWord) -> ConcreteInst),
     // Pseudo-instructions
-    RegImm(fn(IRegister, DataWord) -> Vec<ConcreteInst>),
-    RegReg(fn(IRegister, IRegister) -> Vec<ConcreteInst>),
-    NoArgs(fn() -> Vec<ConcreteInst>),
-    OneReg(fn(IRegister) -> Vec<ConcreteInst>),
-    OneImm(fn(DataWord) -> Vec<ConcreteInst>),
+    Li(fn(IRegister, DataWord) -> Vec<ConcreteInst>),
+    RegReg(fn(IRegister, IRegister) -> ConcreteInst),
+    NoArgs(fn() -> ConcreteInst),
+    OneReg(fn(IRegister) -> ConcreteInst),
+    // Covers "j label", "j -4", etc.
+    LikeJ(fn(DataWord) -> ConcreteInst),
 }
 
 struct ParserData {
@@ -117,6 +121,7 @@ type TokenIter<'a> = Peekable<IntoIter<Token>>;
 lazy_static! {
     static ref INST_EXPANSION_TABLE: HashMap<String, ParseType> = {
         use isa::*;
+        use crate::pseudo_inst;
         use ParseType::*;
         [
             ("add", R(Add::new)),
@@ -132,9 +137,8 @@ lazy_static! {
             ("bne", B(Bne::new)),
             // ("ebreak", Env),
             ("ecall", Env(Ecall::new)),
-            // TODO allow jal/jalr pseudo-ops
             ("jal", ParseType::Jal(isa::Jal::new)),
-            ("jalr", Arith(isa::Jalr::new)),
+            ("jalr", ParseType::Jalr(isa::Jalr::new)),
             ("lb", MemL(Lb::new)),
             ("lbu", MemL(Lbu::new)),
             ("lh", MemL(Lh::new)),
@@ -159,10 +163,10 @@ lazy_static! {
             ("sw", MemS(Sw::new)),
             // ("xor", R),
             // ("xori", Arith),
-            ("li", RegImm(Li::expand)),
+            ("li", ParseType::Li(pseudo_inst::Li::expand)),
             ("mv", RegReg(Mv::expand)),
             ("nop", NoArgs(Nop::expand)),
-            ("j", OneImm(J::expand)),
+            ("j", LikeJ(J::expand)),
             ("jr", OneReg(Jr::expand)),
             ("ret", NoArgs(Ret::expand)),
         ]
@@ -525,8 +529,6 @@ impl LineParser<'_> {
                     )),
                 }
             }
-            // TODO jal and jalr must be parsed differently
-            // because they can also be used as pseudo-instructions
             Jal(inst_new) => {
                 let args = self.consume_commasep_args(head_loc, name, 2)?;
                 debug_assert!(args.len() == 2);
@@ -539,7 +541,14 @@ impl LineParser<'_> {
                     )),
                 }
             }
-            // Jalr => ,
+            Jalr(inst_new) => {
+                let args = self.consume_commasep_args(head_loc, name, 3)?;
+                debug_assert!(args.len() == 3);
+                let rd = self.try_parse_reg(&args[0])?;
+                let rs1 = self.try_parse_reg(&args[1])?;
+                let imm = self.try_parse_imm(12, &args[2])?;
+                ok_wrap_concr(inst_new(rd, rs1, imm))
+            }
             U(inst_new) => {
                 let args = self.consume_commasep_args(head_loc, name, 2)?;
                 debug_assert!(args.len() == 2);
@@ -547,7 +556,7 @@ impl LineParser<'_> {
                 let imm = self.try_parse_imm(20, &args[1])?;
                 ok_wrap_concr(inst_new(rd, imm))
             }
-            RegImm(inst_expand) => {
+            Li(inst_expand) => {
                 let args = self.consume_commasep_args(head_loc, name, 2)?;
                 debug_assert!(args.len() == 2);
                 let rd = self.try_parse_reg(&args[0])?;
@@ -557,27 +566,32 @@ impl LineParser<'_> {
             NoArgs(inst_expand) => {
                 let args = self.consume_commasep_args(head_loc, name, 0)?;
                 debug_assert!(args.is_empty());
-                ok_wrap_expanded(inst_expand())
+                ok_wrap_concr(inst_expand())
             }
             RegReg(inst_expand) => {
                 let args = self.consume_commasep_args(head_loc, name, 2)?;
                 debug_assert!(args.len() == 2);
                 let rd = self.try_parse_reg(&args[0])?;
                 let rs = self.try_parse_reg(&args[1])?;
-                ok_wrap_expanded(inst_expand(rd, rs))
+                ok_wrap_concr(inst_expand(rd, rs))
             }
-            OneImm(inst_expand) => {
+            LikeJ(inst_expand) => {
                 let args = self.consume_commasep_args(head_loc, name, 1)?;
                 debug_assert!(args.len() == 1);
                 // j expands to J-type, so 20-bit immediate
-                let imm = self.try_parse_imm(20, &args[0])?;
-                ok_wrap_expanded(inst_expand(imm))
+                let last_arg = self.try_parse_imm_or_label_ref(20, &args[0])?;
+                match last_arg {
+                    Either::Left(imm) => ok_wrap_concr(inst_expand(imm)),
+                    Either::Right(tgt_label) => {
+                        ok_vec(PartialInst::new_no_reg_needs_label(*inst_expand, tgt_label))
+                    }
+                }
             }
             OneReg(inst_expand) => {
                 let args = self.consume_commasep_args(head_loc, name, 1)?;
                 debug_assert!(args.len() == 1);
                 let rs = self.try_parse_reg(&args[0])?;
-                ok_wrap_expanded(inst_expand(rs))
+                ok_wrap_concr(inst_expand(rs))
             }
         }
     }

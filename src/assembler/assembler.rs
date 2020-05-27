@@ -51,6 +51,10 @@ pub(crate) enum PartialInstType {
         reg: IRegister,
         needed_label: Label,
     },
+    NoRegNeedsLabel {
+        assemble: fn(DataWord) -> ConcreteInst,
+        needed_label: Label,
+    },
 }
 
 pub struct PartialInst {
@@ -98,6 +102,19 @@ impl PartialInst {
         }
     }
 
+    pub fn new_no_reg_needs_label(
+        assemble: fn(DataWord) -> ConcreteInst,
+        needed: Label,
+    ) -> PartialInst {
+        PartialInst {
+            tpe: PartialInstType::NoRegNeedsLabel {
+                assemble,
+                needed_label: needed,
+            },
+            label: None,
+        }
+    }
+
     /// Attaches a label to this instruction. Panics if there's already a label.
     pub fn with_label(self, label: Label) -> PartialInst {
         match self.label {
@@ -112,9 +129,9 @@ impl PartialInst {
     pub fn get_needed_label(&self) -> Option<&Label> {
         use PartialInstType::*;
         match &self.tpe {
-            TwoRegNeedsLabel { needed_label, .. } | OneRegNeedsLabel { needed_label, .. } => {
-                Some(&needed_label)
-            }
+            TwoRegNeedsLabel { needed_label, .. }
+            | OneRegNeedsLabel { needed_label, .. }
+            | NoRegNeedsLabel { needed_label, .. } => Some(&needed_label),
             Complete(..) => None,
         }
     }
@@ -140,6 +157,7 @@ impl PartialInst {
                 ..
             } => assemble(reg1, reg2, imm),
             &OneRegNeedsLabel { assemble, reg, .. } => assemble(reg, imm),
+            &NoRegNeedsLabel { assemble, .. } => assemble(imm),
             Complete(..) => panic!("Cannot fulfill label for complete instruction"),
         }
     }
