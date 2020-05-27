@@ -1,5 +1,5 @@
-use super::assembler::{Label, PartialInst};
 use super::lexer::*;
+use super::partial_inst::PartialInst;
 use crate::instruction::*;
 use crate::isa;
 use crate::program_state::{DataWord, IRegister};
@@ -8,6 +8,8 @@ use std::collections::HashMap;
 use std::fmt;
 use std::iter::Peekable;
 use std::vec::IntoIter;
+
+pub type Label = String;
 
 type ParsedInstStream = Vec<PartialInst>;
 type ParseResult = Result<ParsedInstStream, ParseError>;
