@@ -41,6 +41,20 @@ impl Mv {
     }
 }
 
+pub struct JalPseudo;
+impl JalPseudo {
+    pub fn expand(offs: DataWord) -> ConcreteInst {
+        Jal::new(RA, offs)
+    }
+}
+
+pub struct JalrPseudo;
+impl JalrPseudo {
+    pub fn expand(rs: IRegister) -> ConcreteInst {
+        Jalr::new(RA, rs, DataWord::zero())
+    }
+}
+
 pub struct J;
 impl J {
     pub fn expand(offs: DataWord) -> ConcreteInst {

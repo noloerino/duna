@@ -3,10 +3,10 @@
 li a0, 0xABCD_0122
 li t1, 1
 li t2, -1
-# j actual_start
+j actual_start
 # This line should be skipped
-# bad: li a0, 0xFFFF_FFFF
-# li a0, 0xFFFF_FFFE
+bad: li a0, 0xFFFF_FFFF
+li a0, 0xFFFF_FFFE
 actual_start: 
 bge t1, zero, l1
 addi a0, zero, -1

@@ -84,6 +84,8 @@ impl fmt::Display for ParseError {
 }
 
 #[derive(Clone)]
+/// Describes the arguments needed for a type of function.
+/// Due to their unique parsing rules, Jal, Jalr, and Li are hardcoded.
 enum ParseType {
     // Base ISA
     R(fn(IRegister, IRegister, IRegister) -> ConcreteInst),
@@ -93,12 +95,12 @@ enum ParseType {
     MemS(fn(IRegister, IRegister, DataWord) -> ConcreteInst),
     B(fn(IRegister, IRegister, DataWord) -> ConcreteInst),
     // Covers "jal ra, label", "jal label", "jal -4" etc.
-    Jal(fn(IRegister, DataWord) -> ConcreteInst),
+    Jal,
     // Covers "jalr ra, 0(x1)", "jalr x1", etc.
-    Jalr(fn(IRegister, IRegister, DataWord) -> ConcreteInst),
+    Jalr,
     U(fn(IRegister, DataWord) -> ConcreteInst),
     // Pseudo-instructions
-    Li(fn(IRegister, DataWord) -> Vec<ConcreteInst>),
+    Li,
     RegReg(fn(IRegister, IRegister) -> ConcreteInst),
     NoArgs(fn() -> ConcreteInst),
     OneReg(fn(IRegister) -> ConcreteInst),
@@ -121,7 +123,7 @@ type TokenIter<'a> = Peekable<IntoIter<Token>>;
 lazy_static! {
     static ref INST_EXPANSION_TABLE: HashMap<String, ParseType> = {
         use isa::*;
-        use crate::pseudo_inst;
+
         use ParseType::*;
         [
             ("add", R(Add::new)),
@@ -137,8 +139,8 @@ lazy_static! {
             ("bne", B(Bne::new)),
             // ("ebreak", Env),
             ("ecall", Env(Ecall::new)),
-            ("jal", ParseType::Jal(isa::Jal::new)),
-            ("jalr", ParseType::Jalr(isa::Jalr::new)),
+            ("jal", ParseType::Jal),
+            ("jalr", ParseType::Jalr),
             ("lb", MemL(Lb::new)),
             ("lbu", MemL(Lbu::new)),
             ("lh", MemL(Lh::new)),
@@ -163,7 +165,7 @@ lazy_static! {
             ("sw", MemS(Sw::new)),
             // ("xor", R),
             // ("xori", Arith),
-            ("li", ParseType::Li(pseudo_inst::Li::expand)),
+            ("li", ParseType::Li),
             ("mv", RegReg(Mv::expand)),
             ("nop", NoArgs(Nop::expand)),
             ("j", LikeJ(J::expand)),
@@ -305,7 +307,7 @@ impl LineParser<'_> {
             match self.iter.next() {
                 Some(tok) => match tok.data {
                     Name(..) | Immediate(..) => {
-                        // Allow single comma, excpet when trailing
+                        // Allow single comma, except when trailing
                         if n > 1 {
                             if let Some(tok2) = self.iter.peek() {
                                 if let Comma = tok2.data {
@@ -327,6 +329,43 @@ impl LineParser<'_> {
                 None => Err(ParseError::not_enough_args(head_loc, head_name)),
             }
         }
+    }
+
+    /// Attempts to consume possibly comma-separate arguments from the iterator.
+    /// The first and last tokens cannot be commas. If repeated commas appear anywhere,
+    /// an error is returned.
+    /// This consumes until a comment token or the end of the iterator is reached.
+    fn consume_unbounded_commasep_args(&mut self) -> Result<Vec<Token>, ParseError> {
+        use TokenType::*;
+        let mut toks = Vec::new();
+        // track if we just visited a comma
+        // initialize to true to prevent leading commas
+        let mut was_comma = true;
+        for tok in &mut self.iter {
+            match tok.data {
+                Name(..) | Immediate(..) => {
+                    was_comma = false;
+                    toks.push(tok)
+                }
+                Comma => {
+                    if was_comma {
+                        return Err(ParseError::bad_arg(
+                            tok.location,
+                            &format!("{:?}", tok.data),
+                        ));
+                    }
+                    was_comma = true;
+                }
+                Comment(..) => return Ok(toks),
+                _ => {
+                    return Err(ParseError::bad_arg(
+                        tok.location,
+                        &format!("{:?}", tok.data),
+                    ));
+                }
+            }
+        }
+        Ok(toks)
     }
 
     /// Consumes tokens for arguments for a memory operation.
@@ -529,25 +568,59 @@ impl LineParser<'_> {
                     )),
                 }
             }
-            Jal(inst_new) => {
-                let args = self.consume_commasep_args(head_loc, name, 2)?;
-                debug_assert!(args.len() == 2);
-                let rd = self.try_parse_reg(&args[0])?;
-                let last_arg = self.try_parse_imm_or_label_ref(20, &args[1])?;
-                match last_arg {
-                    Either::Left(imm) => ok_wrap_concr(inst_new(rd, imm)),
-                    Either::Right(tgt_label) => ok_vec(PartialInst::new_one_reg_needs_label(
-                        *inst_new, rd, tgt_label,
+            Jal => {
+                let args = self.consume_unbounded_commasep_args()?;
+                let argc = args.len();
+                match argc {
+                    1 => {
+                        // "jal label"
+                        let last_arg = self.try_parse_imm_or_label_ref(20, &args[0])?;
+                        match last_arg {
+                            Either::Left(imm) => ok_wrap_concr(JalPseudo::expand(imm)),
+                            Either::Right(tgt_label) => ok_vec(
+                                PartialInst::new_no_reg_needs_label(JalPseudo::expand, tgt_label),
+                            ),
+                        }
+                    }
+                    2 => {
+                        // "jal ra label"
+                        let rd = self.try_parse_reg(&args[0])?;
+                        // J-type has 20-bit immediate
+                        let last_arg = self.try_parse_imm_or_label_ref(20, &args[1])?;
+                        match last_arg {
+                            Either::Left(imm) => ok_wrap_concr(isa::Jal::new(rd, imm)),
+                            Either::Right(tgt_label) => ok_vec(
+                                PartialInst::new_one_reg_needs_label(isa::Jal::new, rd, tgt_label),
+                            ),
+                        }
+                    }
+                    _ => Err(ParseError::unexpected(
+                        head_loc,
+                        &format!("wrong number of arguments for instruction {}", name),
                     )),
                 }
             }
-            Jalr(inst_new) => {
-                let args = self.consume_commasep_args(head_loc, name, 3)?;
-                debug_assert!(args.len() == 3);
-                let rd = self.try_parse_reg(&args[0])?;
-                let rs1 = self.try_parse_reg(&args[1])?;
-                let imm = self.try_parse_imm(12, &args[2])?;
-                ok_wrap_concr(inst_new(rd, rs1, imm))
+            Jalr => {
+                let args = self.consume_unbounded_commasep_args()?;
+                let argc = args.len();
+                match argc {
+                    1 => {
+                        // "jalr rs"
+                        let rs = self.try_parse_reg(&args[0])?;
+                        ok_wrap_concr(JalrPseudo::expand(rs))
+                    }
+                    3 => {
+                        // "jalr rd, rs, imm"
+                        let rd = self.try_parse_reg(&args[0])?;
+                        let rs1 = self.try_parse_reg(&args[1])?;
+                        let imm = self.try_parse_imm(12, &args[2])?;
+                        ok_wrap_concr(isa::Jalr::new(rd, rs1, imm))
+                    }
+                    _ => Err(ParseError::unexpected(
+                        head_loc,
+                        &format!("wrong number of arguments for instruction {}", name),
+                    )),
+                }
             }
             U(inst_new) => {
                 let args = self.consume_commasep_args(head_loc, name, 2)?;
@@ -556,12 +629,12 @@ impl LineParser<'_> {
                 let imm = self.try_parse_imm(20, &args[1])?;
                 ok_wrap_concr(inst_new(rd, imm))
             }
-            Li(inst_expand) => {
+            Li => {
                 let args = self.consume_commasep_args(head_loc, name, 2)?;
                 debug_assert!(args.len() == 2);
                 let rd = self.try_parse_reg(&args[0])?;
                 let imm = self.try_parse_imm(32, &args[1])?;
-                ok_wrap_expanded(inst_expand(rd, imm))
+                ok_wrap_expanded(crate::pseudo_inst::Li::expand(rd, imm))
             }
             NoArgs(inst_expand) => {
                 let args = self.consume_commasep_args(head_loc, name, 0)?;

@@ -183,7 +183,6 @@ pub struct UnlinkedProgram {
 impl UnlinkedProgram {
     /// Constructs an instance of an UnlinkedProgram from an instruction stream.
     pub fn new(insts: Vec<PartialInst>) -> UnlinkedProgram {
-        use PartialInstType::*;
         let local_labels = insts
             .iter()
             .enumerate()
@@ -194,12 +193,7 @@ impl UnlinkedProgram {
         let needed_labels = insts
             .iter()
             .enumerate()
-            .filter_map(|(i, partial_inst)| match &partial_inst.tpe {
-                TwoRegNeedsLabel { needed_label, .. } | OneRegNeedsLabel { needed_label, .. } => {
-                    Some((needed_label.clone(), i))
-                }
-                _ => None,
-            })
+            .filter_map(|(i, partial_inst)| (Some((partial_inst.get_needed_label()?.clone(), i))))
             .collect();
         UnlinkedProgram {
             insts,
@@ -244,13 +238,14 @@ impl UnlinkedProgram {
     /// but not found within the body of this program.
     pub fn try_into_program(self) -> RiscVProgram {
         use PartialInstType::*;
+        let linked = self.link_self();
         RiscVProgram::new(
-            self.link_self()
+            linked
                 .insts
                 .into_iter()
                 .map(|partial_inst| match partial_inst.tpe {
                     Complete(inst) => inst,
-                    _ => panic!("inst needed labels (error handling unimplented)"),
+                    _ => panic!("inst needed label {:?}", partial_inst.get_needed_label()),
                 })
                 .collect(),
         )
