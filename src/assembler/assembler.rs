@@ -38,23 +38,29 @@ impl Assembler {
 
 pub type Label = String;
 
-pub(crate) enum PartialInstType {
-    Complete(ConcreteInst),
-    TwoRegNeedsLabel {
+pub(crate) enum NeedsLabelType {
+    TwoReg {
         assemble: fn(IRegister, IRegister, DataWord) -> ConcreteInst,
         reg1: IRegister,
         reg2: IRegister,
-        needed_label: Label,
     },
-    OneRegNeedsLabel {
+    OneReg {
         assemble: fn(IRegister, DataWord) -> ConcreteInst,
         reg: IRegister,
-        needed_label: Label,
     },
-    NoRegNeedsLabel {
+    ZeroReg {
         assemble: fn(DataWord) -> ConcreteInst,
-        needed_label: Label,
     },
+}
+
+pub(crate) struct NeedsLabel {
+    tpe: NeedsLabelType,
+    needed_label: Label,
+}
+
+pub(crate) enum PartialInstType {
+    Complete(ConcreteInst),
+    NeedsLabel(NeedsLabel),
 }
 
 pub struct PartialInst {
@@ -70,21 +76,27 @@ impl PartialInst {
         }
     }
 
+    fn new_needs_label(data: NeedsLabel) -> PartialInst {
+        PartialInst {
+            tpe: PartialInstType::NeedsLabel(data),
+            label: None,
+        }
+    }
+
     pub fn new_two_reg_needs_label(
         assemble: fn(IRegister, IRegister, DataWord) -> ConcreteInst,
         reg1: IRegister,
         reg2: IRegister,
         needed: Label,
     ) -> PartialInst {
-        PartialInst {
-            tpe: PartialInstType::TwoRegNeedsLabel {
+        PartialInst::new_needs_label(NeedsLabel {
+            tpe: NeedsLabelType::TwoReg {
                 assemble,
                 reg1,
                 reg2,
-                needed_label: needed,
             },
-            label: None,
-        }
+            needed_label: needed,
+        })
     }
 
     pub fn new_one_reg_needs_label(
@@ -92,27 +104,20 @@ impl PartialInst {
         reg: IRegister,
         needed: Label,
     ) -> PartialInst {
-        PartialInst {
-            tpe: PartialInstType::OneRegNeedsLabel {
-                assemble,
-                reg,
-                needed_label: needed,
-            },
-            label: None,
-        }
+        PartialInst::new_needs_label(NeedsLabel {
+            tpe: NeedsLabelType::OneReg { assemble, reg },
+            needed_label: needed,
+        })
     }
 
     pub fn new_no_reg_needs_label(
         assemble: fn(DataWord) -> ConcreteInst,
         needed: Label,
     ) -> PartialInst {
-        PartialInst {
-            tpe: PartialInstType::NoRegNeedsLabel {
-                assemble,
-                needed_label: needed,
-            },
-            label: None,
-        }
+        PartialInst::new_needs_label(NeedsLabel {
+            tpe: NeedsLabelType::ZeroReg { assemble },
+            needed_label: needed,
+        })
     }
 
     /// Attaches a label to this instruction. Panics if there's already a label.
@@ -127,12 +132,9 @@ impl PartialInst {
     }
 
     pub fn get_needed_label(&self) -> Option<&Label> {
-        use PartialInstType::*;
         match &self.tpe {
-            TwoRegNeedsLabel { needed_label, .. }
-            | OneRegNeedsLabel { needed_label, .. }
-            | NoRegNeedsLabel { needed_label, .. } => Some(&needed_label),
-            Complete(..) => None,
+            PartialInstType::NeedsLabel(NeedsLabel { needed_label, .. }) => Some(&needed_label),
+            PartialInstType::Complete(..) => None,
         }
     }
 
@@ -147,17 +149,20 @@ impl PartialInst {
     }
 
     /// Attempts to replace the needed label with the provided immediate
+    /// TODO move this onto NeedsLabel instead?
     pub fn fulfill_label(&self, imm: DataWord) -> ConcreteInst {
+        use NeedsLabelType::*;
         use PartialInstType::*;
         match &self.tpe {
-            &TwoRegNeedsLabel {
-                assemble,
-                reg1,
-                reg2,
-                ..
-            } => assemble(reg1, reg2, imm),
-            &OneRegNeedsLabel { assemble, reg, .. } => assemble(reg, imm),
-            &NoRegNeedsLabel { assemble, .. } => assemble(imm),
+            NeedsLabel(data) => match &data.tpe {
+                &TwoReg {
+                    assemble,
+                    reg1,
+                    reg2,
+                } => assemble(reg1, reg2, imm),
+                &OneReg { assemble, reg } => assemble(reg, imm),
+                &ZeroReg { assemble } => assemble(imm),
+            },
             Complete(..) => panic!("Cannot fulfill label for complete instruction"),
         }
     }
