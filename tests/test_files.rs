@@ -65,3 +65,9 @@ fn test_write_stdout() {
         Ok("deadbeef\n".to_string())
     );
 }
+
+#[test]
+/// Tests jumping and branching to locally defined labels.
+fn test_local_labels() {
+    check_a0_at_end("local_labels.s", 0xABCD_0123u32);
+}
