@@ -4,7 +4,6 @@ use crate::instruction::*;
 use crate::isa;
 use crate::program_state::{DataWord, IRegister};
 use crate::pseudo_inst::*;
-use either::Either;
 use std::collections::HashMap;
 use std::fmt;
 use std::iter::Peekable;
@@ -240,6 +239,11 @@ struct MemArgs {
     imm: DataWord,
 }
 
+enum ImmOrLabel {
+    Imm(DataWord),
+    Label(Label),
+}
+
 /// Convenience method to stuff a PartialInst into a Vec<PartialInst>
 fn ok_vec(inst: PartialInst) -> ParseResult {
     Ok(vec![inst])
@@ -300,7 +304,7 @@ impl LineParser<'_> {
         n: usize,
     ) -> Result<Vec<Token>, ParseError> {
         use TokenType::*;
-        if n == 0 {
+        let result = if n == 0 {
             self.check_no_more_args(head_loc, head_name)
                 .and(Ok(Vec::new()))
         } else {
@@ -328,6 +332,14 @@ impl LineParser<'_> {
                 },
                 None => Err(ParseError::not_enough_args(head_loc, head_name)),
             }
+        };
+        // jank to allow assertion and borrow checker to both be happy
+        match result {
+            Ok(args) => {
+                debug_assert!(args.len() == n);
+                Ok(args)
+            }
+            _ => result,
         }
     }
 
@@ -488,13 +500,13 @@ impl LineParser<'_> {
         &self,
         max_imm_len: u8,
         token: &Token,
-    ) -> Result<Either<DataWord, Label>, ParseError> {
+    ) -> Result<ImmOrLabel, ParseError> {
         if let TokenType::Name(name) = &token.data {
             // label case
-            Ok(Either::Right(name.clone()))
+            Ok(ImmOrLabel::Label(name.clone()))
         } else {
             // imm case
-            Ok(Either::Left(self.try_parse_imm(max_imm_len, token)?))
+            Ok(ImmOrLabel::Imm(self.try_parse_imm(max_imm_len, token)?))
         }
     }
 
@@ -510,7 +522,6 @@ impl LineParser<'_> {
             R(inst_new) => {
                 // R-types are always "inst rd, rs1, rs2" with one or no commas in between
                 let args = self.consume_commasep_args(head_loc, name, 3)?;
-                debug_assert!(args.len() == 3);
                 let rd = self.try_parse_reg(&args[0])?;
                 let rs1 = self.try_parse_reg(&args[1])?;
                 let rs2 = self.try_parse_reg(&args[2])?;
@@ -518,15 +529,13 @@ impl LineParser<'_> {
             }
             Arith(inst_new) => {
                 let args = self.consume_commasep_args(head_loc, name, 3)?;
-                debug_assert!(args.len() == 3);
                 let rd = self.try_parse_reg(&args[0])?;
                 let rs1 = self.try_parse_reg(&args[1])?;
                 let imm = self.try_parse_imm(12, &args[2])?;
                 ok_wrap_concr(inst_new(rd, rs1, imm))
             }
             Env(inst_new) => {
-                let args = self.consume_commasep_args(head_loc, name, 0)?;
-                debug_assert!(args.is_empty());
+                let _args = self.consume_commasep_args(head_loc, name, 0)?;
                 ok_wrap_concr(inst_new())
             }
             MemL(inst_new) => {
@@ -545,13 +554,12 @@ impl LineParser<'_> {
             }
             B(inst_new) => {
                 let args = self.consume_commasep_args(head_loc, name, 3)?;
-                debug_assert!(args.len() == 3);
                 let rs1 = self.try_parse_reg(&args[0])?;
                 let rs2 = self.try_parse_reg(&args[1])?;
                 // Becuse branches actually chop off the LSB, we can take up to 13b
                 let last_arg = self.try_parse_imm_or_label_ref(13, &args[2])?;
                 match last_arg {
-                    Either::Left(imm) => {
+                    ImmOrLabel::Imm(imm) => {
                         if u32::from(imm) & 1 > 0 {
                             Err(ParseError::new(
                                 head_loc,
@@ -563,7 +571,7 @@ impl LineParser<'_> {
                             ok_wrap_concr(inst_new(rs1, rs2, imm))
                         }
                     }
-                    Either::Right(tgt_label) => ok_vec(PartialInst::new_two_reg_needs_label(
+                    ImmOrLabel::Label(tgt_label) => ok_vec(PartialInst::new_two_reg_needs_label(
                         *inst_new, rs1, rs2, tgt_label,
                     )),
                 }
@@ -576,8 +584,8 @@ impl LineParser<'_> {
                         // "jal label"
                         let last_arg = self.try_parse_imm_or_label_ref(20, &args[0])?;
                         match last_arg {
-                            Either::Left(imm) => ok_wrap_concr(JalPseudo::expand(imm)),
-                            Either::Right(tgt_label) => ok_vec(
+                            ImmOrLabel::Imm(imm) => ok_wrap_concr(JalPseudo::expand(imm)),
+                            ImmOrLabel::Label(tgt_label) => ok_vec(
                                 PartialInst::new_no_reg_needs_label(JalPseudo::expand, tgt_label),
                             ),
                         }
@@ -588,8 +596,8 @@ impl LineParser<'_> {
                         // J-type has 20-bit immediate
                         let last_arg = self.try_parse_imm_or_label_ref(20, &args[1])?;
                         match last_arg {
-                            Either::Left(imm) => ok_wrap_concr(isa::Jal::new(rd, imm)),
-                            Either::Right(tgt_label) => ok_vec(
+                            ImmOrLabel::Imm(imm) => ok_wrap_concr(isa::Jal::new(rd, imm)),
+                            ImmOrLabel::Label(tgt_label) => ok_vec(
                                 PartialInst::new_one_reg_needs_label(isa::Jal::new, rd, tgt_label),
                             ),
                         }
@@ -624,45 +632,39 @@ impl LineParser<'_> {
             }
             U(inst_new) => {
                 let args = self.consume_commasep_args(head_loc, name, 2)?;
-                debug_assert!(args.len() == 2);
                 let rd = self.try_parse_reg(&args[0])?;
                 let imm = self.try_parse_imm(20, &args[1])?;
                 ok_wrap_concr(inst_new(rd, imm))
             }
             Li => {
                 let args = self.consume_commasep_args(head_loc, name, 2)?;
-                debug_assert!(args.len() == 2);
                 let rd = self.try_parse_reg(&args[0])?;
                 let imm = self.try_parse_imm(32, &args[1])?;
                 ok_wrap_expanded(crate::pseudo_inst::Li::expand(rd, imm))
             }
             NoArgs(inst_expand) => {
-                let args = self.consume_commasep_args(head_loc, name, 0)?;
-                debug_assert!(args.is_empty());
+                let _args = self.consume_commasep_args(head_loc, name, 0)?;
                 ok_wrap_concr(inst_expand())
             }
             RegReg(inst_expand) => {
                 let args = self.consume_commasep_args(head_loc, name, 2)?;
-                debug_assert!(args.len() == 2);
                 let rd = self.try_parse_reg(&args[0])?;
                 let rs = self.try_parse_reg(&args[1])?;
                 ok_wrap_concr(inst_expand(rd, rs))
             }
             LikeJ(inst_expand) => {
                 let args = self.consume_commasep_args(head_loc, name, 1)?;
-                debug_assert!(args.len() == 1);
                 // j expands to J-type, so 20-bit immediate
                 let last_arg = self.try_parse_imm_or_label_ref(20, &args[0])?;
                 match last_arg {
-                    Either::Left(imm) => ok_wrap_concr(inst_expand(imm)),
-                    Either::Right(tgt_label) => {
+                    ImmOrLabel::Imm(imm) => ok_wrap_concr(inst_expand(imm)),
+                    ImmOrLabel::Label(tgt_label) => {
                         ok_vec(PartialInst::new_no_reg_needs_label(*inst_expand, tgt_label))
                     }
                 }
             }
             OneReg(inst_expand) => {
                 let args = self.consume_commasep_args(head_loc, name, 1)?;
-                debug_assert!(args.len() == 1);
                 let rs = self.try_parse_reg(&args[0])?;
                 ok_wrap_concr(inst_expand(rs))
             }
