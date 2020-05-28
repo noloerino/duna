@@ -4,6 +4,7 @@ use super::registers::{IRegister, RegFile};
 use crate::assembler::{Assembler, ParseError};
 use crate::instruction::ConcreteInst;
 use std::collections::HashMap;
+use std::str;
 
 pub struct RiscVProgram {
     pub insts: Vec<ConcreteInst>,
@@ -47,13 +48,6 @@ impl RiscVProgram {
         Ok(Assembler::from_file(path).assemble()?.try_into_program())
     }
 
-    #[allow(clippy::should_implement_trait)]
-    pub fn from_str(contents: &str) -> Result<RiscVProgram, Vec<ParseError>> {
-        Ok(Assembler::from_str(&contents)
-            .assemble()?
-            .try_into_program())
-    }
-
     /// Runs the program to completion, returning the value in register a0.
     pub fn run(&mut self) -> i32 {
         // for now, just use the instruction vec to determine the next instruction
@@ -67,6 +61,14 @@ impl RiscVProgram {
             self.state.apply_inst(inst);
         }
         i32::from(self.state.user_state.regfile.read(IRegister::A0))
+    }
+}
+
+impl str::FromStr for RiscVProgram {
+    type Err = Vec<ParseError>;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Assembler::from_str(s).assemble()?.try_into_program())
     }
 }
 
@@ -508,7 +510,9 @@ mod test {
 
     #[test]
     fn test_e2e_program() {
-        let mut program = RiscVProgram::from_str("addi s1, zero, 4\nadd a0, s1, zero").unwrap();
+        let mut program = "addi s1, zero, 4\nadd a0, s1, zero"
+            .parse::<RiscVProgram>()
+            .unwrap();
         let result = program.run();
         assert_eq!(result, 4);
     }
