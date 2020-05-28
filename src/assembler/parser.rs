@@ -1,5 +1,5 @@
 use super::lexer::*;
-use super::parse_error::{ParseError, ParseErrorReporter};
+use super::parse_error::{ParseError, ParseErrorReport, ParseErrorReporter};
 use super::partial_inst::PartialInst;
 use crate::instruction::*;
 use crate::isa;
@@ -15,7 +15,7 @@ type ParsedInstStream = Vec<PartialInst>;
 type LineParseResult = Result<ParsedInstStream, ParseError>;
 pub struct ParseResult {
     pub insts: ParsedInstStream,
-    pub reporter: ParseErrorReporter,
+    pub report: ParseErrorReport,
 }
 
 #[derive(Clone)]
@@ -164,10 +164,9 @@ impl RiscVParser {
                 Err(new_err) => self.reporter.add_error(new_err),
             }
         }
-        // (insts, errs)
         ParseResult {
             insts,
-            reporter: self.reporter,
+            report: self.reporter.into_report(),
         }
     }
 }
@@ -733,9 +732,8 @@ mod tests {
     /// Parses and lexes the provided string, assuming that there are no errors in either phase.
     /// Assumes that there were no lex errors.
     fn parse_and_lex(prog: &str) -> Vec<PartialInst> {
-        let ParseResult { insts, reporter } = RiscVParser::from_lex_result(lex(prog)).parse();
-        // Check against empty slice instead of using is_empty so the backtrace displays errors
-        assert_eq!(reporter.get_errs(), &[]);
+        let ParseResult { insts, report } = RiscVParser::from_lex_result(lex(prog)).parse();
+        assert!(report.is_empty(), format!("{:?}", report.report()));
         insts
     }
 
@@ -788,8 +786,8 @@ mod tests {
             "add x1,,x2, x3",
         ];
         for inst in bad_insts {
-            let ParseResult { reporter, .. } = RiscVParser::from_lex_result(lex(inst)).parse();
-            assert!(!reporter.is_empty());
+            let ParseResult { report, .. } = RiscVParser::from_lex_result(lex(inst)).parse();
+            assert!(!report.is_empty());
         }
     }
 
@@ -819,8 +817,8 @@ mod tests {
     fn test_imm_too_big() {
         // immediates for instructions like addi can only be 12 bits long
         let parser = RiscVParser::from_lex_result(lex("addi sp sp 0xF000"));
-        let ParseResult { insts, reporter } = parser.parse();
-        assert!(!reporter.is_empty());
+        let ParseResult { insts, report } = parser.parse();
+        assert!(!report.is_empty());
         assert!(insts.is_empty());
     }
 

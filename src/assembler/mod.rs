@@ -5,4 +5,4 @@ mod parser;
 mod partial_inst;
 
 pub use assembler_impl::Assembler;
-pub use parse_error::ParseError;
+pub use parse_error::ParseErrorReport;

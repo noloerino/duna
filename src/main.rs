@@ -19,7 +19,7 @@ fn main() {
     let mut program = match parse_result {
         Ok(p) => p,
         Err(errs) => {
-            errs.iter().for_each(|e| println!("{}", e));
+            errs.report();
             process::exit(1);
         }
     };

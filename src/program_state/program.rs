@@ -1,7 +1,7 @@
 use super::datatypes::*;
 use super::memory::Memory;
 use super::registers::{IRegister, RegFile};
-use crate::assembler::{Assembler, ParseError};
+use crate::assembler::{Assembler, ParseErrorReport};
 use crate::instruction::ConcreteInst;
 use std::collections::HashMap;
 use std::str;
@@ -44,7 +44,7 @@ impl RiscVProgram {
         }
     }
 
-    pub fn from_file(path: &str) -> Result<RiscVProgram, Vec<ParseError>> {
+    pub fn from_file(path: &str) -> Result<RiscVProgram, ParseErrorReport> {
         Ok(Assembler::from_file(path).assemble()?.try_into_program())
     }
 
@@ -65,7 +65,7 @@ impl RiscVProgram {
 }
 
 impl str::FromStr for RiscVProgram {
-    type Err = Vec<ParseError>;
+    type Err = ParseErrorReport;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(Assembler::from_str(s).assemble()?.try_into_program())

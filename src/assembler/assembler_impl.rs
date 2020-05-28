@@ -1,5 +1,5 @@
 use super::lexer::Lexer;
-use super::parse_error::ParseError;
+use super::parse_error::ParseErrorReport;
 use super::parser::{Label, ParseResult, RiscVParser};
 use super::partial_inst::PartialInst;
 use crate::program_state::{DataWord, RiscVProgram};
@@ -23,14 +23,13 @@ impl<'a> Assembler<'a> {
         }
     }
 
-    pub fn assemble(self) -> Result<UnlinkedProgram, Vec<ParseError>> {
-        let ParseResult { insts, reporter } =
-            RiscVParser::from_lex_result(self.lexer.lex()).parse();
+    pub fn assemble(self) -> Result<UnlinkedProgram, ParseErrorReport> {
+        let ParseResult { insts, report } = RiscVParser::from_lex_result(self.lexer.lex()).parse();
 
-        if reporter.is_empty() {
+        if report.is_empty() {
             Ok(UnlinkedProgram::new(insts))
         } else {
-            Err(reporter.errs)
+            Err(report)
         }
     }
 }

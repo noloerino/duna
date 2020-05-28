@@ -16,12 +16,12 @@ pub type LineNo = usize;
 // The offset of a token within a line.
 pub type LineOffs = usize;
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, PartialOrd, Debug)]
 pub struct Location {
-    /// Holds a reference to the line from which this came (used for debugging)
+    /// Holds a reference to the line from which this came (used for error messages)
     // line_contents: &'a str,
-    lineno: LineNo,
-    offs: LineOffs,
+    pub lineno: LineNo,
+    pub offs: LineOffs,
 }
 
 impl fmt::Display for Location {
@@ -126,7 +126,6 @@ fn is_imm_start(c: char) -> bool {
 }
 
 struct LineLexer<'a> {
-    // line_contents: &'a str,
     lineno: LineNo,
     iter: LineIter<'a>,
     reporter: &'a mut ParseErrorReporter,
@@ -308,7 +307,6 @@ impl<'a> LineLexer<'a> {
 
     fn new(lineno: LineNo, line: &'a str, reporter: &'a mut ParseErrorReporter) -> LineLexer<'a> {
         LineLexer {
-            // line_contents: line,
             lineno,
             iter: line.chars().enumerate().peekable(),
             reporter,
@@ -363,7 +361,7 @@ pub struct Lexer<'a> {
     contents: Cow<'a, str>,
 }
 
-impl<'a> Lexer<'a> {
+impl Lexer<'_> {
     pub fn from_file(path: &str) -> Lexer {
         let contents = fs::read_to_string(path).expect("Failed to open file");
         Lexer {
@@ -381,7 +379,7 @@ impl<'a> Lexer<'a> {
     /// Consume the lexer's iterator to produce a stream of tokens and any possible errors.
     pub fn lex(self) -> LexResult {
         let mut toks = Vec::<TokenStream>::new();
-        let mut reporter = ParseErrorReporter::new();
+        let mut reporter = ParseErrorReporter::new(self.contents.to_string());
         for (lineno, line) in self.contents.lines().enumerate() {
             toks.push(LineLexer::new(lineno, line, &mut reporter).lex());
         }
@@ -398,7 +396,9 @@ mod tests {
 
     #[test]
     fn test_simple_lex() {
-        let LexResult { lines, reporter } = Lexer::from_str("addi x0, x1, x2").lex();
+        let LexResult {
+            lines, reporter, ..
+        } = Lexer::from_str("addi x0, x1, x2").lex();
         assert!(reporter.is_empty());
         let toks = &lines[0];
         // check actual data
@@ -436,7 +436,7 @@ mod tests {
         ];
         for (line, fmt, exp) in cases {
             let head = line.chars().next().unwrap();
-            let mut reporter = Default::default();
+            let mut reporter = ParseErrorReporter::new(line.to_string());
             let mut lexer = LineLexer::new(0, line.get(1..).unwrap(), &mut reporter);
             let result = lexer.build_imm(&LexState {
                 head,

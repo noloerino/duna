@@ -1,19 +1,65 @@
-use super::lexer::{ImmRenderType, Location, TokenType};
+use super::lexer::{ImmRenderType, LineNo, Location, TokenType};
+use std::collections::BTreeSet;
+use std::collections::HashMap;
 use std::fmt;
+
+pub struct ParseErrorReport {
+    /// Maps a line number to the raw contents of the corresponding line.
+    lines: HashMap<LineNo, String>,
+    /// Assume the errors are sorted by location
+    pub errs: Vec<ParseError>,
+}
+
+impl ParseErrorReport {
+    /// Prints errors.
+    pub fn report(&self) {
+        println!("{:?}", self)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.errs.is_empty()
+    }
+}
+
+impl fmt::Debug for ParseErrorReport {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for err in &self.errs {
+            write!(f, "{}\n", err)?;
+            let lineno = err.location.lineno;
+            // TODO fix spacing
+            write!(f, "  |\n")?;
+            write!(
+                f,
+                "{} | {}\n",
+                lineno,
+                self.lines
+                    .get(&lineno)
+                    .unwrap_or(&"line not found".to_string())
+            )?;
+            write!(f, "  |\n")?;
+        }
+        if self.errs.is_empty() {
+            Ok(())
+        } else {
+            write!(
+                f,
+                "\nerror: aborting due to {} previous errors",
+                self.errs.len()
+            )
+        }
+    }
+}
 
 /// Reports parse-time errors
 pub struct ParseErrorReporter {
-    /// The indices at which these lines occur don't actually matter;
-    /// all that matters is this struct maintains ownership over the strings
-    /// so that its ParseErrors can maintain a reference to them.
-    // lines: Vec<String>,
+    original_text: String,
     pub errs: Vec<ParseError>,
 }
 
 impl ParseErrorReporter {
-    pub fn new() -> ParseErrorReporter {
+    pub fn new(original_text: String) -> ParseErrorReporter {
         ParseErrorReporter {
-            // lines: Vec::new(),
+            original_text,
             errs: Vec::new(),
         }
     }
@@ -22,6 +68,7 @@ impl ParseErrorReporter {
         self.errs.push(err);
     }
 
+    #[cfg(test)]
     pub fn is_empty(&self) -> bool {
         self.errs.is_empty()
     }
@@ -30,11 +77,21 @@ impl ParseErrorReporter {
     pub fn get_errs(&self) -> &[ParseError] {
         self.errs.as_slice()
     }
-}
 
-impl Default for ParseErrorReporter {
-    fn default() -> Self {
-        Self::new()
+    pub fn into_report(self) -> ParseErrorReport {
+        let mut errs = self.errs;
+        let needed_linenos: BTreeSet<LineNo> = errs.iter().map(|e| e.location.lineno).collect();
+        errs.sort_by(|a, b| a.location.partial_cmp(&b.location).unwrap());
+        let mut line_map: HashMap<usize, String> = HashMap::new();
+        for (lineno, line) in self.original_text.lines().enumerate() {
+            if needed_linenos.contains(&lineno) {
+                line_map.insert(lineno, line.to_string());
+            }
+        }
+        ParseErrorReport {
+            lines: line_map,
+            errs,
+        }
     }
 }
 
@@ -248,6 +305,6 @@ impl ParseError {
 
 impl fmt::Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "ParseError at {}:\t{}", self.location, self.tpe)
+        write!(f, "error: {} (at {})", self.tpe, self.location)
     }
 }
