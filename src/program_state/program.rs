@@ -47,6 +47,7 @@ impl RiscVProgram {
         Ok(Assembler::from_file(path).assemble()?.try_into_program())
     }
 
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(contents: &str) -> Result<RiscVProgram, Vec<ParseError>> {
         Ok(Assembler::from_str(&contents)
             .assemble()?
