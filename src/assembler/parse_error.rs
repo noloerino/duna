@@ -25,6 +25,11 @@ impl ParseErrorReporter {
     pub fn is_empty(&self) -> bool {
         self.errs.is_empty()
     }
+
+    #[cfg(test)]
+    pub fn get_errs(&self) -> &[ParseError] {
+        self.errs.as_slice()
+    }
 }
 
 impl Default for ParseErrorReporter {

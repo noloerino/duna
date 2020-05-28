@@ -257,7 +257,7 @@ impl<'a> InstParser<'a> {
                 Some(tok) => match tok.data {
                     Name(..) | Immediate(..) => {
                         // Allow single comma, except when trailing
-                        if left > 1 {
+                        if left > 0 {
                             if let Some(tok2) = self.iter.peek() {
                                 if let Comma = tok2.data {
                                     self.iter.next();
@@ -330,7 +330,7 @@ impl<'a> InstParser<'a> {
     fn consume_mem_args(&mut self) -> Result<MemArgs, ParseError> {
         // first consumed token must be register name
         let first_tok = self.try_next_tok(3, 0)?;
-        let first_reg = self.try_parse_reg(&first_tok)?;
+        let first_reg = self.try_parse_reg(first_tok)?;
         // check for comma
         let maybe_comma = self.try_peek_tok(3, 1)?;
         if let TokenType::Comma = maybe_comma.data {
@@ -338,7 +338,7 @@ impl<'a> InstParser<'a> {
         }
         // must be immediate here
         let imm_tok = self.try_next_tok(3, 1)?;
-        let imm = self.try_parse_imm(12, &imm_tok)?;
+        let imm = self.try_parse_imm(12, imm_tok)?;
         // check for lparen
         let maybe_lparen = self.try_peek_tok(3, 2)?;
         let is_lparen = if let TokenType::LParen = maybe_lparen.data {
@@ -349,7 +349,7 @@ impl<'a> InstParser<'a> {
         };
         // must be a register here
         let reg2_tok = self.try_next_tok(3, 2)?;
-        let second_reg = self.try_parse_reg(&reg2_tok)?;
+        let second_reg = self.try_parse_reg(reg2_tok)?;
         if is_lparen {
             let maybe_rparen = self.try_next_tok(3, 2)?;
             if let TokenType::RParen = maybe_rparen.data {
@@ -396,7 +396,7 @@ impl<'a> InstParser<'a> {
         }
     }
 
-    fn try_parse_reg(&self, token: &Token) -> Result<IRegister, ParseError> {
+    fn try_parse_reg(&self, token: Token) -> Result<IRegister, ParseError> {
         match &token.data {
             TokenType::Name(name) => self
                 .data
@@ -414,8 +414,8 @@ impl<'a> InstParser<'a> {
 
     /// Parses an immediate that is required to be at most n bits.
     /// If the provided immediate is a negative, then the upper (32 - n + 1) bits must all be 1.
-    fn try_parse_imm(&self, n: u8, token: &Token) -> Result<DataWord, ParseError> {
-        match &token.data {
+    fn try_parse_imm(&self, n: u8, token: Token) -> Result<DataWord, ParseError> {
+        match token.data {
             // Check lower n bits
             // We give a pass to negative numbers with high bits set
             TokenType::Immediate(val, radix) => {
@@ -424,22 +424,22 @@ impl<'a> InstParser<'a> {
                     0
                 } else {
                     (-1i32)
-                        << (if *val < 0 {
+                        << (if val < 0 {
                             // Allow the sign bit to be part of the mask
                             n - 1
                         } else {
                             n
                         })
                 };
-                let mask_result = *val & mask;
+                let mask_result = val & mask;
                 if mask_result != 0 && mask_result != mask {
                     Err(ParseError::imm_too_big(
                         token.location,
                         n,
-                        &radix.format(*val),
+                        &radix.format(val),
                     ))
                 } else {
-                    Ok(DataWord::from(*val))
+                    Ok(DataWord::from(val))
                 }
             }
             _ => Err(ParseError::unexpected_type(
@@ -454,7 +454,7 @@ impl<'a> InstParser<'a> {
     fn try_parse_imm_or_label_ref(
         &self,
         max_imm_len: u8,
-        token: &Token,
+        token: Token,
     ) -> Result<ImmOrLabel, ParseError> {
         if let TokenType::Name(name) = &token.data {
             // label case
@@ -474,17 +474,17 @@ impl<'a> InstParser<'a> {
         match parse_type {
             R(inst_new) => {
                 // R-types are always "inst rd, rs1, rs2" with one or no commas in between
-                let args = self.consume_commasep_args(3)?;
-                let rd = self.try_parse_reg(&args[0])?;
-                let rs1 = self.try_parse_reg(&args[1])?;
-                let rs2 = self.try_parse_reg(&args[2])?;
+                let mut args = self.consume_commasep_args(3)?.into_iter();
+                let rd = self.try_parse_reg(args.next().unwrap())?;
+                let rs1 = self.try_parse_reg(args.next().unwrap())?;
+                let rs2 = self.try_parse_reg(args.next().unwrap())?;
                 ok_wrap_concr(inst_new(rd, rs1, rs2))
             }
             Arith(inst_new) => {
-                let args = self.consume_commasep_args(3)?;
-                let rd = self.try_parse_reg(&args[0])?;
-                let rs1 = self.try_parse_reg(&args[1])?;
-                let imm = self.try_parse_imm(12, &args[2])?;
+                let mut args = self.consume_commasep_args(3)?.into_iter();
+                let rd = self.try_parse_reg(args.next().unwrap())?;
+                let rs1 = self.try_parse_reg(args.next().unwrap())?;
+                let imm = self.try_parse_imm(12, args.next().unwrap())?;
                 ok_wrap_concr(inst_new(rd, rs1, imm))
             }
             Env(inst_new) => {
@@ -506,11 +506,11 @@ impl<'a> InstParser<'a> {
                 ok_wrap_concr(inst_new(rs1, rs2, imm))
             }
             B(inst_new) => {
-                let args = self.consume_commasep_args(3)?;
-                let rs1 = self.try_parse_reg(&args[0])?;
-                let rs2 = self.try_parse_reg(&args[1])?;
+                let mut args = self.consume_commasep_args(3)?.into_iter();
+                let rs1 = self.try_parse_reg(args.next().unwrap())?;
+                let rs2 = self.try_parse_reg(args.next().unwrap())?;
                 // Becuse branches actually chop off the LSB, we can take up to 13b
-                let last_arg = self.try_parse_imm_or_label_ref(13, &args[2])?;
+                let last_arg = self.try_parse_imm_or_label_ref(13, args.next().unwrap())?;
                 match last_arg {
                     ImmOrLabel::Imm(imm) => {
                         if u32::from(imm) & 1 > 0 {
@@ -534,10 +534,12 @@ impl<'a> InstParser<'a> {
             Jal => {
                 let args = self.consume_unbounded_commasep_args()?;
                 let argc = args.len();
+                let mut args_iter = args.into_iter();
                 match argc {
                     1 => {
                         // "jal label"
-                        let last_arg = self.try_parse_imm_or_label_ref(20, &args[0])?;
+                        let last_arg =
+                            self.try_parse_imm_or_label_ref(20, args_iter.next().unwrap())?;
                         match last_arg {
                             ImmOrLabel::Imm(imm) => ok_wrap_concr(JalPseudo::expand(imm)),
                             ImmOrLabel::Label(tgt_label) => ok_vec(
@@ -547,9 +549,10 @@ impl<'a> InstParser<'a> {
                     }
                     2 => {
                         // "jal ra label"
-                        let rd = self.try_parse_reg(&args[0])?;
+                        let rd = self.try_parse_reg(args_iter.next().unwrap())?;
                         // J-type has 20-bit immediate
-                        let last_arg = self.try_parse_imm_or_label_ref(20, &args[1])?;
+                        let last_arg =
+                            self.try_parse_imm_or_label_ref(20, args_iter.next().unwrap())?;
                         match last_arg {
                             ImmOrLabel::Imm(imm) => ok_wrap_concr(isa::Jal::new(rd, imm)),
                             ImmOrLabel::Label(tgt_label) => ok_vec(
@@ -569,17 +572,18 @@ impl<'a> InstParser<'a> {
             Jalr => {
                 let args = self.consume_unbounded_commasep_args()?;
                 let argc = args.len();
+                let mut args_iter = args.into_iter();
                 match argc {
                     1 => {
                         // "jalr rs"
-                        let rs = self.try_parse_reg(&args[0])?;
+                        let rs = self.try_parse_reg(args_iter.next().unwrap())?;
                         ok_wrap_concr(JalrPseudo::expand(rs))
                     }
                     3 => {
                         // "jalr rd, rs, imm"
-                        let rd = self.try_parse_reg(&args[0])?;
-                        let rs1 = self.try_parse_reg(&args[1])?;
-                        let imm = self.try_parse_imm(12, &args[2])?;
+                        let rd = self.try_parse_reg(args_iter.next().unwrap())?;
+                        let rs1 = self.try_parse_reg(args_iter.next().unwrap())?;
+                        let imm = self.try_parse_imm(12, args_iter.next().unwrap())?;
                         ok_wrap_concr(isa::Jalr::new(rd, rs1, imm))
                     }
                     _ => Err(ParseError::wrong_diff_argc(
@@ -592,15 +596,15 @@ impl<'a> InstParser<'a> {
                 }
             }
             U(inst_new) => {
-                let args = self.consume_commasep_args(2)?;
-                let rd = self.try_parse_reg(&args[0])?;
-                let imm = self.try_parse_imm(20, &args[1])?;
+                let mut args = self.consume_commasep_args(2)?.into_iter();
+                let rd = self.try_parse_reg(args.next().unwrap())?;
+                let imm = self.try_parse_imm(20, args.next().unwrap())?;
                 ok_wrap_concr(inst_new(rd, imm))
             }
             Li => {
-                let args = self.consume_commasep_args(2)?;
-                let rd = self.try_parse_reg(&args[0])?;
-                let imm = self.try_parse_imm(32, &args[1])?;
+                let mut args = self.consume_commasep_args(2)?.into_iter();
+                let rd = self.try_parse_reg(args.next().unwrap())?;
+                let imm = self.try_parse_imm(32, args.next().unwrap())?;
                 ok_wrap_expanded(crate::pseudo_inst::Li::expand(rd, imm))
             }
             NoArgs(inst_expand) => {
@@ -608,15 +612,15 @@ impl<'a> InstParser<'a> {
                 ok_wrap_concr(inst_expand())
             }
             RegReg(inst_expand) => {
-                let args = self.consume_commasep_args(2)?;
-                let rd = self.try_parse_reg(&args[0])?;
-                let rs = self.try_parse_reg(&args[1])?;
+                let mut args = self.consume_commasep_args(2)?.into_iter();
+                let rd = self.try_parse_reg(args.next().unwrap())?;
+                let rs = self.try_parse_reg(args.next().unwrap())?;
                 ok_wrap_concr(inst_expand(rd, rs))
             }
             LikeJ(inst_expand) => {
-                let args = self.consume_commasep_args(1)?;
+                let mut args = self.consume_commasep_args(1)?.into_iter();
                 // j expands to J-type, so 20-bit immediate
-                let last_arg = self.try_parse_imm_or_label_ref(20, &args[0])?;
+                let last_arg = self.try_parse_imm_or_label_ref(20, args.next().unwrap())?;
                 match last_arg {
                     ImmOrLabel::Imm(imm) => ok_wrap_concr(inst_expand(imm)),
                     ImmOrLabel::Label(tgt_label) => {
@@ -625,8 +629,8 @@ impl<'a> InstParser<'a> {
                 }
             }
             OneReg(inst_expand) => {
-                let args = self.consume_commasep_args(1)?;
-                let rs = self.try_parse_reg(&args[0])?;
+                let mut args = self.consume_commasep_args(1)?.into_iter();
+                let rs = self.try_parse_reg(args.next().unwrap())?;
                 ok_wrap_concr(inst_expand(rs))
             }
         }
@@ -726,7 +730,7 @@ mod tests {
     /// Lexes a program. Asserts that the lex has no errors.
     fn lex(prog: &str) -> LexResult {
         let result = Lexer::from_str(prog).lex();
-        assert!(!result.has_errors());
+        assert_eq!(result.reporter.get_errs(), &[]);
         result
     }
 
@@ -734,7 +738,8 @@ mod tests {
     /// Assumes that there were no lex errors.
     fn parse_and_lex(prog: &str) -> Vec<PartialInst> {
         let ParseResult { insts, reporter } = RiscVParser::from_lex_result(lex(prog)).parse();
-        assert!(reporter.is_empty());
+        // Check against empty slice instead of using is_empty so the backtrace displays errors
+        assert_eq!(reporter.get_errs(), &[]);
         insts
     }
 

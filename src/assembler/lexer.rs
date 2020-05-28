@@ -11,13 +11,6 @@ pub struct LexResult {
     pub reporter: ParseErrorReporter,
 }
 
-impl LexResult {
-    #[cfg(test)]
-    pub fn has_errors(&self) -> bool {
-        !self.reporter.errs.is_empty()
-    }
-}
-
 // The line number of a token.
 pub type LineNo = usize;
 // The offset of a token within a line.
