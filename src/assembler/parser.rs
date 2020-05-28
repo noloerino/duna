@@ -474,17 +474,17 @@ impl<'a> InstParser<'a> {
         match parse_type {
             R(inst_new) => {
                 // R-types are always "inst rd, rs1, rs2" with one or no commas in between
-                let mut args = self.consume_commasep_args(3)?.into_iter();
-                let rd = self.try_parse_reg(args.next().unwrap())?;
-                let rs1 = self.try_parse_reg(args.next().unwrap())?;
-                let rs2 = self.try_parse_reg(args.next().unwrap())?;
+                let mut args = self.consume_commasep_args(3)?;
+                let rd = self.try_parse_reg(args.remove(0))?;
+                let rs1 = self.try_parse_reg(args.remove(0))?;
+                let rs2 = self.try_parse_reg(args.remove(0))?;
                 ok_wrap_concr(inst_new(rd, rs1, rs2))
             }
             Arith(inst_new) => {
-                let mut args = self.consume_commasep_args(3)?.into_iter();
-                let rd = self.try_parse_reg(args.next().unwrap())?;
-                let rs1 = self.try_parse_reg(args.next().unwrap())?;
-                let imm = self.try_parse_imm(12, args.next().unwrap())?;
+                let mut args = self.consume_commasep_args(3)?;
+                let rd = self.try_parse_reg(args.remove(0))?;
+                let rs1 = self.try_parse_reg(args.remove(0))?;
+                let imm = self.try_parse_imm(12, args.remove(0))?;
                 ok_wrap_concr(inst_new(rd, rs1, imm))
             }
             Env(inst_new) => {
@@ -506,11 +506,11 @@ impl<'a> InstParser<'a> {
                 ok_wrap_concr(inst_new(rs1, rs2, imm))
             }
             B(inst_new) => {
-                let mut args = self.consume_commasep_args(3)?.into_iter();
-                let rs1 = self.try_parse_reg(args.next().unwrap())?;
-                let rs2 = self.try_parse_reg(args.next().unwrap())?;
+                let mut args = self.consume_commasep_args(3)?;
+                let rs1 = self.try_parse_reg(args.remove(0))?;
+                let rs2 = self.try_parse_reg(args.remove(0))?;
                 // Becuse branches actually chop off the LSB, we can take up to 13b
-                let last_arg = self.try_parse_imm_or_label_ref(13, args.next().unwrap())?;
+                let last_arg = self.try_parse_imm_or_label_ref(13, args.remove(0))?;
                 match last_arg {
                     ImmOrLabel::Imm(imm) => {
                         if u32::from(imm) & 1 > 0 {
@@ -532,14 +532,12 @@ impl<'a> InstParser<'a> {
                 }
             }
             Jal => {
-                let args = self.consume_unbounded_commasep_args()?;
+                let mut args = self.consume_unbounded_commasep_args()?;
                 let argc = args.len();
-                let mut args_iter = args.into_iter();
                 match argc {
                     1 => {
                         // "jal label"
-                        let last_arg =
-                            self.try_parse_imm_or_label_ref(20, args_iter.next().unwrap())?;
+                        let last_arg = self.try_parse_imm_or_label_ref(20, args.remove(0))?;
                         match last_arg {
                             ImmOrLabel::Imm(imm) => ok_wrap_concr(JalPseudo::expand(imm)),
                             ImmOrLabel::Label(tgt_label) => ok_vec(
@@ -549,10 +547,9 @@ impl<'a> InstParser<'a> {
                     }
                     2 => {
                         // "jal ra label"
-                        let rd = self.try_parse_reg(args_iter.next().unwrap())?;
+                        let rd = self.try_parse_reg(args.remove(0))?;
                         // J-type has 20-bit immediate
-                        let last_arg =
-                            self.try_parse_imm_or_label_ref(20, args_iter.next().unwrap())?;
+                        let last_arg = self.try_parse_imm_or_label_ref(20, args.remove(0))?;
                         match last_arg {
                             ImmOrLabel::Imm(imm) => ok_wrap_concr(isa::Jal::new(rd, imm)),
                             ImmOrLabel::Label(tgt_label) => ok_vec(
@@ -570,20 +567,19 @@ impl<'a> InstParser<'a> {
                 }
             }
             Jalr => {
-                let args = self.consume_unbounded_commasep_args()?;
+                let mut args = self.consume_unbounded_commasep_args()?;
                 let argc = args.len();
-                let mut args_iter = args.into_iter();
                 match argc {
                     1 => {
                         // "jalr rs"
-                        let rs = self.try_parse_reg(args_iter.next().unwrap())?;
+                        let rs = self.try_parse_reg(args.remove(0))?;
                         ok_wrap_concr(JalrPseudo::expand(rs))
                     }
                     3 => {
                         // "jalr rd, rs, imm"
-                        let rd = self.try_parse_reg(args_iter.next().unwrap())?;
-                        let rs1 = self.try_parse_reg(args_iter.next().unwrap())?;
-                        let imm = self.try_parse_imm(12, args_iter.next().unwrap())?;
+                        let rd = self.try_parse_reg(args.remove(0))?;
+                        let rs1 = self.try_parse_reg(args.remove(0))?;
+                        let imm = self.try_parse_imm(12, args.remove(0))?;
                         ok_wrap_concr(isa::Jalr::new(rd, rs1, imm))
                     }
                     _ => Err(ParseError::wrong_diff_argc(
@@ -596,15 +592,15 @@ impl<'a> InstParser<'a> {
                 }
             }
             U(inst_new) => {
-                let mut args = self.consume_commasep_args(2)?.into_iter();
-                let rd = self.try_parse_reg(args.next().unwrap())?;
-                let imm = self.try_parse_imm(20, args.next().unwrap())?;
+                let mut args = self.consume_commasep_args(2)?;
+                let rd = self.try_parse_reg(args.remove(0))?;
+                let imm = self.try_parse_imm(20, args.remove(0))?;
                 ok_wrap_concr(inst_new(rd, imm))
             }
             Li => {
-                let mut args = self.consume_commasep_args(2)?.into_iter();
-                let rd = self.try_parse_reg(args.next().unwrap())?;
-                let imm = self.try_parse_imm(32, args.next().unwrap())?;
+                let mut args = self.consume_commasep_args(2)?;
+                let rd = self.try_parse_reg(args.remove(0))?;
+                let imm = self.try_parse_imm(32, args.remove(0))?;
                 ok_wrap_expanded(crate::pseudo_inst::Li::expand(rd, imm))
             }
             NoArgs(inst_expand) => {
@@ -612,15 +608,15 @@ impl<'a> InstParser<'a> {
                 ok_wrap_concr(inst_expand())
             }
             RegReg(inst_expand) => {
-                let mut args = self.consume_commasep_args(2)?.into_iter();
-                let rd = self.try_parse_reg(args.next().unwrap())?;
-                let rs = self.try_parse_reg(args.next().unwrap())?;
+                let mut args = self.consume_commasep_args(2)?;
+                let rd = self.try_parse_reg(args.remove(0))?;
+                let rs = self.try_parse_reg(args.remove(0))?;
                 ok_wrap_concr(inst_expand(rd, rs))
             }
             LikeJ(inst_expand) => {
-                let mut args = self.consume_commasep_args(1)?.into_iter();
+                let mut args = self.consume_commasep_args(1)?;
                 // j expands to J-type, so 20-bit immediate
-                let last_arg = self.try_parse_imm_or_label_ref(20, args.next().unwrap())?;
+                let last_arg = self.try_parse_imm_or_label_ref(20, args.remove(0))?;
                 match last_arg {
                     ImmOrLabel::Imm(imm) => ok_wrap_concr(inst_expand(imm)),
                     ImmOrLabel::Label(tgt_label) => {
@@ -629,8 +625,8 @@ impl<'a> InstParser<'a> {
                 }
             }
             OneReg(inst_expand) => {
-                let mut args = self.consume_commasep_args(1)?.into_iter();
-                let rs = self.try_parse_reg(args.next().unwrap())?;
+                let mut args = self.consume_commasep_args(1)?;
+                let rs = self.try_parse_reg(args.remove(0))?;
                 ok_wrap_concr(inst_expand(rs))
             }
         }
