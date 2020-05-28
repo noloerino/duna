@@ -397,15 +397,18 @@ impl<'a> InstParser<'a> {
 
     fn try_parse_reg(&self, token: Token) -> Result<IRegister, ParseError> {
         match &token.data {
-            TokenType::Name(name) => self
-                .data
-                .reg_expansion_table
-                .get(name)
-                .cloned()
-                .ok_or_else(|| ParseError::unexpected_type(token.location, "register", token.data)),
+            TokenType::Name(name) => {
+                self.data
+                    .reg_expansion_table
+                    .get(name)
+                    .cloned()
+                    .ok_or_else(|| {
+                        ParseError::unexpected_type(token.location, "register name", token.data)
+                    })
+            }
             _ => Err(ParseError::unexpected_type(
                 token.location,
-                "register",
+                "register name",
                 token.data,
             )),
         }
