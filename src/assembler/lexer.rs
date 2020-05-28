@@ -358,6 +358,7 @@ impl<'a> LineLexer<'a> {
 }
 
 pub struct Lexer<'a> {
+    file_name: Option<&'a str>,
     contents: Cow<'a, str>,
 }
 
@@ -365,6 +366,7 @@ impl Lexer<'_> {
     pub fn from_file(path: &str) -> Lexer {
         let contents = fs::read_to_string(path).expect("Failed to open file");
         Lexer {
+            file_name: Some(path),
             contents: Cow::Owned(contents),
         }
     }
@@ -372,6 +374,7 @@ impl Lexer<'_> {
     #[allow(clippy::should_implement_trait)]
     pub fn from_str(contents: &str) -> Lexer {
         Lexer {
+            file_name: None,
             contents: Cow::Borrowed(contents),
         }
     }
@@ -379,7 +382,10 @@ impl Lexer<'_> {
     /// Consume the lexer's iterator to produce a stream of tokens and any possible errors.
     pub fn lex(self) -> LexResult {
         let mut toks = Vec::<TokenStream>::new();
-        let mut reporter = ParseErrorReporter::new(self.contents.to_string());
+        let mut reporter = ParseErrorReporter::new(
+            self.file_name.unwrap_or("<no file name>").to_string(),
+            self.contents.to_string(),
+        );
         for (lineno, line) in self.contents.lines().enumerate() {
             toks.push(LineLexer::new(lineno, line, &mut reporter).lex());
         }
@@ -436,7 +442,7 @@ mod tests {
         ];
         for (line, fmt, exp) in cases {
             let head = line.chars().next().unwrap();
-            let mut reporter = ParseErrorReporter::new(line.to_string());
+            let mut reporter = ParseErrorReporter::new("test file".to_string(), line.to_string());
             let mut lexer = LineLexer::new(0, line.get(1..).unwrap(), &mut reporter);
             let result = lexer.build_imm(&LexState {
                 head,

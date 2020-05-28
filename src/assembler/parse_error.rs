@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::fmt;
 
 pub struct ParseErrorReport {
+    file_name: String,
     /// Maps a line number to the raw contents of the corresponding line.
     lines: HashMap<LineNo, String>,
     /// Assume the errors are sorted by location
@@ -24,26 +25,27 @@ impl ParseErrorReport {
 impl fmt::Debug for ParseErrorReport {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for err in &self.errs {
-            write!(f, "{}\n", err)?;
+            writeln!(f, "{}", err)?;
             let lineno = err.location.lineno;
-            // TODO fix spacing
-            write!(f, "  |\n")?;
-            write!(
+            // TODO fix spacing if lineno is more than one digit
+            writeln!(f, " --> {}:{}", self.file_name, err.location)?;
+            writeln!(f, "  |")?;
+            writeln!(
                 f,
-                "{} | {}\n",
+                "{} | {}",
                 lineno,
                 self.lines
                     .get(&lineno)
                     .unwrap_or(&"line not found".to_string())
             )?;
-            write!(f, "  |\n")?;
+            writeln!(f, "  |\n")?;
         }
         if self.errs.is_empty() {
             Ok(())
         } else {
             write!(
                 f,
-                "\nerror: aborting due to {} previous errors",
+                "error: aborting due to {} previous errors",
                 self.errs.len()
             )
         }
@@ -52,13 +54,15 @@ impl fmt::Debug for ParseErrorReport {
 
 /// Reports parse-time errors
 pub struct ParseErrorReporter {
+    file_name: String,
     original_text: String,
     pub errs: Vec<ParseError>,
 }
 
 impl ParseErrorReporter {
-    pub fn new(original_text: String) -> ParseErrorReporter {
+    pub fn new(file_name: String, original_text: String) -> ParseErrorReporter {
         ParseErrorReporter {
+            file_name,
             original_text,
             errs: Vec::new(),
         }
@@ -89,6 +93,7 @@ impl ParseErrorReporter {
             }
         }
         ParseErrorReport {
+            file_name: self.file_name,
             lines: line_map,
             errs,
         }
@@ -305,6 +310,6 @@ impl ParseError {
 
 impl fmt::Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "error: {} (at {})", self.tpe, self.location)
+        write!(f, "error: {}", self.tpe)
     }
 }
