@@ -11,6 +11,13 @@ pub struct LexResult {
     pub reporter: ParseErrorReporter,
 }
 
+impl LexResult {
+    #[cfg(test)]
+    pub fn has_errors(&self) -> bool {
+        !self.reporter.errs.is_empty()
+    }
+}
+
 // The line number of a token.
 pub type LineNo = usize;
 // The offset of a token within a line.
@@ -350,21 +357,18 @@ impl<'a> LineLexer<'a> {
 
 pub struct Lexer<'a> {
     contents: Cow<'a, str>,
-    reporter: ParseErrorReporter,
 }
 
 impl<'a> Lexer<'a> {
     pub fn from_file(path: &str) -> Lexer {
         let contents = fs::read_to_string(path).expect("Failed to open file");
         Lexer {
-            reporter: ParseErrorReporter::new(),
             contents: Cow::Owned(contents),
         }
     }
 
     pub fn from_str(contents: &str) -> Lexer {
         Lexer {
-            reporter: ParseErrorReporter::new(),
             contents: Cow::Borrowed(contents),
         }
     }
@@ -390,9 +394,8 @@ mod tests {
     #[test]
     fn test_simple_lex() {
         let LexResult { lines, reporter } = Lexer::from_str("addi x0, x1, x2").lex();
-        let errs = reporter.errs;
+        assert!(reporter.is_empty());
         let toks = &lines[0];
-        assert!(errs.is_empty());
         // check actual data
         assert_eq!(toks[0].data, TokenType::Name("addi".to_string()));
         assert_eq!(toks[1].data, TokenType::Name("x0".to_string()));

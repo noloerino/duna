@@ -230,17 +230,6 @@ lazy_static! {
 }
 
 impl RiscVParser {
-    pub fn from_tokens(lines: LineTokenStream) -> Self {
-        RiscVParser {
-            parser_data: ParserData {
-                inst_expansion_table: &INST_EXPANSION_TABLE,
-                reg_expansion_table: &REG_EXPANSION_TABLE,
-            },
-            lines,
-            reporter: ParseErrorReporter::new(),
-        }
-    }
-
     pub fn from_lex_result(lex_result: LexResult) -> Self {
         RiscVParser {
             parser_data: ParserData {
@@ -252,7 +241,7 @@ impl RiscVParser {
         }
     }
 
-    pub fn parse<'a>(mut self) -> ParseResult {
+    pub fn parse(mut self) -> ParseResult {
         let mut insts = Vec::<PartialInst>::new();
         let mut last_label: Option<Label> = None;
         let parser_data = &self.parser_data;
@@ -300,17 +289,17 @@ enum ImmOrLabel {
 }
 
 /// Convenience method to stuff a PartialInst into a Vec<PartialInst>
-fn ok_vec<'a>(inst: PartialInst) -> LineParseResult {
+fn ok_vec(inst: PartialInst) -> LineParseResult {
     Ok(vec![inst])
 }
 
 /// Convenience method to stuff a ConcreteInst into Ok(vec![PartialInst(...)])
-fn ok_wrap_concr<'a>(inst: ConcreteInst) -> LineParseResult {
+fn ok_wrap_concr(inst: ConcreteInst) -> LineParseResult {
     ok_vec(PartialInst::new_complete(inst))
 }
 
 /// Convenience method to turn a Vec<ConcreteInst> into Ok(Vec<PartialInst>)
-fn ok_wrap_expanded<'a>(inst: Vec<ConcreteInst>) -> LineParseResult {
+fn ok_wrap_expanded(inst: Vec<ConcreteInst>) -> LineParseResult {
     Ok(inst.into_iter().map(PartialInst::new_complete).collect())
 }
 
@@ -825,16 +814,16 @@ mod tests {
     use crate::program_state::IRegister::*;
 
     /// Lexes a program. Asserts that the lex has no errors.
-    fn lex(prog: &str) -> Vec<TokenStream> {
-        let LexResult { lines, reporter } = Lexer::from_str(prog).lex();
-        assert!(reporter.is_empty());
-        lines
+    fn lex(prog: &str) -> LexResult {
+        let result = Lexer::from_str(prog).lex();
+        assert!(!result.has_errors());
+        result
     }
 
     /// Parses and lexes the provided string, assuming that there are no errors in either phase.
     /// Assumes that there were no lex errors.
     fn parse_and_lex(prog: &str) -> Vec<PartialInst> {
-        let ParseResult { insts, reporter } = RiscVParser::from_tokens(lex(prog)).parse();
+        let ParseResult { insts, reporter } = RiscVParser::from_lex_result(lex(prog)).parse();
         assert!(reporter.is_empty());
         insts
     }
@@ -888,7 +877,7 @@ mod tests {
             "add x1,,x2, x3",
         ];
         for inst in bad_insts {
-            let ParseResult { reporter, .. } = RiscVParser::from_tokens(lex(inst)).parse();
+            let ParseResult { reporter, .. } = RiscVParser::from_lex_result(lex(inst)).parse();
             assert!(!reporter.is_empty());
         }
     }
@@ -918,7 +907,7 @@ mod tests {
     #[test]
     fn test_imm_too_big() {
         // immediates for instructions like addi can only be 12 bits long
-        let parser = RiscVParser::from_tokens(lex("addi sp sp 0xF000"));
+        let parser = RiscVParser::from_lex_result(lex("addi sp sp 0xF000"));
         let ParseResult { insts, reporter } = parser.parse();
         assert!(!reporter.is_empty());
         assert!(insts.is_empty());
