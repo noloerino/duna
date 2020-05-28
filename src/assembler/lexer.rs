@@ -376,20 +376,21 @@ pub struct Lexer<'a> {
 }
 
 impl Lexer<'_> {
-    pub fn from_file(path: &str) -> Lexer {
+    pub fn lex_file(path: &str) -> LexResult {
         let contents = fs::read_to_string(path).expect("Failed to open file");
         Lexer {
             file_name: Some(path),
             contents: Cow::Owned(contents),
         }
+        .lex()
     }
 
-    #[allow(clippy::should_implement_trait)]
-    pub fn from_str(contents: &str) -> Lexer {
+    pub fn lex_str(contents: &str) -> LexResult {
         Lexer {
             file_name: None,
             contents: Cow::Borrowed(contents),
         }
+        .lex()
     }
 
     /// Consume the lexer's iterator to produce a stream of tokens and any possible errors.
@@ -441,7 +442,7 @@ mod tests {
     fn test_simple_lex() {
         let LexResult {
             lines, reporter, ..
-        } = Lexer::from_str("addi x0, x1, x2").lex();
+        } = Lexer::lex_str("addi x0, x1, x2");
         assert!(reporter.is_empty());
         let toks = &lines[0];
         // check actual data

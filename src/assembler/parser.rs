@@ -128,7 +128,15 @@ lazy_static! {
 }
 
 impl RiscVParser {
-    pub fn from_lex_result(lex_result: LexResult) -> Self {
+    pub fn parse_file(path: &str) -> ParseResult {
+        RiscVParser::parse_lex_result(Lexer::lex_file(path))
+    }
+
+    pub fn parse_str(contents: &str) -> ParseResult {
+        RiscVParser::parse_lex_result(Lexer::lex_str(contents))
+    }
+
+    pub fn parse_lex_result(lex_result: LexResult) -> ParseResult {
         RiscVParser {
             parser_data: ParserData {
                 inst_expansion_table: &INST_EXPANSION_TABLE,
@@ -137,9 +145,10 @@ impl RiscVParser {
             lines: lex_result.lines,
             reporter: lex_result.reporter,
         }
+        .parse()
     }
 
-    pub fn parse(mut self) -> ParseResult {
+    fn parse(mut self) -> ParseResult {
         let mut insts = Vec::<PartialInst>::new();
         let mut last_label: Option<Label> = None;
         let parser_data = &self.parser_data;
@@ -727,7 +736,7 @@ mod tests {
 
     /// Lexes a program. Asserts that the lex has no errors.
     fn lex(prog: &str) -> LexResult {
-        let result = Lexer::from_str(prog).lex();
+        let result = Lexer::lex_str(prog);
         assert_eq!(result.reporter.get_errs(), &[]);
         result
     }
@@ -735,7 +744,7 @@ mod tests {
     /// Parses and lexes the provided string, assuming that there are no errors in either phase.
     /// Assumes that there were no lex errors.
     fn parse_and_lex(prog: &str) -> Vec<PartialInst> {
-        let ParseResult { insts, report } = RiscVParser::from_lex_result(lex(prog)).parse();
+        let ParseResult { insts, report } = RiscVParser::parse_lex_result(lex(prog));
         assert!(report.is_empty(), format!("{:?}", report.report()));
         insts
     }
@@ -789,7 +798,7 @@ mod tests {
             "add x1,,x2, x3",
         ];
         for inst in bad_insts {
-            let ParseResult { report, .. } = RiscVParser::from_lex_result(lex(inst)).parse();
+            let ParseResult { report, .. } = RiscVParser::parse_str(inst);
             assert!(!report.is_empty());
         }
     }
@@ -819,8 +828,7 @@ mod tests {
     #[test]
     fn test_imm_too_big() {
         // immediates for instructions like addi can only be 12 bits long
-        let parser = RiscVParser::from_lex_result(lex("addi sp sp 0xF000"));
-        let ParseResult { insts, report } = parser.parse();
+        let ParseResult { insts, report } = RiscVParser::parse_str("addi sp sp 0xF000");
         assert!(!report.is_empty());
         assert!(insts.is_empty());
     }

@@ -1,31 +1,22 @@
-use super::lexer::Lexer;
 use super::parse_error::ParseErrorReport;
 use super::parser::{Label, ParseResult, RiscVParser};
 use super::partial_inst::PartialInst;
 use crate::program_state::{DataWord, RiscVProgram};
 use std::collections::HashMap;
 
-pub struct Assembler<'a> {
-    lexer: Lexer<'a>,
-}
+pub struct Assembler;
 
-impl<'a> Assembler<'a> {
-    pub fn from_file(path: &str) -> Assembler {
-        Assembler {
-            lexer: Lexer::from_file(path),
-        }
+impl Assembler {
+    pub fn assemble_file(path: &str) -> Result<UnlinkedProgram, ParseErrorReport> {
+        Assembler::assemble(RiscVParser::parse_file(path))
     }
 
-    #[allow(clippy::should_implement_trait)]
-    pub fn from_str(contents: &str) -> Assembler {
-        Assembler {
-            lexer: Lexer::from_str(contents),
-        }
+    pub fn assemble_str(contents: &str) -> Result<UnlinkedProgram, ParseErrorReport> {
+        Assembler::assemble(RiscVParser::parse_str(contents))
     }
 
-    pub fn assemble(self) -> Result<UnlinkedProgram, ParseErrorReport> {
-        let ParseResult { insts, report } = RiscVParser::from_lex_result(self.lexer.lex()).parse();
-
+    fn assemble(parse_result: ParseResult) -> Result<UnlinkedProgram, ParseErrorReport> {
+        let ParseResult { insts, report } = parse_result;
         if report.is_empty() {
             Ok(UnlinkedProgram::new(insts))
         } else {
@@ -129,9 +120,7 @@ mod tests {
     #[test]
     fn test_forward_local_label() {
         let program = "beq x0, x0, l1\nnop\nnop\nl1:nop";
-        let unlinked = Assembler::from_str(program)
-            .assemble()
-            .expect("Assembler errored out");
+        let unlinked = Assembler::assemble_str(program).expect("Assembler errored out");
         // should automatically attempt to link
         let concrete = unlinked.try_into_program();
         println!("{:?}", concrete.insts);
@@ -141,9 +130,7 @@ mod tests {
     #[test]
     fn test_backward_local_label() {
         let program = "\nl1:nop\nnop\nnop\nbeq x0, x0, l1";
-        let unlinked = Assembler::from_str(program)
-            .assemble()
-            .expect("Assembler errored out");
+        let unlinked = Assembler::assemble_str(program).expect("Assembler errored out");
         // should automatically attempt to link
         let concrete = unlinked.try_into_program();
         println!("{:?}", concrete.insts);

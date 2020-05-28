@@ -320,16 +320,13 @@ impl fmt::Display for ParseError {
 
 #[cfg(test)]
 mod tests {
-    use super::super::lexer::Lexer;
     use super::super::parser::RiscVParser;
 
     #[test]
     /// Tests that an error produced by the lexer makes it so the affected line is not passed
     /// to the parser.
     fn test_lex_short_circuit() {
-        let report = RiscVParser::from_lex_result(Lexer::from_str("addi x1 0xggg1, x2").lex())
-            .parse()
-            .report;
+        let report = RiscVParser::parse_str("addi x1 0xggg1, x2").report;
         assert_eq!(report.errs.len(), 1);
     }
 }

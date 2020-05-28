@@ -45,7 +45,7 @@ impl RiscVProgram {
     }
 
     pub fn from_file(path: &str) -> Result<RiscVProgram, ParseErrorReport> {
-        Ok(Assembler::from_file(path).assemble()?.try_into_program())
+        Ok(Assembler::assemble_file(path)?.try_into_program())
     }
 
     /// Runs the program to completion, returning the value in register a0.
@@ -68,7 +68,7 @@ impl str::FromStr for RiscVProgram {
     type Err = ParseErrorReport;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Assembler::from_str(s).assemble()?.try_into_program())
+        Ok(Assembler::assemble_str(s)?.try_into_program())
     }
 }
 
