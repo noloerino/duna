@@ -47,8 +47,8 @@ impl RiscVProgram {
         Ok(Assembler::from_file(path).assemble()?.try_into_program())
     }
 
-    pub fn from_string(contents: String) -> Result<RiscVProgram, Vec<ParseError>> {
-        Ok(Assembler::from_string(contents)
+    pub fn from_str(contents: &str) -> Result<RiscVProgram, Vec<ParseError>> {
+        Ok(Assembler::from_str(&contents)
             .assemble()?
             .try_into_program())
     }
@@ -507,8 +507,7 @@ mod test {
 
     #[test]
     fn test_e2e_program() {
-        let mut program =
-            RiscVProgram::from_string("addi s1, zero, 4\nadd a0, s1, zero".to_string()).unwrap();
+        let mut program = RiscVProgram::from_str("addi s1, zero, 4\nadd a0, s1, zero").unwrap();
         let result = program.run();
         assert_eq!(result, 4);
     }

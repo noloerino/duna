@@ -1,35 +1,34 @@
 use super::lexer::Lexer;
-use super::parser::{Label, ParseError, RiscVParser};
+use super::parser::{Label, ParseError, ParseResult, RiscVParser};
 use super::partial_inst::PartialInst;
 use crate::program_state::{DataWord, RiscVProgram};
 use std::collections::HashMap;
 
-pub struct Assembler {
-    lexer: Lexer,
+pub struct Assembler<'a> {
+    lexer: Lexer<'a>,
 }
 
-impl Assembler {
+impl<'a> Assembler<'a> {
     pub fn from_file(path: &str) -> Assembler {
         Assembler {
             lexer: Lexer::from_file(path),
         }
     }
 
-    pub fn from_string(contents: String) -> Assembler {
+    pub fn from_str(contents: &str) -> Assembler {
         Assembler {
-            lexer: Lexer::from_string(contents),
+            lexer: Lexer::from_str(contents),
         }
     }
 
     pub fn assemble(self) -> Result<UnlinkedProgram, Vec<ParseError>> {
-        let (toks, lex_errs) = self.lexer.lex();
-        let (insts, parse_errs) = RiscVParser::from_tokens(toks).parse();
-        let mut all_errs = lex_errs;
-        all_errs.extend(parse_errs);
-        if all_errs.is_empty() {
+        let ParseResult { insts, reporter } =
+            RiscVParser::from_lex_result(self.lexer.lex()).parse();
+
+        if reporter.is_empty() {
             Ok(UnlinkedProgram::new(insts))
         } else {
-            Err(all_errs)
+            Err(reporter.errs)
         }
     }
 }
@@ -129,7 +128,7 @@ mod tests {
     #[test]
     fn test_forward_local_label() {
         let program = "beq x0, x0, l1\nnop\nnop\nl1:nop";
-        let unlinked = Assembler::from_string(program.to_string())
+        let unlinked = Assembler::from_str(program)
             .assemble()
             .expect("Assembler errored out");
         // should automatically attempt to link
@@ -141,7 +140,7 @@ mod tests {
     #[test]
     fn test_backward_local_label() {
         let program = "\nl1:nop\nnop\nnop\nbeq x0, x0, l1";
-        let unlinked = Assembler::from_string(program.to_string())
+        let unlinked = Assembler::from_str(program)
             .assemble()
             .expect("Assembler errored out");
         // should automatically attempt to link

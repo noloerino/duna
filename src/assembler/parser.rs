@@ -12,7 +12,43 @@ use std::vec::IntoIter;
 pub type Label = String;
 
 type ParsedInstStream = Vec<PartialInst>;
-type ParseResult = Result<ParsedInstStream, ParseError>;
+type LineParseResult = Result<ParsedInstStream, ParseError>;
+pub struct ParseResult {
+    pub insts: ParsedInstStream,
+    pub reporter: ParseErrorReporter,
+}
+
+/// Reports parse-time errors
+pub struct ParseErrorReporter {
+    /// The indices at which these lines occur don't actually matter;
+    /// all that matters is this struct maintains ownership over the strings
+    /// so that its ParseErrors can maintain a reference to them.
+    // lines: Vec<String>,
+    pub errs: Vec<ParseError>,
+}
+
+impl ParseErrorReporter {
+    pub fn new() -> ParseErrorReporter {
+        ParseErrorReporter {
+            // lines: Vec::new(),
+            errs: Vec::new(),
+        }
+    }
+
+    pub fn add_error(&mut self, err: ParseError) {
+        self.errs.push(err);
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.errs.is_empty()
+    }
+}
+
+impl Default for ParseErrorReporter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 #[derive(Eq, PartialEq, Debug)]
 struct ParseErrorData {
@@ -117,9 +153,10 @@ struct ParserData {
 pub struct RiscVParser {
     parser_data: ParserData,
     lines: LineTokenStream,
+    reporter: ParseErrorReporter,
 }
 
-type TokenIter<'a> = Peekable<IntoIter<Token>>;
+type TokenIter = Peekable<IntoIter<Token>>;
 
 lazy_static! {
     static ref INST_EXPANSION_TABLE: HashMap<String, ParseType> = {
@@ -200,16 +237,28 @@ impl RiscVParser {
                 reg_expansion_table: &REG_EXPANSION_TABLE,
             },
             lines,
+            reporter: ParseErrorReporter::new(),
         }
     }
 
-    pub fn parse(self) -> (ParsedInstStream, Vec<ParseError>) {
+    pub fn from_lex_result(lex_result: LexResult) -> Self {
+        RiscVParser {
+            parser_data: ParserData {
+                inst_expansion_table: &INST_EXPANSION_TABLE,
+                reg_expansion_table: &REG_EXPANSION_TABLE,
+            },
+            lines: lex_result.lines,
+            reporter: lex_result.reporter,
+        }
+    }
+
+    pub fn parse<'a>(mut self) -> ParseResult {
         let mut insts = Vec::<PartialInst>::new();
-        let mut errs = Vec::<ParseError>::new();
         let mut last_label: Option<Label> = None;
+        let parser_data = &self.parser_data;
         for line in self.lines {
             let (found_label, parse_result) =
-                LineParser::new(&self.parser_data, line, &last_label).parse();
+                LineParser::new(parser_data, line, &last_label).parse();
             match parse_result {
                 Ok(mut new_insts) => {
                     // if insts is not empty, then that means the label was already used
@@ -218,17 +267,21 @@ impl RiscVParser {
                     } else {
                         // stick label onto first inst
                         if let Some(new_label) = found_label {
-                            let head_inst = new_insts.remove(0).with_label(new_label);
+                            let head_inst = new_insts.remove(0).with_label(new_label.to_string());
                             new_insts.insert(0, head_inst);
                         }
                         None
                     };
                     insts.extend(new_insts);
                 }
-                Err(new_err) => errs.push(new_err),
+                Err(new_err) => self.reporter.add_error(new_err),
             }
         }
-        (insts, errs)
+        // (insts, errs)
+        ParseResult {
+            insts,
+            reporter: self.reporter,
+        }
     }
 }
 
@@ -247,46 +300,58 @@ enum ImmOrLabel {
 }
 
 /// Convenience method to stuff a PartialInst into a Vec<PartialInst>
-fn ok_vec(inst: PartialInst) -> ParseResult {
+fn ok_vec<'a>(inst: PartialInst) -> LineParseResult {
     Ok(vec![inst])
 }
 
 /// Convenience method to stuff a ConcreteInst into Ok(vec![PartialInst(...)])
-fn ok_wrap_concr(inst: ConcreteInst) -> ParseResult {
+fn ok_wrap_concr<'a>(inst: ConcreteInst) -> LineParseResult {
     ok_vec(PartialInst::new_complete(inst))
 }
 
 /// Convenience method to turn a Vec<ConcreteInst> into Ok(Vec<PartialInst>)
-fn ok_wrap_expanded(inst: Vec<ConcreteInst>) -> ParseResult {
+fn ok_wrap_expanded<'a>(inst: Vec<ConcreteInst>) -> LineParseResult {
     Ok(inst.into_iter().map(PartialInst::new_complete).collect())
 }
 
-struct LineParser<'a> {
+/// Responsible for parsing a line with an instruction
+struct InstParser<'a> {
     data: &'a ParserData,
-    iter: TokenIter<'a>,
-    label: Option<Label>,
+    iter: TokenIter,
+    head_loc: Location,
+    inst_name: &'a str,
 }
 
-impl LineParser<'_> {
+impl<'a> InstParser<'a> {
+    fn new(
+        data: &'a ParserData,
+        iter: TokenIter,
+        head_loc: Location,
+        inst_name: &'a str,
+    ) -> InstParser<'a> {
+        InstParser {
+            data,
+            iter,
+            head_loc,
+            inst_name,
+        }
+    }
+
     /// Checks this line's iterator to ensure that there are no more tokens remaining, save
     /// for a possible comment.
     /// This is used for situations where a fixed number of arguments is expected, as we're
     /// free to consume the iterator since more tokens would be an error regardless.
-    fn check_no_more_args(
-        &mut self,
-        head_loc: Location,
-        head_name: &str,
-    ) -> Result<(), ParseError> {
+    fn check_no_more_args(&mut self) -> Result<(), ParseError> {
         let next = self.iter.next();
         if let Some(tok) = next {
             if let TokenType::Comment(_) = tok.data {
                 Ok(())
             } else {
                 Err(ParseError::unexpected(
-                    head_loc,
+                    self.head_loc,
                     &format!(
                         "{:?} (too many arguments for instruction {})",
-                        tok, head_name
+                        tok, self.inst_name
                     ),
                 ))
             }
@@ -299,16 +364,10 @@ impl LineParser<'_> {
     /// The first and last tokens cannot be commas. If repeated commas appear anywhere,
     /// an error is returned.
     /// The only tokens that may appear during this consumption are commas, names, and immediates.
-    fn consume_commasep_args(
-        &mut self,
-        head_loc: Location,
-        head_name: &str,
-        n: usize,
-    ) -> Result<Vec<Token>, ParseError> {
+    fn consume_commasep_args(&mut self, n: usize) -> Result<Vec<Token>, ParseError> {
         use TokenType::*;
         let result = if n == 0 {
-            self.check_no_more_args(head_loc, head_name)
-                .and(Ok(Vec::new()))
+            self.check_no_more_args().and(Ok(Vec::new()))
         } else {
             match self.iter.next() {
                 Some(tok) => match tok.data {
@@ -321,18 +380,17 @@ impl LineParser<'_> {
                                 }
                             }
                         }
-                        self.consume_commasep_args(head_loc, head_name, n - 1)
-                            .and_then(|mut args| {
-                                args.insert(0, tok);
-                                Ok(args)
-                            })
+                        self.consume_commasep_args(n - 1).and_then(|mut args| {
+                            args.insert(0, tok);
+                            Ok(args)
+                        })
                     }
                     _ => Err(ParseError::bad_arg(
                         tok.location,
                         &format!("{:?}", tok.data),
                     )),
                 },
-                None => Err(ParseError::not_enough_args(head_loc, head_name)),
+                None => Err(ParseError::not_enough_args(self.head_loc, self.inst_name)),
             }
         };
         // jank to allow assertion and borrow checker to both be happy
@@ -385,24 +443,20 @@ impl LineParser<'_> {
     /// Consumes tokens for arguments for a memory operation.
     /// These are either of the form "inst reg, imm, reg)" e.g. "lw x1 -4 x2"
     /// or "inst reg, (imm)reg" e.g "lw x1, 4(x2)" (commas optional in both cases)
-    fn consume_mem_args(
-        &mut self,
-        head_loc: Location,
-        head_name: &str,
-    ) -> Result<MemArgs, ParseError> {
+    fn consume_mem_args(&mut self) -> Result<MemArgs, ParseError> {
         // first consumed token must be register name
-        let first_tok = self.try_next_tok(head_loc, &head_name)?;
+        let first_tok = self.try_next_tok()?;
         let first_reg = self.try_parse_reg(&first_tok)?;
         // check for comma
-        let maybe_comma = self.try_peek_tok(head_loc, &head_name)?;
+        let maybe_comma = self.try_peek_tok()?;
         if let TokenType::Comma = maybe_comma.data {
             self.iter.next();
         }
         // must be immediate here
-        let imm_tok = self.try_next_tok(head_loc, &head_name)?;
+        let imm_tok = self.try_next_tok()?;
         let imm = self.try_parse_imm(12, &imm_tok)?;
         // check for lparen
-        let maybe_lparen = self.try_peek_tok(head_loc, &head_name)?;
+        let maybe_lparen = self.try_peek_tok()?;
         let is_lparen = if let TokenType::LParen = maybe_lparen.data {
             self.iter.next();
             true
@@ -410,10 +464,10 @@ impl LineParser<'_> {
             false
         };
         // must be a register here
-        let reg2_tok = self.try_next_tok(head_loc, &head_name)?;
+        let reg2_tok = self.try_next_tok()?;
         let second_reg = self.try_parse_reg(&reg2_tok)?;
         if is_lparen {
-            let maybe_rparen = self.try_next_tok(head_loc, &head_name)?;
+            let maybe_rparen = self.try_next_tok()?;
             if let TokenType::RParen = maybe_rparen.data {
             } else {
                 return Err(ParseError::unclosed_paren(
@@ -423,29 +477,28 @@ impl LineParser<'_> {
             }
         }
         // Any trailing token must be a comment
-        self.check_no_more_args(head_loc, head_name)
-            .and(Ok(MemArgs {
-                first_reg,
-                second_reg,
-                imm,
-            }))
+        self.check_no_more_args().and(Ok(MemArgs {
+            first_reg,
+            second_reg,
+            imm,
+        }))
     }
 
     /// Attempts to advance the next token of the iterator, returning a ParseError if there are none.
-    fn try_next_tok(&mut self, head_loc: Location, inst_name: &str) -> Result<Token, ParseError> {
+    fn try_next_tok(&mut self) -> Result<Token, ParseError> {
         if let Some(tok) = self.iter.next() {
             Ok(tok)
         } else {
-            Err(ParseError::not_enough_args(head_loc, inst_name))
+            Err(ParseError::not_enough_args(self.head_loc, self.inst_name))
         }
     }
 
     /// Attempts to peek the next token of the iterator, returning a ParseError if there are none.
-    fn try_peek_tok(&mut self, head_loc: Location, inst_name: &str) -> Result<&Token, ParseError> {
+    fn try_peek_tok(&mut self) -> Result<&Token, ParseError> {
         if let Some(tok) = self.iter.peek() {
             Ok(tok)
         } else {
-            Err(ParseError::not_enough_args(head_loc, inst_name))
+            Err(ParseError::not_enough_args(self.head_loc, self.inst_name))
         }
     }
 
@@ -515,47 +568,45 @@ impl LineParser<'_> {
     /// Expands an instruction that is known to be in the expansion table.
     fn try_expand_found_inst(
         &mut self,
-        head_loc: Location,
-        name: &str,
         parse_type: &ParseType,
     ) -> Result<ParsedInstStream, ParseError> {
         use ParseType::*;
         match parse_type {
             R(inst_new) => {
                 // R-types are always "inst rd, rs1, rs2" with one or no commas in between
-                let args = self.consume_commasep_args(head_loc, name, 3)?;
+                let args = self.consume_commasep_args(3)?;
                 let rd = self.try_parse_reg(&args[0])?;
                 let rs1 = self.try_parse_reg(&args[1])?;
                 let rs2 = self.try_parse_reg(&args[2])?;
                 ok_wrap_concr(inst_new(rd, rs1, rs2))
             }
             Arith(inst_new) => {
-                let args = self.consume_commasep_args(head_loc, name, 3)?;
+                let args = self.consume_commasep_args(3)?;
                 let rd = self.try_parse_reg(&args[0])?;
                 let rs1 = self.try_parse_reg(&args[1])?;
                 let imm = self.try_parse_imm(12, &args[2])?;
                 ok_wrap_concr(inst_new(rd, rs1, imm))
             }
             Env(inst_new) => {
-                let _args = self.consume_commasep_args(head_loc, name, 0)?;
+                let _args = self.consume_commasep_args(0)?;
                 ok_wrap_concr(inst_new())
             }
             MemL(inst_new) => {
-                let args = self.consume_mem_args(head_loc, name)?;
+                let args = self.consume_mem_args()?;
                 let rd = args.first_reg;
                 let rs1 = args.second_reg;
                 let imm = args.imm;
                 ok_wrap_concr(inst_new(rd, rs1, imm))
             }
             MemS(inst_new) => {
-                let args = self.consume_mem_args(head_loc, name)?;
+                let args = self.consume_mem_args()?;
                 let rs2 = args.first_reg;
                 let rs1 = args.second_reg;
                 let imm = args.imm;
                 ok_wrap_concr(inst_new(rs1, rs2, imm))
             }
             B(inst_new) => {
-                let args = self.consume_commasep_args(head_loc, name, 3)?;
+                let args = self.consume_commasep_args(3)?;
                 let rs1 = self.try_parse_reg(&args[0])?;
                 let rs2 = self.try_parse_reg(&args[1])?;
                 // Becuse branches actually chop off the LSB, we can take up to 13b
@@ -564,7 +615,7 @@ impl LineParser<'_> {
                     ImmOrLabel::Imm(imm) => {
                         if u32::from(imm) & 1 > 0 {
                             Err(ParseError::new(
-                                head_loc,
+                                self.head_loc,
                                 "Branch immediates must be multiples of two",
                                 &imm.to_string(),
                             ))
@@ -605,8 +656,11 @@ impl LineParser<'_> {
                         }
                     }
                     _ => Err(ParseError::unexpected(
-                        head_loc,
-                        &format!("wrong number of arguments for instruction {}", name),
+                        self.head_loc,
+                        &format!(
+                            "wrong number of arguments for instruction {}",
+                            self.inst_name
+                        ),
                     )),
                 }
             }
@@ -627,35 +681,38 @@ impl LineParser<'_> {
                         ok_wrap_concr(isa::Jalr::new(rd, rs1, imm))
                     }
                     _ => Err(ParseError::unexpected(
-                        head_loc,
-                        &format!("wrong number of arguments for instruction {}", name),
+                        self.head_loc,
+                        &format!(
+                            "wrong number of arguments for instruction {}",
+                            self.inst_name
+                        ),
                     )),
                 }
             }
             U(inst_new) => {
-                let args = self.consume_commasep_args(head_loc, name, 2)?;
+                let args = self.consume_commasep_args(2)?;
                 let rd = self.try_parse_reg(&args[0])?;
                 let imm = self.try_parse_imm(20, &args[1])?;
                 ok_wrap_concr(inst_new(rd, imm))
             }
             Li => {
-                let args = self.consume_commasep_args(head_loc, name, 2)?;
+                let args = self.consume_commasep_args(2)?;
                 let rd = self.try_parse_reg(&args[0])?;
                 let imm = self.try_parse_imm(32, &args[1])?;
                 ok_wrap_expanded(crate::pseudo_inst::Li::expand(rd, imm))
             }
             NoArgs(inst_expand) => {
-                let _args = self.consume_commasep_args(head_loc, name, 0)?;
+                let _args = self.consume_commasep_args(0)?;
                 ok_wrap_concr(inst_expand())
             }
             RegReg(inst_expand) => {
-                let args = self.consume_commasep_args(head_loc, name, 2)?;
+                let args = self.consume_commasep_args(2)?;
                 let rd = self.try_parse_reg(&args[0])?;
                 let rs = self.try_parse_reg(&args[1])?;
                 ok_wrap_concr(inst_expand(rd, rs))
             }
             LikeJ(inst_expand) => {
-                let args = self.consume_commasep_args(head_loc, name, 1)?;
+                let args = self.consume_commasep_args(1)?;
                 // j expands to J-type, so 20-bit immediate
                 let last_arg = self.try_parse_imm_or_label_ref(20, &args[0])?;
                 match last_arg {
@@ -666,28 +723,37 @@ impl LineParser<'_> {
                 }
             }
             OneReg(inst_expand) => {
-                let args = self.consume_commasep_args(head_loc, name, 1)?;
+                let args = self.consume_commasep_args(1)?;
                 let rs = self.try_parse_reg(&args[0])?;
                 ok_wrap_concr(inst_expand(rs))
             }
         }
     }
 
-    fn try_expand_inst(&mut self, head_loc: Location, name: &str) -> ParseResult {
-        if let Some(parse_type) = self.data.inst_expansion_table.get(name) {
-            self.try_expand_found_inst(head_loc, &name, parse_type)
+    fn try_expand_inst(&mut self) -> LineParseResult {
+        if let Some(parse_type) = self.data.inst_expansion_table.get(self.inst_name) {
+            self.try_expand_found_inst(parse_type)
         // TODO label should be moved onto the vec instead
         } else {
             Err(ParseError::new(
-                head_loc,
+                self.head_loc,
                 "No instruction found with name",
-                name,
+                self.inst_name,
             ))
         }
     }
+}
 
+/// Responsible for parsing a line.
+struct LineParser<'a> {
+    data: &'a ParserData,
+    iter: TokenIter,
+    label: Option<Label>,
+}
+
+impl<'a> LineParser<'a> {
     /// Creates a LineParser, with a label possibly inherited from the previous line.
-    fn new<'a>(
+    fn new(
         data: &'a ParserData,
         tokens: TokenStream,
         maybe_label: &'a Option<Label>,
@@ -721,13 +787,14 @@ impl LineParser<'_> {
         }
     }
 
-    fn parse(mut self) -> (Option<Label>, ParseResult) {
+    fn parse(mut self) -> (Option<Label>, LineParseResult) {
         (
-            self.label.clone(),
+            self.label,
             if let Some(head_tok) = self.iter.next() {
                 use TokenType::*;
                 match head_tok.data {
-                    Name(name) => self.try_expand_inst(head_tok.location, &name),
+                    Name(name) => InstParser::new(self.data, self.iter, head_tok.location, &name)
+                        .try_expand_inst(),
                     // first label def is handled by contructor
                     // TODO handle multiple labels on same line
                     LabelDef(label_name) => Err(ParseError::new(
@@ -759,17 +826,16 @@ mod tests {
 
     /// Lexes a program. Asserts that the lex has no errors.
     fn lex(prog: &str) -> Vec<TokenStream> {
-        let (toks, errs) = Lexer::from_string(prog.to_string()).lex();
-        assert!(errs.is_empty());
-        toks
+        let LexResult { lines, reporter } = Lexer::from_str(prog).lex();
+        assert!(reporter.is_empty());
+        lines
     }
 
     /// Parses and lexes the provided string, assuming that there are no errors in either phase.
     /// Assumes that there were no lex errors.
     fn parse_and_lex(prog: &str) -> Vec<PartialInst> {
-        let (insts, errs) = RiscVParser::from_tokens(lex(prog)).parse();
-        println!("{:?}", errs);
-        assert!(errs.is_empty());
+        let ParseResult { insts, reporter } = RiscVParser::from_tokens(lex(prog)).parse();
+        assert!(reporter.is_empty());
         insts
     }
 
@@ -822,8 +888,8 @@ mod tests {
             "add x1,,x2, x3",
         ];
         for inst in bad_insts {
-            let (_, parse_err) = RiscVParser::from_tokens(lex(inst)).parse();
-            assert!(!parse_err.is_empty());
+            let ParseResult { reporter, .. } = RiscVParser::from_tokens(lex(inst)).parse();
+            assert!(!reporter.is_empty());
         }
     }
 
@@ -853,8 +919,8 @@ mod tests {
     fn test_imm_too_big() {
         // immediates for instructions like addi can only be 12 bits long
         let parser = RiscVParser::from_tokens(lex("addi sp sp 0xF000"));
-        let (insts, parse_err) = parser.parse();
-        assert!(!parse_err.is_empty());
+        let ParseResult { insts, reporter } = parser.parse();
+        assert!(!reporter.is_empty());
         assert!(insts.is_empty());
     }
 
