@@ -316,13 +316,11 @@ impl<'a> LineLexer<'a> {
     /// Generates a TokenStream for a line in a file.
     fn lex(mut self) -> TokenStream {
         let mut toks = Vec::<Token>::new();
-        // let line_contents = self.line_contents;
         let lineno = self.lineno;
         while let Some((start_offs, c)) = self.iter.next() {
             let state = LexState {
                 head: c,
                 location: Location {
-                    // line_contents,
                     lineno,
                     offs: start_offs,
                 },
@@ -344,13 +342,28 @@ impl<'a> LineLexer<'a> {
             match maybe_tok {
                 Ok(tok) => toks.push(Token {
                     location: Location {
-                        // line_contents,
                         lineno,
                         offs: start_offs,
                     },
                     data: tok,
                 }),
-                Err(err) => self.reporter.add_error(err),
+                Err(err) => {
+                    // To prevent a redundant (and perhaps misleading) error appearing in the
+                    // parser, we don't return any of the lexed tokens
+                    // However, if there are labels, we still emit them to avoid confusing
+                    // the assembler.
+                    self.reporter.add_error(err);
+                    return toks
+                        .into_iter()
+                        .filter(|tok| {
+                            if let TokenType::LabelDef(..) = tok.data {
+                                true
+                            } else {
+                                false
+                            }
+                        })
+                        .collect();
+                }
             }
         }
         toks
@@ -400,6 +413,30 @@ impl Lexer<'_> {
 mod tests {
     use super::*;
 
+    fn get_test_reporter(line: &str) -> ParseErrorReporter {
+        ParseErrorReporter::new("test file".to_string(), line.to_string())
+    }
+
+    // Gets a LineLexer instance and an initialized state for more fine-grained testing.
+    fn get_line_lexer<'a>(
+        reporter: &'a mut ParseErrorReporter,
+        line: &'a str,
+    ) -> (LineLexer<'a>, LexState) {
+        let head = line.chars().next().unwrap();
+        let lexer = LineLexer::new(0, line.get(1..).unwrap(), reporter);
+        (
+            lexer,
+            LexState {
+                head,
+                location: Location {
+                    // line_contents: line,
+                    lineno: 0,
+                    offs: 0,
+                },
+            },
+        )
+    }
+
     #[test]
     fn test_simple_lex() {
         let LexResult {
@@ -441,34 +478,25 @@ mod tests {
             ("0xABCD_0123", Hex, 0xABCD_0123u32 as i32),
         ];
         for (line, fmt, exp) in cases {
-            let head = line.chars().next().unwrap();
-            let mut reporter = ParseErrorReporter::new("test file".to_string(), line.to_string());
-            let mut lexer = LineLexer::new(0, line.get(1..).unwrap(), &mut reporter);
-            let result = lexer.build_imm(&LexState {
-                head,
-                location: Location {
-                    // line_contents: line,
-                    lineno: 0,
-                    offs: 0,
-                },
-            });
+            let mut reporter = get_test_reporter(line);
+            let (mut lexer, state) = get_line_lexer(&mut reporter, line);
+            let result = lexer.build_imm(&state);
+            assert!(reporter.is_empty());
             assert_eq!(result, Ok(TokenType::Immediate(exp, fmt)));
         }
     }
 
     #[test]
-    fn test_bad_imm_recovery() {
+    /// Tests that a bad immediate is max munched.
+    fn test_bad_imm_report() {
         let line = "addi x1 0xggg1, x2";
-        let LexResult {
-            lines, reporter, ..
-        } = Lexer::from_str(line).lex();
-        let errs = reporter.errs;
-        assert_eq!(errs.len(), 1);
-        assert_eq!(lines.len(), 1);
-        let parsed = &lines[0];
-        assert_eq!(parsed[0].data, TokenType::Name("addi".to_string()));
-        assert_eq!(parsed[1].data, TokenType::Name("x1".to_string()));
-        assert_eq!(parsed[2].data, TokenType::Comma);
-        assert_eq!(parsed[3].data, TokenType::Name("x2".to_string()));
+        let mut reporter = get_test_reporter(line);
+        let (lexer, _state) = get_line_lexer(&mut reporter, line);
+        let tokens = lexer.lex();
+        let report = reporter.into_report();
+        assert!(!report.is_empty());
+        // TODO make this into 0xggg1 to ensure it gets the whole thing
+        assert!(format!("{:?}", report).contains("ggg1"));
+        assert!(tokens.is_empty());
     }
 }
