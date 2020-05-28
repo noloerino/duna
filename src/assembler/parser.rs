@@ -1,11 +1,11 @@
 use super::lexer::*;
+use super::parse_error::{ParseError, ParseErrorReporter};
 use super::partial_inst::PartialInst;
 use crate::instruction::*;
 use crate::isa;
 use crate::program_state::{DataWord, IRegister};
 use crate::pseudo_inst::*;
 use std::collections::HashMap;
-use std::fmt;
 use std::iter::Peekable;
 use std::vec::IntoIter;
 
@@ -16,108 +16,6 @@ type LineParseResult = Result<ParsedInstStream, ParseError>;
 pub struct ParseResult {
     pub insts: ParsedInstStream,
     pub reporter: ParseErrorReporter,
-}
-
-/// Reports parse-time errors
-pub struct ParseErrorReporter {
-    /// The indices at which these lines occur don't actually matter;
-    /// all that matters is this struct maintains ownership over the strings
-    /// so that its ParseErrors can maintain a reference to them.
-    // lines: Vec<String>,
-    pub errs: Vec<ParseError>,
-}
-
-impl ParseErrorReporter {
-    pub fn new() -> ParseErrorReporter {
-        ParseErrorReporter {
-            // lines: Vec::new(),
-            errs: Vec::new(),
-        }
-    }
-
-    pub fn add_error(&mut self, err: ParseError) {
-        self.errs.push(err);
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.errs.is_empty()
-    }
-}
-
-impl Default for ParseErrorReporter {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-#[derive(Eq, PartialEq, Debug)]
-struct ParseErrorData {
-    msg: String,
-    contents: String,
-}
-
-#[derive(Eq, PartialEq, Debug)]
-pub struct ParseError {
-    location: Location,
-    data: ParseErrorData,
-}
-
-impl ParseError {
-    pub fn new(location: Location, msg: &str, contents: &str) -> Self {
-        ParseError {
-            location,
-            data: ParseErrorData {
-                msg: msg.to_string(),
-                contents: contents.to_string(),
-            },
-        }
-    }
-
-    fn bad_head(location: Location, contents: &str) -> Self {
-        ParseError::new(
-            location,
-            "Expected label, section, or instruction",
-            contents,
-        )
-    }
-
-    fn bad_arg(location: Location, contents: &str) -> Self {
-        ParseError::new(location, "Expected register name or immediate", contents)
-    }
-
-    fn bad_reg(location: Location, reg_name: &str) -> Self {
-        ParseError::new(location, "Expected register name", reg_name)
-    }
-
-    fn not_enough_args(location: Location, inst_name: &str) -> Self {
-        ParseError::new(
-            location,
-            "Not enough arguments",
-            &format!("while parsing instruction {}", inst_name),
-        )
-    }
-
-    fn imm_too_big(location: Location, imm_str: &str) -> Self {
-        ParseError::new(location, "Immediate too large", imm_str)
-    }
-
-    fn unexpected(location: Location, contents: &str) -> Self {
-        ParseError::new(location, "Unexpected token", contents)
-    }
-
-    fn unclosed_paren(location: Location, contents: &str) -> Self {
-        ParseError::new(location, "Expected closing parentheses", contents)
-    }
-}
-
-impl fmt::Display for ParseError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "ParseError at {}: {}\t{}",
-            self.location, self.data.msg, self.data.contents
-        )
-    }
 }
 
 #[derive(Clone)]
@@ -330,18 +228,16 @@ impl<'a> InstParser<'a> {
     /// for a possible comment.
     /// This is used for situations where a fixed number of arguments is expected, as we're
     /// free to consume the iterator since more tokens would be an error regardless.
-    fn check_no_more_args(&mut self) -> Result<(), ParseError> {
+    fn check_no_more_args(&mut self, needed: u8) -> Result<(), ParseError> {
         let next = self.iter.next();
         if let Some(tok) = next {
             if let TokenType::Comment(_) = tok.data {
                 Ok(())
             } else {
-                Err(ParseError::unexpected(
+                Err(ParseError::too_many_args(
                     self.head_loc,
-                    &format!(
-                        "{:?} (too many arguments for instruction {})",
-                        tok, self.inst_name
-                    ),
+                    self.inst_name,
+                    needed,
                 ))
             }
         } else {
@@ -353,43 +249,42 @@ impl<'a> InstParser<'a> {
     /// The first and last tokens cannot be commas. If repeated commas appear anywhere,
     /// an error is returned.
     /// The only tokens that may appear during this consumption are commas, names, and immediates.
-    fn consume_commasep_args(&mut self, n: usize) -> Result<Vec<Token>, ParseError> {
+    fn consume_commasep_args(&mut self, n: u8) -> Result<Vec<Token>, ParseError> {
         use TokenType::*;
-        let result = if n == 0 {
-            self.check_no_more_args().and(Ok(Vec::new()))
-        } else {
+        let mut found = Vec::<Token>::new();
+        for left in (0..n).rev() {
             match self.iter.next() {
                 Some(tok) => match tok.data {
                     Name(..) | Immediate(..) => {
                         // Allow single comma, except when trailing
-                        if n > 1 {
+                        if left > 1 {
                             if let Some(tok2) = self.iter.peek() {
                                 if let Comma = tok2.data {
                                     self.iter.next();
                                 }
                             }
                         }
-                        self.consume_commasep_args(n - 1).and_then(|mut args| {
-                            args.insert(0, tok);
-                            Ok(args)
-                        })
+                        found.push(tok);
                     }
-                    _ => Err(ParseError::bad_arg(
-                        tok.location,
-                        &format!("{:?}", tok.data),
-                    )),
+                    _ => {
+                        return Err(ParseError::bad_arg(
+                            tok.location,
+                            &format!("{:?}", tok.data),
+                        ))
+                    }
                 },
-                None => Err(ParseError::not_enough_args(self.head_loc, self.inst_name)),
+                None => {
+                    return Err(ParseError::wrong_argc(
+                        self.head_loc,
+                        self.inst_name,
+                        n,
+                        found.len() as u8,
+                    ))
+                }
             }
-        };
-        // jank to allow assertion and borrow checker to both be happy
-        match result {
-            Ok(args) => {
-                debug_assert!(args.len() == n);
-                Ok(args)
-            }
-            _ => result,
         }
+        debug_assert!(found.len() == (n as usize));
+        self.check_no_more_args(n).and(Ok(found))
     }
 
     /// Attempts to consume possibly comma-separate arguments from the iterator.
@@ -434,18 +329,18 @@ impl<'a> InstParser<'a> {
     /// or "inst reg, (imm)reg" e.g "lw x1, 4(x2)" (commas optional in both cases)
     fn consume_mem_args(&mut self) -> Result<MemArgs, ParseError> {
         // first consumed token must be register name
-        let first_tok = self.try_next_tok()?;
+        let first_tok = self.try_next_tok(3, 0)?;
         let first_reg = self.try_parse_reg(&first_tok)?;
         // check for comma
-        let maybe_comma = self.try_peek_tok()?;
+        let maybe_comma = self.try_peek_tok(3, 1)?;
         if let TokenType::Comma = maybe_comma.data {
             self.iter.next();
         }
         // must be immediate here
-        let imm_tok = self.try_next_tok()?;
+        let imm_tok = self.try_next_tok(3, 1)?;
         let imm = self.try_parse_imm(12, &imm_tok)?;
         // check for lparen
-        let maybe_lparen = self.try_peek_tok()?;
+        let maybe_lparen = self.try_peek_tok(3, 2)?;
         let is_lparen = if let TokenType::LParen = maybe_lparen.data {
             self.iter.next();
             true
@@ -453,20 +348,20 @@ impl<'a> InstParser<'a> {
             false
         };
         // must be a register here
-        let reg2_tok = self.try_next_tok()?;
+        let reg2_tok = self.try_next_tok(3, 2)?;
         let second_reg = self.try_parse_reg(&reg2_tok)?;
         if is_lparen {
-            let maybe_rparen = self.try_next_tok()?;
+            let maybe_rparen = self.try_next_tok(3, 2)?;
             if let TokenType::RParen = maybe_rparen.data {
             } else {
                 return Err(ParseError::unclosed_paren(
                     maybe_rparen.location,
-                    &format!("{:?}", maybe_rparen.data),
+                    maybe_rparen.data,
                 ));
             }
         }
         // Any trailing token must be a comment
-        self.check_no_more_args().and(Ok(MemArgs {
+        self.check_no_more_args(3).and(Ok(MemArgs {
             first_reg,
             second_reg,
             imm,
@@ -474,20 +369,30 @@ impl<'a> InstParser<'a> {
     }
 
     /// Attempts to advance the next token of the iterator, returning a ParseError if there are none.
-    fn try_next_tok(&mut self) -> Result<Token, ParseError> {
+    fn try_next_tok(&mut self, needed_args: u8, found_so_far: u8) -> Result<Token, ParseError> {
         if let Some(tok) = self.iter.next() {
             Ok(tok)
         } else {
-            Err(ParseError::not_enough_args(self.head_loc, self.inst_name))
+            Err(ParseError::wrong_argc(
+                self.head_loc,
+                self.inst_name,
+                needed_args,
+                found_so_far,
+            ))
         }
     }
 
     /// Attempts to peek the next token of the iterator, returning a ParseError if there are none.
-    fn try_peek_tok(&mut self) -> Result<&Token, ParseError> {
+    fn try_peek_tok(&mut self, needed_args: u8, found_so_far: u8) -> Result<&Token, ParseError> {
         if let Some(tok) = self.iter.peek() {
             Ok(tok)
         } else {
-            Err(ParseError::not_enough_args(self.head_loc, self.inst_name))
+            Err(ParseError::wrong_argc(
+                self.head_loc,
+                self.inst_name,
+                needed_args,
+                found_so_far,
+            ))
         }
     }
 
@@ -498,10 +403,11 @@ impl<'a> InstParser<'a> {
                 .reg_expansion_table
                 .get(name)
                 .cloned()
-                .ok_or_else(|| ParseError::bad_reg(token.location, name)),
-            _ => Err(ParseError::unexpected(
+                .ok_or_else(|| ParseError::unexpected_type(token.location, "register", token.data)),
+            _ => Err(ParseError::unexpected_type(
                 token.location,
-                &format!("Expected register name, found {:?}", token.data),
+                "register",
+                token.data,
             )),
         }
     }
@@ -527,14 +433,19 @@ impl<'a> InstParser<'a> {
                 };
                 let mask_result = *val & mask;
                 if mask_result != 0 && mask_result != mask {
-                    Err(ParseError::imm_too_big(token.location, &radix.format(*val)))
+                    Err(ParseError::imm_too_big(
+                        token.location,
+                        n,
+                        &radix.format(*val),
+                    ))
                 } else {
                     Ok(DataWord::from(*val))
                 }
             }
-            _ => Err(ParseError::unexpected(
+            _ => Err(ParseError::unexpected_type(
                 token.location,
-                &format!("Expected immediate, found {:?}", token.data),
+                "immediate",
+                token.data,
             )),
         }
     }
@@ -603,10 +514,12 @@ impl<'a> InstParser<'a> {
                 match last_arg {
                     ImmOrLabel::Imm(imm) => {
                         if u32::from(imm) & 1 > 0 {
-                            Err(ParseError::new(
+                            Err(ParseError::generic(
                                 self.head_loc,
-                                "Branch immediates must be multiples of two",
-                                &imm.to_string(),
+                                &format!(
+                                    "branch immediates must be multiples of two, got {}",
+                                    imm.to_string()
+                                ),
                             ))
                         } else {
                             // LSB chopping is handled by instruction
@@ -644,12 +557,12 @@ impl<'a> InstParser<'a> {
                             ),
                         }
                     }
-                    _ => Err(ParseError::unexpected(
+                    _ => Err(ParseError::wrong_diff_argc(
                         self.head_loc,
-                        &format!(
-                            "wrong number of arguments for instruction {}",
-                            self.inst_name
-                        ),
+                        self.inst_name,
+                        1,
+                        2,
+                        argc as u8,
                     )),
                 }
             }
@@ -669,12 +582,12 @@ impl<'a> InstParser<'a> {
                         let imm = self.try_parse_imm(12, &args[2])?;
                         ok_wrap_concr(isa::Jalr::new(rd, rs1, imm))
                     }
-                    _ => Err(ParseError::unexpected(
+                    _ => Err(ParseError::wrong_diff_argc(
                         self.head_loc,
-                        &format!(
-                            "wrong number of arguments for instruction {}",
-                            self.inst_name
-                        ),
+                        self.inst_name,
+                        1,
+                        3,
+                        argc as u8,
                     )),
                 }
             }
@@ -722,13 +635,8 @@ impl<'a> InstParser<'a> {
     fn try_expand_inst(&mut self) -> LineParseResult {
         if let Some(parse_type) = self.data.inst_expansion_table.get(self.inst_name) {
             self.try_expand_found_inst(parse_type)
-        // TODO label should be moved onto the vec instead
         } else {
-            Err(ParseError::new(
-                self.head_loc,
-                "No instruction found with name",
-                self.inst_name,
-            ))
+            Err(ParseError::bad_inst_name(self.head_loc, self.inst_name))
         }
     }
 }
@@ -786,10 +694,12 @@ impl<'a> LineParser<'a> {
                         .try_expand_inst(),
                     // first label def is handled by contructor
                     // TODO handle multiple labels on same line
-                    LabelDef(label_name) => Err(ParseError::new(
+                    LabelDef(label_name) => Err(ParseError::generic(
                         head_tok.location,
-                        "Multiple labels on the same line is unimplemented",
-                        &label_name,
+                        &format!(
+                            "Multiple labels on the same line is unimplemented (found label {})",
+                            label_name
+                        ),
                     )),
                     Directive(_section_name) => Ok(Vec::new()), // TODO
                     Comment(..) => Ok(Vec::new()),              // deliberate no-op

@@ -1,5 +1,6 @@
 use super::lexer::Lexer;
-use super::parser::{Label, ParseError, ParseResult, RiscVParser};
+use super::parse_error::ParseError;
+use super::parser::{Label, ParseResult, RiscVParser};
 use super::partial_inst::PartialInst;
 use crate::program_state::{DataWord, RiscVProgram};
 use std::collections::HashMap;

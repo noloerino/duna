@@ -1,4 +1,4 @@
-use super::parser::{ParseError, ParseErrorReporter};
+use super::parse_error::{ParseError, ParseErrorReporter};
 use std::borrow::Cow;
 use std::fmt;
 use std::fs;
@@ -82,6 +82,22 @@ pub enum TokenType {
     Immediate(i32, ImmRenderType),
     LParen,
     RParen,
+}
+
+impl fmt::Display for TokenType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use TokenType::*;
+        match self {
+            Name(name) => write!(f, "{}", name),
+            LabelDef(label) => write!(f, "{}:", label),
+            Directive(directive) => write!(f, ".{}", directive),
+            Comment(comment) => write!(f, "#{}", comment),
+            Comma => write!(f, ","),
+            Immediate(n, render_type) => write!(f, "{}", render_type.format(*n)),
+            LParen => write!(f, "("),
+            RParen => write!(f, ")"),
+        }
+    }
 }
 
 const DELIMS: [char; 6] = ['#', ':', ',', '(', ')', ' '];
@@ -200,22 +216,26 @@ impl<'a> LineLexer<'a> {
                         c
                     } else {
                         self.max_munch_on_error();
-                        return Err(ParseError::new(
+                        return Err(ParseError::generic(
                             Location {
                                 offs,
                                 ..state.location
                             },
-                            "Cannot parse number literal",
-                            &string_from_utf8(vec![head as u8, c as u8]),
+                            &format!(
+                                "cannot parse number literal {}",
+                                string_from_utf8(vec![head as u8, c as u8])
+                            ),
                         ));
                     }
                 }
                 None => {
                     self.max_munch_on_error();
-                    return Err(ParseError::new(
+                    return Err(ParseError::generic(
                         state.location,
-                        "Ran out of characters while parsing number literal",
-                        &head.to_string(),
+                        &format!(
+                            "ran out of characters while parsing number literal {}",
+                            head.to_string()
+                        ),
                     ));
                 }
             }
@@ -241,10 +261,12 @@ impl<'a> LineLexer<'a> {
                         digits.push(c);
                         if !c.is_ascii_digit() {
                             self.max_munch_on_error();
-                            return Err(ParseError::new(
+                            return Err(ParseError::generic(
                                 state.location,
-                                "Error parsing base 10 integer literal",
-                                &string_from_chars(digits),
+                                &format!(
+                                    "unexpected character when parsing base 10 integer literal {}",
+                                    string_from_chars(digits)
+                                ),
                             ));
                         }
                     }
@@ -272,17 +294,10 @@ impl<'a> LineLexer<'a> {
                     } else {
                         digits.extend(self.max_munch_on_error());
                         // TODO separators and format specifier are ignored
-                        return Err(ParseError::new(
+                        return Err(ParseError::bad_int_literal(
                             state.location,
-                            &format!(
-                                "Error parsing {} integer literal",
-                                match fmt {
-                                    Bin => "binary",
-                                    Hex => "hexademical",
-                                    Dec => "decimal",
-                                }
-                            ),
-                            &string_from_chars(digits),
+                            fmt,
+                            string_from_chars(digits),
                         ));
                     }
                 }
@@ -294,11 +309,7 @@ impl<'a> LineLexer<'a> {
             let val = unsgn_val as i32;
             Ok(TokenType::Immediate(if negate { -val } else { val }, fmt))
         } else {
-            Err(ParseError::new(
-                state.location,
-                &format!("Malformed base {} immediate", fmt.radix()),
-                &digit_str,
-            ))
+            Err(ParseError::bad_int_literal(state.location, fmt, digit_str))
         }
     }
 
