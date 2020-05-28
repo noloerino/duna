@@ -20,6 +20,11 @@ impl ParseErrorReport {
     pub fn is_empty(&self) -> bool {
         self.errs.is_empty()
     }
+
+    #[cfg(test)]
+    pub fn get_errs(&self) -> &[ParseError] {
+        self.errs.as_slice()
+    }
 }
 
 impl fmt::Debug for ParseErrorReport {
@@ -72,7 +77,6 @@ impl ParseErrorReporter {
         self.errs.push(err);
     }
 
-    #[cfg(test)]
     pub fn is_empty(&self) -> bool {
         self.errs.is_empty()
     }

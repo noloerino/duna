@@ -347,26 +347,26 @@ impl<'a> LineLexer<'a> {
                     },
                     data: tok,
                 }),
-                Err(err) => {
-                    // To prevent a redundant (and perhaps misleading) error appearing in the
-                    // parser, we don't return any of the lexed tokens
-                    // However, if there are labels, we still emit them to avoid confusing
-                    // the assembler.
-                    self.reporter.add_error(err);
-                    return toks
-                        .into_iter()
-                        .filter(|tok| {
-                            if let TokenType::LabelDef(..) = tok.data {
-                                true
-                            } else {
-                                false
-                            }
-                        })
-                        .collect();
-                }
+                Err(err) => self.reporter.add_error(err),
             }
         }
-        toks
+        // To prevent a redundant (and perhaps misleading) error appearing in the parser, we don't
+        // return any of the lexed tokens.
+        // However, if there are labels, we still emit them so the error doesn't propagate to the
+        // assembler/linker.
+        if self.reporter.is_empty() {
+            toks
+        } else {
+            toks.into_iter()
+                .filter(|tok| {
+                    if let TokenType::LabelDef(..) = tok.data {
+                        true
+                    } else {
+                        false
+                    }
+                })
+                .collect()
+        }
     }
 }
 
@@ -498,5 +498,18 @@ mod tests {
         // TODO make this into 0xggg1 to ensure it gets the whole thing
         assert!(format!("{:?}", report).contains("ggg1"));
         assert!(tokens.is_empty());
+    }
+
+    #[test]
+    /// Tests that if there are multiple malformed immediates on the same line, all are reported.
+    /// Though no instruction requires multiple immediates, this is implemented to check if in
+    /// general, the presence of multiple syntax errors is handled properly.
+    fn test_multi_bad_imm_report() {
+        let line = "addi x1 1ggg1, 12kjkj03";
+        let mut reporter = get_test_reporter(line);
+        let (lexer, _state) = get_line_lexer(&mut reporter, line);
+        let _tokens = lexer.lex();
+        let report = reporter.into_report();
+        assert_eq!(report.get_errs().len(), 2);
     }
 }
