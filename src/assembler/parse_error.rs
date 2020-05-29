@@ -31,7 +31,7 @@ impl fmt::Debug for ParseErrorReport {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for err in &self.errs {
             writeln!(f, "{}", err)?;
-            let lineno = err.location.lineno;
+            let Location { lineno, offs } = err.location;
             // TODO fix spacing if lineno is more than one digit
             writeln!(f, " --> {}:{}", self.file_name, err.location)?;
             writeln!(f, "  |")?;
@@ -43,7 +43,13 @@ impl fmt::Debug for ParseErrorReport {
                     .get(&lineno)
                     .unwrap_or(&"line not found".to_string())
             )?;
-            writeln!(f, "  |\n")?;
+            write!(f, "  |")?;
+            // throw informational caret in
+            // +1 because there's one space between the pipe and the string in the line above
+            for _ in 0..=offs {
+                write!(f, " ")?;
+            }
+            writeln!(f, "^\n")?;
         }
         if self.errs.is_empty() {
             Ok(())
@@ -105,12 +111,16 @@ impl ParseErrorReporter {
 }
 
 #[derive(Eq, PartialEq, Debug)]
-/// Encodes different kinds of parse errors.
+/// Encodes different kinds of parsing and lexing errors.
 enum ParseErrorType {
     /// A catch-all for any kind of error I was too lazy to add a type for.
     Generic(String),
     /// A bad character was encountered while lexing an integer literal.
     BadIntLiteral(ImmRenderType, String),
+    /// An unrecognized escape character was provided.
+    BadEscape(char),
+    /// A string literal didn't have a closing quote.
+    UnclosedStringLiteral,
     /// The line should have started with a different kind of token.
     BadFirstToken(String),
     /// An instruction name was expected, and the given string was not one.
@@ -159,6 +169,8 @@ impl fmt::Display for ParseErrorType {
                 },
                 *n
             ),
+            BadEscape(c) => write!(f, "encountered illegal escape sequence: \\{}", c),
+            UnclosedStringLiteral => write!(f, "found unclosed string literal"),
             BadFirstToken(got) => write!(
                 f,
                 "expected label, section, or instruction, instead got {}",
@@ -231,6 +243,14 @@ impl ParseError {
 impl ParseError {
     pub fn bad_int_literal(location: Location, render_type: ImmRenderType, n: String) -> Self {
         ParseError::new(location, ParseErrorType::BadIntLiteral(render_type, n))
+    }
+
+    pub fn bad_escape(location: Location, escaped: char) -> Self {
+        ParseError::new(location, ParseErrorType::BadEscape(escaped))
+    }
+
+    pub fn unclosed_string_literal(location: Location) -> Self {
+        ParseError::new(location, ParseErrorType::UnclosedStringLiteral)
     }
 }
 

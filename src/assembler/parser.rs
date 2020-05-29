@@ -718,6 +718,7 @@ impl<'a> LineParser<'a> {
                     Immediate(n, style) => {
                         Err(ParseError::bad_head(head_tok.location, &style.format(n)))
                     }
+                    StringLiteral(s) => Err(ParseError::bad_head(head_tok.location, &s)),
                     LParen => Err(ParseError::bad_head(head_tok.location, "(")),
                     RParen => Err(ParseError::bad_head(head_tok.location, ")")),
                 }

@@ -73,6 +73,9 @@ pub enum TokenType {
     Comment(String),
     Comma,
     Immediate(i32, ImmRenderType),
+    /// A token representing a string literal, without the surrounding quote marks.
+    /// Escape sequences are translated.
+    StringLiteral(String),
     LParen,
     RParen,
 }
@@ -86,7 +89,8 @@ impl fmt::Display for TokenType {
             Directive(directive) => write!(f, ".{}", directive),
             Comment(comment) => write!(f, "#{}", comment),
             Comma => write!(f, ","),
-            Immediate(n, render_type) => write!(f, "{}", render_type.format(*n)),
+            Immediate(n, render_type) => write!(f, "\"{}\"", render_type.format(*n)),
+            StringLiteral(s) => write!(f, "{}", s),
             LParen => write!(f, "("),
             RParen => write!(f, ")"),
         }
@@ -163,6 +167,10 @@ impl<'a> LineLexer<'a> {
         while let Some((_, c_ref)) = self.iter.peek() {
             let c = *c_ref;
             if is_delim(c) {
+                // sike, it's a label
+                if c == ':' {
+                    return Ok(TokenType::LabelDef(string_from_utf8(cs)));
+                }
                 break;
             }
             cs.push(c as u8);
@@ -178,6 +186,8 @@ impl<'a> LineLexer<'a> {
             // colon acts as a delimiter - if we hit a colon, we should start parsing the next token
             let c = *c_ref;
             if c == ':' {
+                // consume the trailing token so nothing else gets it by accident
+                self.iter.next();
                 return Ok(TokenType::LabelDef(string_from_utf8(cs)));
             }
             if is_delim(c) {
@@ -305,6 +315,43 @@ impl<'a> LineLexer<'a> {
         }
     }
 
+    fn build_string_literal(&mut self, state: &LexState) -> Result<TokenType, ParseError> {
+        // assume leading double quote mark was already consumed
+        let mut cs = Vec::<char>::new();
+        while let Some((_, c)) = self.iter.next() {
+            match c {
+                // found end quote, so return
+                '\"' => return Ok(TokenType::StringLiteral(string_from_chars(cs))),
+                // look for escape
+                '\\' => {
+                    let escaped = self.iter.next();
+                    match escaped {
+                        Some((offs2, c2)) => cs.push(match c2 {
+                            'n' => '\n',
+                            'r' => '\r',
+                            't' => '\t',
+                            '\"' => '\"',
+                            '\\' => '\\',
+                            _ => {
+                                return Err(ParseError::bad_escape(
+                                    Location {
+                                        offs: offs2,
+                                        ..state.location
+                                    },
+                                    c2,
+                                ))
+                            }
+                        }),
+                        None => return Err(ParseError::unclosed_string_literal(state.location)),
+                    }
+                }
+                _ => cs.push(c),
+            }
+        }
+        // iterator ran out - return error
+        Err(ParseError::unclosed_string_literal(state.location))
+    }
+
     fn new(lineno: LineNo, line: &'a str, reporter: &'a mut ParseErrorReporter) -> LineLexer<'a> {
         LineLexer {
             lineno,
@@ -336,7 +383,12 @@ impl<'a> LineLexer<'a> {
                     '#' => self.build_comment(),
                     '(' => Ok(TokenType::LParen),
                     ')' => Ok(TokenType::RParen),
-                    _ => continue,
+                    '\"' => self.build_string_literal(&state),
+                    ' ' | '\t' => continue,
+                    _ => Err(ParseError::generic(
+                        state.location,
+                        &format!("unexpected token {}", c),
+                    )),
                 }
             };
             match maybe_tok {
@@ -512,5 +564,23 @@ mod tests {
         let _tokens = lexer.lex();
         let report = reporter.into_report();
         assert_eq!(report.get_errs().len(), 2);
+    }
+
+    #[test]
+    fn test_string_literal() {
+        // the program sees a carefully escaped newline
+        let line = ".string \"howdy world\\n\"";
+        let LexResult {
+            lines, reporter, ..
+        } = Lexer::lex_str(line);
+        assert!(reporter.is_empty());
+        assert_eq!(lines.len(), 1);
+        let toks = &lines[0];
+        assert_eq!(toks.len(), 2);
+        assert_eq!(toks[0].data, TokenType::Directive("string".to_string()));
+        assert_eq!(
+            toks[1].data,
+            TokenType::StringLiteral("howdy world\n".to_string())
+        );
     }
 }
