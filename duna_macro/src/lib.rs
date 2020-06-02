@@ -3,7 +3,7 @@ use quote::quote;
 
 #[proc_macro_derive(ConvertInt64)]
 /// Automatically provides conversion methods to and from 64-bit int and wrapping int types.
-/// Assumes the target type has a new(u64) method.
+/// Assumes the target type has a new(u64) method, and has a backing field named value.
 pub fn convert_int64_derive(input: TokenStream) -> TokenStream {
     let ast = syn::parse(input).unwrap();
     impl_convert_int64_derive(&ast)
@@ -11,7 +11,7 @@ pub fn convert_int64_derive(input: TokenStream) -> TokenStream {
 
 #[proc_macro_derive(ConvertInt32)]
 /// Automatically provides conversion methods to and from 32-bit int and wrapping int types.
-/// Assumes the target type has a new(u32) method.
+/// Assumes the target type has a new(u32) method, and has a backing field named value.
 pub fn convert_int32_derive(input: TokenStream) -> TokenStream {
     let ast = syn::parse(input).unwrap();
     impl_convert_int32_derive(&ast)
@@ -41,7 +41,7 @@ fn impl_convert_int64_derive(ast: &syn::DeriveInput) -> TokenStream {
 
         impl From<i64> for #name {
             fn from(value: i64) -> #name {
-                #name::new(value as i64)
+                #name::new(value as u64)
             }
         }
 
@@ -53,7 +53,32 @@ fn impl_convert_int64_derive(ast: &syn::DeriveInput) -> TokenStream {
 
         impl From<Wrapping<i64>> for #name {
             fn from(value: Wrapping<i64>) -> #name {
-                #name::new(value.0)
+                #name::new(value.0 as u64)
+            }
+        }
+
+        impl From<#name> for u64 {
+            fn from(value: #name) -> u64 {
+                value.value
+            }
+        }
+
+        impl From<#name> for i64 {
+            fn from(value: #name) -> i64 {
+                value.value as i64
+            }
+        }
+
+
+        impl From<#name> for Wrapping<u64> {
+            fn from(value: #name) -> Wrapping<u64> {
+                Wrapping(value.value)
+            }
+        }
+
+        impl From<#name> for Wrapping<i64> {
+            fn from(value: #name) -> Wrapping<i64> {
+                Wrapping(value.value as i64)
             }
         }
     };
@@ -71,7 +96,7 @@ fn impl_convert_int32_derive(ast: &syn::DeriveInput) -> TokenStream {
 
         impl From<i32> for #name {
             fn from(value: i32) -> #name {
-                #name::new(value as i32)
+                #name::new(value as u32)
             }
         }
 
@@ -83,7 +108,32 @@ fn impl_convert_int32_derive(ast: &syn::DeriveInput) -> TokenStream {
 
         impl From<Wrapping<i32>> for #name {
             fn from(value: Wrapping<i32>) -> #name {
-                #name::new(value.0)
+                #name::new(value.0 as u32)
+            }
+        }
+
+        impl From<#name> for u32 {
+            fn from(value: #name) -> u32 {
+                value.value
+            }
+        }
+
+        impl From<#name> for i32 {
+            fn from(value: #name) -> i32 {
+                value.value as i32
+            }
+        }
+
+
+        impl From<#name> for Wrapping<u32> {
+            fn from(value: #name) -> Wrapping<u32> {
+                Wrapping(value.value)
+            }
+        }
+
+        impl From<#name> for Wrapping<i32> {
+            fn from(value: #name) -> Wrapping<i32> {
+                Wrapping(value.value as i32)
             }
         }
     };
