@@ -652,6 +652,14 @@ impl<'a> InstParser<'a> {
     }
 }
 
+/// Responsible for parsing a line with a directive.
+struct DirectiveParser<'a> {
+    data: &'a ParserData,
+    iter: TokenIter,
+    head_loc: Location,
+    head_directive: &'a str,
+}
+
 /// Responsible for parsing a line.
 struct LineParser<'a> {
     data: &'a ParserData,

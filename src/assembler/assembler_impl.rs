@@ -33,13 +33,15 @@ fn replace_inst(insts: &mut Vec<PartialInst>, i: usize, new_inst: PartialInst) {
 /// The parser must perform two passes in order to locate/process labels.
 /// This struct encodes data for a program that still needs to be passed to the assembler.
 pub struct UnlinkedProgram {
+    /// The list of instructions, which will be placed in the text segment in the order in which
+    /// they appear.
     pub insts: Vec<PartialInst>,
+    // a potential optimization is to store generated labels and needed labels in independent vecs
+    // instead of a hashmap, another vec can be used to lookup the corresponding PartialInst
     /// Maps labels to the index of the insts that define them
     local_labels: HashMap<Label, usize>,
     /// Maps needed labels to the index of the insts that need them
     pub needed_labels: HashMap<Label, usize>,
-    // a potential optimization is to store generated labels and needed labels in independent vecs
-    // instead of a hashmap, another vec can be used to lookup the corresponding PartialInst
 }
 
 impl UnlinkedProgram {

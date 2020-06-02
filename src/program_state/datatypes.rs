@@ -2,6 +2,43 @@ use std::cmp::{max, min};
 use std::fmt;
 use std::ops::Add;
 
+/// Represents a data type that can be used to hold data in a register.
+pub trait RegSize {
+    fn zero() -> Self;
+
+    /// Returns a copy of the value with the ith byte set to val.
+    fn set_byte(self, i: u8, val: DataByte) -> Self;
+
+    /// Selects the ith byte in the word, where 0 is the LSB.
+    fn get_byte(self, i: u8) -> DataByte;
+}
+
+/// Encodes the difference between a 32-bit and 64-bit system.
+pub trait MachineDataWidth {
+    type Signed;
+    type Unsigned;
+    type RegData: RegSize;
+    type ByteAddr: ByteAddress;
+}
+
+pub struct Width32b;
+
+impl MachineDataWidth for Width32b {
+    type Signed = i32;
+    type Unsigned = u32;
+    type RegData = DataWord;
+    type ByteAddr = ByteAddr32;
+}
+
+pub struct Width64b;
+
+impl MachineDataWidth for Width64b {
+    type Signed = u64;
+    type Unsigned = u64;
+    type RegData = DataDword;
+    type ByteAddr = ByteAddr64;
+}
+
 #[derive(Debug, Copy, Clone)]
 /// A bit vector that can fit inside 32 bits. Used to represent instruction fields.
 pub struct BitStr32 {
@@ -75,28 +112,89 @@ impl Add for BitStr32 {
     }
 }
 
+/// Represents a 64-bit double-word of data.
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct DataDword {
+    value: u64,
+}
+
+impl RegSize for DataDword {
+    fn zero() -> DataDword {
+        DataDword { value: 0 }
+    }
+
+    fn set_byte(self, i: u8, val: DataByte) -> DataDword {
+        debug_assert!(i < 8);
+        let mask: u64 = !(0xFF << (i * 8));
+        DataDword {
+            value: (self.value & mask) | ((val.value as u64) << (i * 8)),
+        }
+    }
+
+    fn get_byte(self, i: u8) -> DataByte {
+        debug_assert!(i < 8);
+        DataByte {
+            value: (self.value >> (i * 8)) as u8,
+        }
+    }
+}
+
+impl From<ByteAddr64> for DataWord {
+    fn from(value: ByteAddr64) -> DataWord {
+        DataDword {
+            value: u64::from(value),
+        }
+    }
+}
+
+impl From<u64> for DataDword {
+    fn from(value: u64) -> DataDword {
+        DataDword { value }
+    }
+}
+
+impl From<i64> for DataDword {
+    fn from(value: i64) -> DataDword {
+        DataDword {
+            value: value as u64,
+        }
+    }
+}
+
+impl From<DataDword> for u64 {
+    fn from(value: DataDword) -> u64 {
+        value.value
+    }
+}
+
+impl From<DataDword> for i64 {
+    fn from(value: DataDword) -> i64 {
+        value.value as i64
+    }
+}
+
 #[derive(Debug, Copy, Clone, PartialEq)]
 /// Represents a 32-bit word of data that can be stored in a register.
 /// This struct is used in place of a typealias to force call sites to make clear
 /// whether desired behavior is that of a signed or unsigned number.
-/// Note that Rust casts between int types of the same size is specified to be a no-op.
-/// https://doc.rust-lang.org/nomicon/casts.html
 pub struct DataWord {
     value: u32,
 }
 
 impl DataWord {
-    /// Returns a DataWord of zero.
-    pub const fn zero() -> DataWord {
-        DataWord { value: 0 }
-    }
-
     pub const fn to_bit_str(self, size: u8) -> BitStr32 {
         BitStr32::new(self.value, size)
     }
+}
+
+impl RegSize for DataWord {
+    /// Returns a DataWord of zero.
+    fn zero() -> DataWord {
+        DataWord { value: 0 }
+    }
 
     /// Returns a copy of the value with the ith byte set to val.
-    pub fn set_byte(self, i: u8, val: DataByte) -> DataWord {
+    fn set_byte(self, i: u8, val: DataByte) -> DataWord {
         debug_assert!(i < 4);
         let mask: u32 = !(0xFF << (i * 8));
         DataWord {
@@ -105,7 +203,7 @@ impl DataWord {
     }
 
     /// Selects the ith byte in the word, where 0 is the LSB.
-    pub fn get_byte(self, i: u8) -> DataByte {
+    fn get_byte(self, i: u8) -> DataByte {
         debug_assert!(i < 4);
         DataByte {
             value: (self.value >> (i * 8)) as u8,
@@ -119,8 +217,8 @@ impl fmt::Display for DataWord {
     }
 }
 
-impl From<ByteAddress> for DataWord {
-    fn from(value: ByteAddress) -> DataWord {
+impl From<ByteAddr32> for DataWord {
+    fn from(value: ByteAddr32) -> DataWord {
         DataWord {
             value: u32::from(value),
         }
@@ -150,6 +248,37 @@ impl From<DataWord> for u32 {
 impl From<DataWord> for i32 {
     fn from(value: DataWord) -> i32 {
         value.value as i32
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct DataHalf {
+    value: u16,
+}
+
+impl From<u16> for DataHalf {
+    fn from(value: u16) -> DataHalf {
+        DataHalf { value }
+    }
+}
+
+impl From<i16> for DataHalf {
+    fn from(value: i16) -> DataHalf {
+        DataHalf {
+            value: value as u16,
+        }
+    }
+}
+
+impl From<DataHalf> for u16 {
+    fn from(value: DataHalf) -> u16 {
+        value.value
+    }
+}
+
+impl From<DataHalf> for i16 {
+    fn from(value: DataHalf) -> i16 {
+        value.value as i16
     }
 }
 
@@ -204,60 +333,129 @@ impl From<DataByte> for i8 {
     }
 }
 
-#[derive(Eq, PartialEq, Debug, Copy, Clone)]
-pub struct ByteAddress {
-    addr: u32,
+pub trait ByteAddress {
+    type WordAddress;
+
+    fn to_word_address(self) -> Self::WordAddress;
+
+    fn get_word_offset(self) -> u8;
+
+    fn plus_4(self) -> Self;
 }
 
-impl ByteAddress {
-    pub const fn new(v: u32) -> ByteAddress {
-        ByteAddress { addr: v }
-    }
+#[derive(Eq, PartialEq, Debug, Copy, Clone)]
+pub struct ByteAddr64 {
+    addr: u64,
+}
 
-    pub const fn to_word_address(self) -> WordAddress {
+impl ByteAddr64 {
+    pub const fn new(v: u64) -> ByteAddr64 {
+        ByteAddr64 { addr: v }
+    }
+}
+
+impl ByteAddress for ByteAddr64 {
+    type WordAddress = u64;
+
+    fn to_word_address(self) -> Self::WordAddress {
         self.addr >> 2
     }
 
-    pub const fn get_word_offset(self) -> u8 {
+    fn get_word_offset(self) -> u8 {
         (self.addr & 0b11) as u8
     }
 
-    pub const fn plus_4(self) -> ByteAddress {
-        ByteAddress::new(self.addr.wrapping_add(4))
+    fn plus_4(self) -> ByteAddr64 {
+        ByteAddr64::new(self.addr.wrapping_add(4))
     }
 }
 
-impl From<DataWord> for ByteAddress {
-    fn from(value: DataWord) -> ByteAddress {
-        ByteAddress::new(value.value)
+impl From<DataDword> for ByteAddr64 {
+    fn from(value: DataDword) -> ByteAddr64 {
+        ByteAddr64::new(value.value)
     }
 }
 
-impl From<u32> for ByteAddress {
-    fn from(value: u32) -> ByteAddress {
-        ByteAddress::new(value)
+impl From<u64> for ByteAddr64 {
+    fn from(value: u64) -> ByteAddr64 {
+        ByteAddr64::new(value)
     }
 }
 
-impl From<i32> for ByteAddress {
-    fn from(value: i32) -> ByteAddress {
-        ByteAddress::new(value as u32)
+impl From<i64> for ByteAddr64 {
+    fn from(value: i64) -> ByteAddr64 {
+        ByteAddr64::new(value as u64)
     }
 }
 
-impl From<ByteAddress> for u32 {
-    fn from(value: ByteAddress) -> u32 {
+impl From<ByteAddr64> for u64 {
+    fn from(value: ByteAddr64) -> u64 {
         value.addr
     }
 }
 
-impl From<ByteAddress> for i32 {
-    fn from(value: ByteAddress) -> i32 {
-        value.addr as i32
+impl From<ByteAddr64> for i64 {
+    fn from(value: ByteAddr64) -> i64 {
+        value.addr as i64
     }
 }
 
-pub type WordAddress = u32;
+#[derive(Eq, PartialEq, Debug, Copy, Clone)]
+pub struct ByteAddr32 {
+    addr: u32,
+}
+
+impl ByteAddr32 {
+    const fn new(v: u32) -> ByteAddr32 {
+        ByteAddr32 { addr: v }
+    }
+}
+
+impl ByteAddress for ByteAddr32 {
+    type WordAddress = u32;
+
+    fn to_word_address(self) -> Self::WordAddress {
+        self.addr >> 2
+    }
+
+    fn get_word_offset(self) -> u8 {
+        (self.addr & 0b11) as u8
+    }
+
+    fn plus_4(self) -> ByteAddr32 {
+        ByteAddr32::new(self.addr.wrapping_add(4))
+    }
+}
+
+impl From<DataWord> for ByteAddr32 {
+    fn from(value: DataWord) -> ByteAddr32 {
+        ByteAddr32::new(value.value)
+    }
+}
+
+impl From<u32> for ByteAddr32 {
+    fn from(value: u32) -> ByteAddr32 {
+        ByteAddr32::new(value)
+    }
+}
+
+impl From<i32> for ByteAddr32 {
+    fn from(value: i32) -> ByteAddr32 {
+        ByteAddr32::new(value as u32)
+    }
+}
+
+impl From<ByteAddr32> for u32 {
+    fn from(value: ByteAddr32) -> u32 {
+        value.addr
+    }
+}
+
+impl From<ByteAddr32> for i32 {
+    fn from(value: ByteAddr32) -> i32 {
+        value.addr as i32
+    }
+}
 
 #[cfg(test)]
 mod test {

@@ -97,24 +97,24 @@ impl IRegister {
 
 const REGFILE_SIZE: usize = 32;
 
-pub struct RegFile {
-    store: [DataWord; REGFILE_SIZE],
+pub struct RegFile<T: MachineDataWidth> {
+    store: [T::RegData; REGFILE_SIZE],
 }
 
-impl RegFile {
-    pub(in crate::program_state) fn new() -> RegFile {
+impl<T: MachineDataWidth> RegFile<T> {
+    pub(in crate::program_state) fn new() -> RegFile<T> {
         RegFile {
-            store: [DataWord::zero(); REGFILE_SIZE],
+            store: [T::RegData::zero(); REGFILE_SIZE],
         }
     }
 
-    pub fn set(&mut self, rd: IRegister, val: DataWord) {
+    pub fn set(&mut self, rd: IRegister, val: T::RegData) {
         if rd != IRegister::ZERO {
             self.store[rd.to_usize()] = val;
         }
     }
 
-    pub fn read(&self, rs: IRegister) -> DataWord {
+    pub fn read(&self, rs: IRegister) -> T::RegData {
         self.store[rs.to_usize()]
     }
 }
