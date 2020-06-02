@@ -25,8 +25,8 @@ pub struct JInstFields {
     pub opcode: BitStr32,
 }
 
-pub struct ConcreteInst {
-    pub eval: Box<dyn Fn(&ProgramState) -> InstResult>,
+pub struct ConcreteInst<T: MachineDataWidth> {
+    pub eval: Box<dyn Fn(&ProgramState<T>) -> InstResult<T>>,
     data: ConcreteInstData,
 }
 
@@ -67,7 +67,7 @@ enum ConcreteInstData {
     },
 }
 
-impl ConcreteInst {
+impl<T: MachineDataWidth> ConcreteInst<T> {
     pub fn to_machine_code(&self) -> u32 {
         match self.data {
             ConcreteInstData::R {
@@ -141,19 +141,19 @@ impl ConcreteInst {
     }
 }
 
-impl PartialEq<ConcreteInst> for ConcreteInst {
-    fn eq(&self, other: &ConcreteInst) -> bool {
+impl<T: MachineDataWidth> PartialEq<ConcreteInst<T>> for ConcreteInst<T> {
+    fn eq(&self, other: &ConcreteInst<T>) -> bool {
         self.to_machine_code() == other.to_machine_code()
     }
 }
 
-impl fmt::Debug for ConcreteInst {
+impl<T: MachineDataWidth> fmt::Debug for ConcreteInst<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:#010X}", self.to_machine_code())
     }
 }
 
-impl fmt::Display for ConcreteInst {
+impl<T: MachineDataWidth> fmt::Display for ConcreteInst<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use ConcreteInstData::*;
         let data = &self.data;
@@ -173,8 +173,8 @@ impl fmt::Display for ConcreteInst {
     }
 }
 
-pub trait RType {
-    fn new(rd: IRegister, rs1: IRegister, rs2: IRegister) -> ConcreteInst {
+pub trait RType<T: MachineDataWidth> {
+    fn new(rd: IRegister, rs1: IRegister, rs2: IRegister) -> ConcreteInst<T> {
         ConcreteInst {
             eval: Box::new(move |state| {
                 let user_state = &state.user_state;
@@ -194,60 +194,51 @@ pub trait RType {
     fn inst_fields() -> RInstFields;
 
     /// Calculates the new value of rd given values of rs1 and rs2.
-    fn eval(rs1_val: DataWord, rs2_val: DataWord) -> DataWord;
+    fn eval(rs1_val: T::RegData, rs2_val: T::RegData) -> T::RegData;
 }
 
-pub trait IType {
-    fn new(rd: IRegister, rs1: IRegister, imm: DataWord) -> ConcreteInst {
-        let imm_vec = imm.to_bit_str(12);
+pub trait IType<T: MachineDataWidth> {
+    /// Creates an instance of the IType istruction.
+    fn new(rd: IRegister, rs1: IRegister, imm: T::RegData) -> ConcreteInst<T> {
         ConcreteInst {
             // closure must contain match, since otherwise the types for arms don't match
             eval: Box::new(move |state| {
-                InstResult::UserStateChange(<Self as IType>::eval(
+                InstResult::UserStateChange(<Self as IType<T>>::eval(
                     &state.user_state,
                     rd,
                     rs1,
-                    imm_vec,
+                    imm,
                 ))
             }),
-            // Box::new(move |user_state| match Self::eval_wrapper() {
-            //     Generic(eval) => eval(user_state, rd, rs1, imm_vec),
-            //     Arith(eval) => {
-            //         let new_rd_val = eval(user_state.regfile.read(rs1), imm_vec);
-            //         UserStateChange::reg_write_pc_p4(user_state, rd, new_rd_val)
-            //     }
-            //     Load(eval) => {
-            //         let offs = imm_vec.to_sgn_data_word();
-            //         let rs1_val = user_state.regfile.read(rs1);
-            //         let addr = DataWord::from(i32::from(rs1_val).wrapping_add(i32::from(offs)));
-            //         let new_rd_val = eval(&user_state.memory, ByteAddress::from(addr));
-            //         UserStateChange::reg_write_pc_p4(user_state, rd, new_rd_val)
-            //     }
-            // }),
             data: ConcreteInstData::I {
                 fields: Self::inst_fields(),
                 rd,
                 rs1,
-                imm: imm_vec,
+                imm,
             },
         }
     }
     fn inst_fields() -> IInstFields;
-    fn eval(state: &UserProgState, rd: IRegister, rs1: IRegister, imm: BitStr32) -> UserDiff;
+    fn eval(
+        state: &UserProgState<T>,
+        rd: IRegister,
+        rs1: IRegister,
+        imm: T::RegData,
+    ) -> UserDiff<T>;
 }
 
-pub(crate) trait ITypeArith: IType {
+pub(crate) trait ITypeArith<T: MachineDataWidth>: IType<T> {
     fn inst_fields() -> IInstFields;
-    fn eval(rs1_val: DataWord, imm: BitStr32) -> DataWord;
+    fn eval(rs1_val: T::RegData, imm: T::RegData) -> T::RegData;
 }
 
-pub(crate) trait ITypeLoad: IType {
+pub(crate) trait ITypeLoad<T: MachineDataWidth>: IType<T> {
     fn inst_fields() -> IInstFields;
-    fn eval(mem: &Memory, addr: ByteAddress) -> DataWord;
+    fn eval(mem: &Memory<T>, addr: T::ByteAddr) -> T::RegData;
 }
 
-pub trait EnvironInst {
-    fn new() -> ConcreteInst {
+pub trait EnvironInst<T: MachineDataWidth> {
+    fn new() -> ConcreteInst<T> {
         ConcreteInst {
             eval: Box::new(|state| InstResult::Trap(Self::eval(state))),
             data: ConcreteInstData::I {
@@ -260,11 +251,11 @@ pub trait EnvironInst {
     }
     fn funct12() -> BitStr32;
     fn inst_fields() -> IInstFields;
-    fn eval(state: &ProgramState) -> TrapKind;
+    fn eval(state: &ProgramState<T>) -> TrapKind;
 }
 
-pub trait SType {
-    fn new(rs1: IRegister, rs2: IRegister, imm: DataWord) -> ConcreteInst {
+pub trait SType<T: MachineDataWidth> {
+    fn new(rs1: IRegister, rs2: IRegister, imm: T::RegData) -> ConcreteInst<T> {
         let imm_vec = imm.to_bit_str(12);
         ConcreteInst {
             eval: Box::new(move |state| {
@@ -279,11 +270,12 @@ pub trait SType {
         }
     }
     fn inst_fields() -> SInstFields;
-    fn eval(state: &UserProgState, rs1: IRegister, rs2: IRegister, imm: BitStr32) -> UserDiff;
+    fn eval(state: &UserProgState<T>, rs1: IRegister, rs2: IRegister, imm: BitStr32)
+        -> UserDiff<T>;
 }
 
-pub trait BType {
-    fn new(rs1: IRegister, rs2: IRegister, imm: DataWord) -> ConcreteInst {
+pub trait BType<T: MachineDataWidth> {
+    fn new(rs1: IRegister, rs2: IRegister, imm: T::RegData) -> ConcreteInst<T> {
         let imm_vec = imm.to_bit_str(13);
         ConcreteInst {
             eval: Box::new(move |state| {
@@ -310,15 +302,15 @@ pub trait BType {
     fn inst_fields() -> BInstFields;
 
     /// Returns true if the branch should be taken.
-    fn eval(rs1_val: DataWord, rs2_val: DataWord) -> bool;
+    fn eval(rs1_val: T::RegData, rs2_val: T::RegData) -> bool;
 }
 
-pub trait UType {
-    fn new(rd: IRegister, imm: DataWord) -> ConcreteInst {
+pub trait UType<T: MachineDataWidth> {
+    fn new(rd: IRegister, imm: T::RegData) -> ConcreteInst<T> {
         let imm_vec = imm.to_bit_str(20);
         ConcreteInst {
             eval: Box::new(move |state| {
-                InstResult::UserStateChange(Self::eval(&state.user_state, rd, imm_vec))
+                InstResult::UserStateChange(Self::eval(&state.user_state, rd, imm))
             }),
             data: ConcreteInstData::U {
                 fields: Self::inst_fields(),
@@ -329,11 +321,11 @@ pub trait UType {
     }
 
     fn inst_fields() -> UInstFields;
-    fn eval(state: &UserProgState, rd: IRegister, imm: BitStr32) -> UserDiff;
+    fn eval(state: &UserProgState<T>, rd: IRegister, imm: T::RegData) -> UserDiff<T>;
 }
 
-pub trait JType {
-    fn new(rd: IRegister, imm: DataWord) -> ConcreteInst {
+pub trait JType<T: MachineDataWidth> {
+    fn new(rd: IRegister, imm: T::RegData) -> ConcreteInst<T> {
         let imm_vec = imm.to_bit_str(20);
         ConcreteInst {
             eval: Box::new(move |state| {
@@ -347,5 +339,5 @@ pub trait JType {
         }
     }
     fn inst_fields() -> JInstFields;
-    fn eval(state: &UserProgState, rd: IRegister, imm: BitStr32) -> UserDiff;
+    fn eval(state: &UserProgState<T>, rd: IRegister, imm: T::RegData) -> UserDiff<T>;
 }

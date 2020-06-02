@@ -1,8 +1,13 @@
+use duna_macro::*;
 use std::cmp::{max, min};
+use std::convert::TryInto;
 use std::fmt;
+use std::num::Wrapping;
 use std::ops::Add;
 
 /// Represents a data type that can be used to hold data in a register.
+/// Both 32-bit and 64-bit systems will use 64-bit numeric types that are then
+/// cast down later.
 pub trait RegSize {
     fn zero() -> Self;
 
@@ -15,28 +20,110 @@ pub trait RegSize {
 
 /// Encodes the difference between a 32-bit and 64-bit system.
 pub trait MachineDataWidth {
-    type Signed;
-    type Unsigned;
-    type RegData: RegSize;
-    type ByteAddr: ByteAddress;
+    type Signed: From<Self::RegData> + From<Self::ByteAddr> + Add<Self::Signed>;
+    type Unsigned: From<Self::RegData> + From<Self::ByteAddr> + Add<Self::Unsigned>;
+    type RegData: RegSize + From<Self::Signed> + From<Self::Unsigned> + From<Self::ByteAddr>;
+    type ByteAddr: ByteAddress + From<Self::Signed> + From<Self::Unsigned> + From<Self::RegData>;
+
+    fn unsigned_to_usize(data: Self::Unsigned) -> usize;
+    fn signed_to_addr(data: Self::Signed) -> Self::ByteAddr;
+    fn unsigned_to_addr(data: Self::Unsigned) -> Self::ByteAddr;
+    fn signed_to_data(data: Self::Signed) -> Self::RegData;
+    fn data_to_signed(data: Self::RegData) -> Self::Signed;
+    fn data_to_unsigned(data: Self::RegData) -> Self::Unsigned;
+    fn data_to_addr(data: Self::RegData) -> Self::ByteAddr;
+    fn addr_to_data(addr: Self::ByteAddr) -> Self::RegData;
+    fn addr_to_unsigned(addr: Self::ByteAddr) -> Self::Unsigned;
 }
 
 pub struct Width32b;
 
 impl MachineDataWidth for Width32b {
-    type Signed = i32;
-    type Unsigned = u32;
+    type Signed = Wrapping<i32>;
+    type Unsigned = Wrapping<u32>;
     type RegData = DataWord;
     type ByteAddr = ByteAddr32;
+
+    fn unsigned_to_usize(data: Self::Unsigned) -> usize {
+        data as usize
+    }
+
+    fn signed_to_addr(data: Self::Signed) -> Self::ByteAddr {
+        ByteAddr32::from(data)
+    }
+
+    fn unsigned_to_addr(data: Self::Unsigned) -> Self::ByteAddr {
+        ByteAddr32::from(data)
+    }
+
+    fn signed_to_data(data: Self::Signed) -> Self::RegData {
+        DataWord::from(data)
+    }
+
+    fn data_to_signed(data: Self::RegData) -> Self::Signed {
+        i32::from(data)
+    }
+
+    fn data_to_unsigned(data: Self::RegData) -> Self::Unsigned {
+        u32::from(data)
+    }
+
+    fn data_to_addr(data: Self::RegData) -> Self::ByteAddr {
+        ByteAddr32::from(data)
+    }
+
+    fn addr_to_data(addr: Self::ByteAddr) -> Self::RegData {
+        DataWord::from(addr)
+    }
+
+    fn addr_to_unsigned(addr: Self::ByteAddr) -> Self::Unsigned {
+        u32::from(addr)
+    }
 }
 
 pub struct Width64b;
 
 impl MachineDataWidth for Width64b {
-    type Signed = u64;
-    type Unsigned = u64;
+    type Signed = Wrapping<i64>;
+    type Unsigned = Wrapping<u64>;
     type RegData = DataDword;
     type ByteAddr = ByteAddr64;
+
+    fn unsigned_to_usize(data: Self::Unsigned) -> usize {
+        data as usize
+    }
+
+    fn signed_to_addr(data: Self::Signed) -> Self::ByteAddr {
+        ByteAddr64::from(data)
+    }
+
+    fn unsigned_to_addr(data: Self::Unsigned) -> Self::ByteAddr {
+        ByteAddr64::from(data)
+    }
+
+    fn signed_to_data(data: Self::Signed) -> Self::RegData {
+        DataDword::from(data)
+    }
+
+    fn data_to_signed(data: Self::RegData) -> Self::Signed {
+        i64::from(data)
+    }
+
+    fn data_to_unsigned(data: Self::RegData) -> Self::Unsigned {
+        u64::from(data)
+    }
+
+    fn data_to_addr(data: Self::RegData) -> Self::ByteAddr {
+        ByteAddr64::from(data)
+    }
+
+    fn addr_to_data(addr: Self::ByteAddr) -> Self::RegData {
+        DataDword::from(addr)
+    }
+
+    fn addr_to_unsigned(addr: Self::ByteAddr) -> Self::Unsigned {
+        u64::from(addr)
+    }
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -139,8 +226,8 @@ impl RegSize for DataDword {
     }
 }
 
-impl From<ByteAddr64> for DataWord {
-    fn from(value: ByteAddr64) -> DataWord {
+impl From<ByteAddr64> for DataDword {
+    fn from(value: ByteAddr64) -> DataDword {
         DataDword {
             value: u64::from(value),
         }
@@ -161,6 +248,20 @@ impl From<i64> for DataDword {
     }
 }
 
+impl From<Wrapping<u64>> for DataDword {
+    fn from(value: Wrapping<u64>) -> DataDword {
+        DataWord { value: value.0 }
+    }
+}
+
+impl From<Wrapping<i64>> for DataWord {
+    fn from(value: Wrapping<i64>) -> DataDword {
+        DataWord {
+            value: value.0 as u64,
+        }
+    }
+}
+
 impl From<DataDword> for u64 {
     fn from(value: DataDword) -> u64 {
         value.value
@@ -173,7 +274,7 @@ impl From<DataDword> for i64 {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, ConvertInt32)]
 /// Represents a 32-bit word of data that can be stored in a register.
 /// This struct is used in place of a typealias to force call sites to make clear
 /// whether desired behavior is that of a signed or unsigned number.
@@ -184,6 +285,10 @@ pub struct DataWord {
 impl DataWord {
     pub const fn to_bit_str(self, size: u8) -> BitStr32 {
         BitStr32::new(self.value, size)
+    }
+
+    fn new(value: u32) -> DataWord {
+        DataWord { value }
     }
 }
 
@@ -221,20 +326,6 @@ impl From<ByteAddr32> for DataWord {
     fn from(value: ByteAddr32) -> DataWord {
         DataWord {
             value: u32::from(value),
-        }
-    }
-}
-
-impl From<u32> for DataWord {
-    fn from(value: u32) -> DataWord {
-        DataWord { value }
-    }
-}
-
-impl From<i32> for DataWord {
-    fn from(value: i32) -> DataWord {
-        DataWord {
-            value: value as u32,
         }
     }
 }
@@ -336,26 +427,30 @@ impl From<DataByte> for i8 {
 pub trait ByteAddress {
     type WordAddress;
 
+    fn new(n: u64) -> Self
+    where
+        Self: Sized;
+
     fn to_word_address(self) -> Self::WordAddress;
 
     fn get_word_offset(self) -> u8;
 
-    fn plus_4(self) -> Self;
+    fn plus_4(self) -> Self
+    where
+        Self: Sized;
 }
 
-#[derive(Eq, PartialEq, Debug, Copy, Clone)]
+#[derive(Eq, PartialEq, Debug, Copy, Clone, ConvertInt64)]
 pub struct ByteAddr64 {
     addr: u64,
 }
 
-impl ByteAddr64 {
-    pub const fn new(v: u64) -> ByteAddr64 {
-        ByteAddr64 { addr: v }
-    }
-}
-
 impl ByteAddress for ByteAddr64 {
     type WordAddress = u64;
+
+    fn new(v: u64) -> ByteAddr64 {
+        ByteAddr64 { addr: v }
+    }
 
     fn to_word_address(self) -> Self::WordAddress {
         self.addr >> 2
@@ -376,18 +471,6 @@ impl From<DataDword> for ByteAddr64 {
     }
 }
 
-impl From<u64> for ByteAddr64 {
-    fn from(value: u64) -> ByteAddr64 {
-        ByteAddr64::new(value)
-    }
-}
-
-impl From<i64> for ByteAddr64 {
-    fn from(value: i64) -> ByteAddr64 {
-        ByteAddr64::new(value as u64)
-    }
-}
-
 impl From<ByteAddr64> for u64 {
     fn from(value: ByteAddr64) -> u64 {
         value.addr
@@ -405,14 +488,14 @@ pub struct ByteAddr32 {
     addr: u32,
 }
 
-impl ByteAddr32 {
-    const fn new(v: u32) -> ByteAddr32 {
-        ByteAddr32 { addr: v }
-    }
-}
-
 impl ByteAddress for ByteAddr32 {
     type WordAddress = u32;
+
+    fn new(v: u64) -> ByteAddr32 {
+        ByteAddr32 {
+            addr: v.try_into().unwrap(),
+        }
+    }
 
     fn to_word_address(self) -> Self::WordAddress {
         self.addr >> 2
@@ -423,25 +506,25 @@ impl ByteAddress for ByteAddr32 {
     }
 
     fn plus_4(self) -> ByteAddr32 {
-        ByteAddr32::new(self.addr.wrapping_add(4))
+        ByteAddr32::new(self.addr.wrapping_add(4) as u64)
     }
 }
 
 impl From<DataWord> for ByteAddr32 {
     fn from(value: DataWord) -> ByteAddr32 {
-        ByteAddr32::new(value.value)
+        ByteAddr32::new(value.value as u64)
     }
 }
 
 impl From<u32> for ByteAddr32 {
     fn from(value: u32) -> ByteAddr32 {
-        ByteAddr32::new(value)
+        ByteAddr32::new(value as u64)
     }
 }
 
 impl From<i32> for ByteAddr32 {
     fn from(value: i32) -> ByteAddr32 {
-        ByteAddr32::new(value as u32)
+        ByteAddr32::new((value as u32) as u64)
     }
 }
 

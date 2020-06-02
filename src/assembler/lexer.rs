@@ -53,7 +53,7 @@ impl ImmRenderType {
         }
     }
 
-    pub fn format(self, n: i32) -> String {
+    pub fn format(self, n: i64) -> String {
         match self {
             Bin => format!("{:#b}", n),
             Dec => format!("{}", n),
@@ -72,7 +72,7 @@ pub enum TokenType {
     Directive(String),
     Comment(String),
     Comma,
-    Immediate(i32, ImmRenderType),
+    Immediate(i64, ImmRenderType),
     /// A token representing a string literal, without the surrounding quote marks.
     /// Escape sequences are translated.
     StringLiteral(String),

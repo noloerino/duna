@@ -1,11 +1,11 @@
 use crate::instruction::*;
 use crate::isa::*;
-use crate::program_state::{BitStr32, DataWord, IRegister, RegSize};
+use crate::program_state::{BitStr32, DataWord, IRegister, MachineDataWidth, RegSize};
 use IRegister::*;
 
 pub struct Nop;
 impl Nop {
-    pub fn expand() -> ConcreteInst {
+    pub fn expand<T: MachineDataWidth>() -> ConcreteInst<T> {
         Addi::new(ZERO, ZERO, DataWord::zero())
     }
 }
@@ -14,7 +14,7 @@ impl Nop {
 // and li is emmitted as lui + ld
 pub struct Li;
 impl Li {
-    pub fn expand(reg: IRegister, data: DataWord) -> Vec<ConcreteInst> {
+    pub fn expand<T: MachineDataWidth>(reg: IRegister, data: DataWord) -> Vec<ConcreteInst<T>> {
         let imm = data.to_bit_str(32);
         let mut upper = imm.slice(32, 12);
         let lower = imm.slice(11, 0);
@@ -38,42 +38,42 @@ impl Li {
 
 pub struct Mv;
 impl Mv {
-    pub fn expand(rd: IRegister, rs: IRegister) -> ConcreteInst {
+    pub fn expand<T: MachineDataWidth>(rd: IRegister, rs: IRegister) -> ConcreteInst<T> {
         Addi::new(rd, rs, DataWord::zero())
     }
 }
 
 pub struct JalPseudo;
 impl JalPseudo {
-    pub fn expand(offs: DataWord) -> ConcreteInst {
+    pub fn expand<T: MachineDataWidth>(offs: DataWord) -> ConcreteInst<T> {
         Jal::new(RA, offs)
     }
 }
 
 pub struct JalrPseudo;
 impl JalrPseudo {
-    pub fn expand(rs: IRegister) -> ConcreteInst {
+    pub fn expand<T: MachineDataWidth>(rs: IRegister) -> ConcreteInst<T> {
         Jalr::new(RA, rs, DataWord::zero())
     }
 }
 
 pub struct J;
 impl J {
-    pub fn expand(offs: DataWord) -> ConcreteInst {
+    pub fn expand<T: MachineDataWidth>(offs: DataWord) -> ConcreteInst<T> {
         Jal::new(ZERO, offs)
     }
 }
 
 pub struct Jr;
 impl Jr {
-    pub fn expand(rs: IRegister) -> ConcreteInst {
+    pub fn expand<T: MachineDataWidth>(rs: IRegister) -> ConcreteInst<T> {
         Jalr::new(ZERO, rs, DataWord::zero())
     }
 }
 
 pub struct Ret;
 impl Ret {
-    pub fn expand() -> ConcreteInst {
+    pub fn expand<T: MachineDataWidth>() -> ConcreteInst<T> {
         Jalr::new(ZERO, RA, DataWord::zero())
     }
 }

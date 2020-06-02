@@ -7,31 +7,34 @@ use std::collections::HashMap;
 use std::str;
 
 pub struct RiscVProgram<T: MachineDataWidth> {
-    pub insts: Vec<ConcreteInst>,
+    pub insts: Vec<ConcreteInst<T>>,
     pub state: ProgramState<T>,
     // TODO add symbol table, relocation data, etc.?
 }
 
 impl<T: MachineDataWidth> RiscVProgram<T> {
-    pub const TEXT_START: T::ByteAddr = T::ByteAddr::new(0x0000_0008);
-    pub const STACK_START: T::ByteAddr = T::ByteAddr::new(0x7FFF_FFF0);
+    const TEXT_START: u64 = 0x0000_0008;
+    const STACK_START: u64 = 0x7FFF_FFF0;
 
     /// Initializes a new program instance from the provided instructions.
     /// The instructions are loaded into memory at the start of the instruction section,
     /// which defaults to TEXT_START to avoid any accidental null pointer derefs.
     /// The stack pointer is initialized to STACK_START.
-    pub fn new(insts: Vec<ConcreteInst>) -> RiscVProgram<T> {
+    pub fn new(insts: Vec<ConcreteInst<T>>) -> RiscVProgram<T> {
         let mut state = ProgramState::new();
         let mut user_state = &mut state.user_state;
+        let text_start = T::ByteAddr::new(RiscVProgram::TEXT_START);
+        let stack_start = T::ByteAddr::new(RiscVProgram::STACK_START);
         user_state
             .regfile
-            .set(IRegister::SP, DataWord::from(RiscVProgram::STACK_START));
-        user_state.pc = RiscVProgram::TEXT_START;
-        let mut next_addr = user_state.pc.to_word_address();
+            .set(IRegister::SP, T::addr_to_data(stack_start));
+        user_state.pc = text_start;
+        let mut next_addr = (user_state.pc as T::ByteAddr).to_word_address();
         for inst in &insts {
-            user_state
-                .memory
-                .set_word(next_addr, DataWord::from(inst.to_machine_code()));
+            user_state.memory.set_word(
+                next_addr,
+                <T::RegData as From<u64>>::from(inst.to_machine_code() as u64),
+            );
             next_addr += 1
         }
         RiscVProgram { insts, state }
@@ -49,18 +52,20 @@ impl<T: MachineDataWidth> RiscVProgram<T> {
     }
 
     /// Runs the program to completion, returning the value in register a0.
-    pub fn run(&mut self) -> i32 {
+    pub fn run(&mut self) -> T::Signed {
         // for now, just use the instruction vec to determine the next instruction
         let pc_start = RiscVProgram::TEXT_START;
         // for now, if we're out of instructions just call it a day
         // if pc dipped below pc_start, panic for now is also fine
         while let Some(inst) = self.insts.get(
-            ByteAddress::from(u32::from(self.state.user_state.pc) - u32::from(pc_start))
-                .to_word_address() as usize,
+            T::unsigned_to_addr(
+                T::addr_to_unsigned(self.state.user_state.pc) - T::addr_to_unsigned(pc_start),
+            )
+            .to_word_address() as usize,
         ) {
             self.state.apply_inst(inst);
         }
-        i32::from(self.state.user_state.regfile.read(IRegister::A0))
+        T::data_to_signed(self.state.user_state.regfile.read(IRegister::A0))
     }
 }
 
@@ -137,9 +142,11 @@ impl<T: MachineDataWidth> ProgramState<T> {
         let a0 = rf.read(A0);
         let a1 = rf.read(A1);
         let a2 = rf.read(A2);
-        if let Some(nr) = Syscall::from_number(i32::from(self.user_state.regfile.read(A7))) {
+        if let Some(nr) =
+            Syscall::from_number::<T>(T::data_to_signed(self.user_state.regfile.read(A7)))
+        {
             match nr {
-                Syscall::Write => self.syscall_write(a0, ByteAddress::from(a1), a2),
+                Syscall::Write => self.syscall_write(a0, T::data_to_addr(a1), a2),
                 _ => self.syscall_unknown(),
             }
         } else {
@@ -152,7 +159,12 @@ impl<T: MachineDataWidth> ProgramState<T> {
     /// * a0 - file descriptor
     /// * a1 - pointer to the buffer to be written
     /// * a2 - the number of bytes to write
-    fn syscall_write(&self, fd: DataWord, buf: T::ByteAddr, len: DataWord) -> PrivStateChange<T> {
+    fn syscall_write(
+        &self,
+        fd: T::RegData,
+        buf: T::ByteAddr,
+        len: T::RegData,
+    ) -> PrivStateChange<T> {
         PrivStateChange::FileWrite { fd, buf, len }
     }
 
@@ -168,7 +180,7 @@ impl<T: MachineDataWidth> ProgramState<T> {
         }
     }
 
-    pub fn apply_inst(&mut self, inst: &ConcreteInst) {
+    pub fn apply_inst(&mut self, inst: &ConcreteInst<T>) {
         self.apply_diff(&(*inst.eval)(self));
     }
 
@@ -231,7 +243,7 @@ lazy_static! {
 
 impl Syscall {
     /// Returns the syscall identified by number N, or none if no such syscall exists.
-    pub fn from_number(n: i32) -> Option<Syscall> {
+    pub fn from_number<T: MachineDataWidth>(n: T::Signed) -> Option<Syscall> {
         RISCV_SYSCALL_TABLE.get(&n).cloned()
     }
 
@@ -269,14 +281,15 @@ impl PrivProgState {
             NoChange => UserDiff::noop(user_state),
             FileWrite { fd: _, buf, len } => {
                 let memory = &user_state.memory;
-                let count = u32::from(*len);
-                let bytes: Vec<u8> = (0..count)
-                    .map(|i| {
-                        u8::from(
-                            memory.get_byte(ByteAddress::from(u32::from(*buf).wrapping_add(i))),
-                        )
-                    })
-                    .collect();
+                let count = T::unsigned_to_usize(T::data_to_unsigned(*len));
+                let bytes: Vec<u8> =
+                    (0..count)
+                        .map(|i| {
+                            u8::from(memory.get_byte(T::data_to_addr(
+                                T::data_to_unsigned(*buf).wrapping_add(i),
+                            )))
+                        })
+                        .collect();
                 // TODO impl for other files
                 print!("{}", String::from_utf8_lossy(&bytes));
                 self.stdout.extend(bytes);
@@ -323,7 +336,7 @@ impl<T: MachineDataWidth> Default for UserProgState<T> {
 impl<T: MachineDataWidth> UserProgState<T> {
     pub fn new() -> UserProgState<T> {
         UserProgState {
-            pc: ByteAddress::from(0),
+            pc: T::unsigned_to_addr(0),
             regfile: RegFile::new(),
             memory: Memory::new(),
         }
@@ -527,11 +540,12 @@ impl<T: MachineDataWidth> UserDiff<T> {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::program_state::Width32b;
 
     #[test]
     fn test_e2e_program() {
         let mut program = "addi s1, zero, 4\nadd a0, s1, zero"
-            .parse::<RiscVProgram>()
+            .parse::<RiscVProgram<Width32b>>()
             .unwrap();
         let result = program.run();
         assert_eq!(result, 4);

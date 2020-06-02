@@ -3,7 +3,7 @@ use super::parse_error::{ParseError, ParseErrorReport, ParseErrorReporter};
 use super::partial_inst::PartialInst;
 use crate::instruction::*;
 use crate::isa;
-use crate::program_state::{DataWord, IRegister};
+use crate::program_state::{DataWord, IRegister, MachineDataWidth, Width32b};
 use crate::pseudo_inst::*;
 use std::collections::HashMap;
 use std::iter::Peekable;
@@ -11,45 +11,45 @@ use std::vec::IntoIter;
 
 pub type Label = String;
 
-type ParsedInstStream = Vec<PartialInst>;
-type LineParseResult = Result<ParsedInstStream, ParseError>;
-pub struct ParseResult {
-    pub insts: ParsedInstStream,
+type ParsedInstStream<T: MachineDataWidth> = Vec<PartialInst<T>>;
+type LineParseResult<T: MachineDataWidth> = Result<ParsedInstStream<T>, ParseError>;
+pub struct ParseResult<T: MachineDataWidth> {
+    pub insts: ParsedInstStream<T>,
     pub report: ParseErrorReport,
 }
 
 #[derive(Clone)]
 /// Describes the arguments needed for a type of function.
 /// Due to their unique parsing rules, Jal, Jalr, and Li are hardcoded.
-enum ParseType {
+enum ParseType<T: MachineDataWidth> {
     // Base ISA
-    R(fn(IRegister, IRegister, IRegister) -> ConcreteInst),
-    Arith(fn(IRegister, IRegister, DataWord) -> ConcreteInst),
-    Env(fn() -> ConcreteInst),
-    MemL(fn(IRegister, IRegister, DataWord) -> ConcreteInst),
-    MemS(fn(IRegister, IRegister, DataWord) -> ConcreteInst),
-    B(fn(IRegister, IRegister, DataWord) -> ConcreteInst),
+    R(fn(IRegister, IRegister, IRegister) -> ConcreteInst<T>),
+    Arith(fn(IRegister, IRegister, DataWord) -> ConcreteInst<T>),
+    Env(fn() -> ConcreteInst<T>),
+    MemL(fn(IRegister, IRegister, DataWord) -> ConcreteInst<T>),
+    MemS(fn(IRegister, IRegister, DataWord) -> ConcreteInst<T>),
+    B(fn(IRegister, IRegister, DataWord) -> ConcreteInst<T>),
     // Covers "jal ra, label", "jal label", "jal -4" etc.
     Jal,
     // Covers "jalr ra, 0(x1)", "jalr x1", etc.
     Jalr,
-    U(fn(IRegister, DataWord) -> ConcreteInst),
+    U(fn(IRegister, DataWord) -> ConcreteInst<T>),
     // Pseudo-instructions
     Li,
-    RegReg(fn(IRegister, IRegister) -> ConcreteInst),
-    NoArgs(fn() -> ConcreteInst),
-    OneReg(fn(IRegister) -> ConcreteInst),
+    RegReg(fn(IRegister, IRegister) -> ConcreteInst<T>),
+    NoArgs(fn() -> ConcreteInst<T>),
+    OneReg(fn(IRegister) -> ConcreteInst<T>),
     // Covers "j label", "j -4", etc.
-    LikeJ(fn(DataWord) -> ConcreteInst),
+    LikeJ(fn(DataWord) -> ConcreteInst<T>),
 }
 
-struct ParserData {
-    inst_expansion_table: &'static HashMap<String, ParseType>,
-    reg_expansion_table: &'static HashMap<String, IRegister>,
+struct ParserData<'a, T: MachineDataWidth> {
+    inst_expansion_table: &'a HashMap<String, ParseType<T>>,
+    reg_expansion_table: &'a HashMap<String, IRegister>,
 }
 
-pub struct RiscVParser {
-    parser_data: ParserData,
+pub struct RiscVParser<'a, T: MachineDataWidth> {
+    parser_data: ParserData<'a, T>,
     lines: LineTokenStream,
     reporter: ParseErrorReporter,
 }
@@ -57,7 +57,8 @@ pub struct RiscVParser {
 type TokenIter = Peekable<IntoIter<Token>>;
 
 lazy_static! {
-    static ref INST_EXPANSION_TABLE: HashMap<String, ParseType> = {
+    /*
+    static ref RV32_INST_EXPANSION_TABLE: HashMap<String, ParseType<Width32b>> = {
         use isa::*;
 
         use ParseType::*;
@@ -113,6 +114,7 @@ lazy_static! {
         .map(|(s, t)| (s.to_string(), t))
         .collect()
     };
+    */
     static ref REG_EXPANSION_TABLE: HashMap<String, IRegister> = {
         let mut reg_expansion_table: HashMap<String, IRegister> = IRegister::REG_ARRAY
             .iter()
@@ -127,19 +129,71 @@ lazy_static! {
     };
 }
 
-impl RiscVParser {
-    pub fn parse_file(path: &str) -> ParseResult {
+impl<T: MachineDataWidth> RiscVParser<'_, T> {
+    pub fn parse_file(path: &str) -> ParseResult<T> {
         RiscVParser::parse_lex_result(Lexer::lex_file(path))
     }
 
-    pub fn parse_str(contents: &str) -> ParseResult {
+    pub fn parse_str(contents: &str) -> ParseResult<T> {
         RiscVParser::parse_lex_result(Lexer::lex_str(contents))
     }
 
-    pub fn parse_lex_result(lex_result: LexResult) -> ParseResult {
+    pub fn parse_lex_result(lex_result: LexResult) -> ParseResult<T> {
+        use isa::*;
+        use ParseType::*;
+        let inst_expansion_table: HashMap<String, ParseType<T>> = [
+            ("add", R(Add::new)),
+            ("addi", Arith(Addi::new)),
+            ("and", R(And::new)),
+            ("andi", Arith(Andi::new)),
+            ("auipc", U(Auipc::new)),
+            ("beq", B(Beq::new)),
+            ("bge", B(Bge::new)),
+            ("bgeu", B(Bgeu::new)),
+            ("blt", B(Blt::new)),
+            ("bltu", B(Bltu::new)),
+            ("bne", B(Bne::new)),
+            // ("ebreak", Env),
+            ("ecall", Env(Ecall::new)),
+            ("jal", ParseType::Jal),
+            ("jalr", ParseType::Jalr),
+            ("lb", MemL(Lb::new)),
+            ("lbu", MemL(Lbu::new)),
+            ("lh", MemL(Lh::new)),
+            ("lhu", MemL(Lhu::new)),
+            ("lui", U(Lui::new)),
+            ("lw", MemL(Lw::new)),
+            // ("or", R),
+            // ("ori", Arith),
+            ("sb", MemS(Sb::new)),
+            ("sh", MemS(Sh::new)),
+            // ("sll", R),
+            // ("slli", Arith),
+            // ("slt", R),
+            // ("slti", Arith),
+            // ("sltiu", Arith),
+            // ("sltu", R),
+            // ("sra", R),
+            // ("srai", Arith),
+            // ("srl", R),
+            // ("srli", Arith),
+            // ("sub", R),
+            ("sw", MemS(Sw::new)),
+            // ("xor", R),
+            // ("xori", Arith),
+            ("li", ParseType::Li),
+            ("mv", RegReg(Mv::expand)),
+            ("nop", NoArgs(Nop::expand)),
+            ("j", LikeJ(J::expand)),
+            ("jr", OneReg(Jr::expand)),
+            ("ret", NoArgs(Ret::expand)),
+        ]
+        .into_iter()
+        .map(|(s, t)| (s.to_string(), *t))
+        .collect();
         RiscVParser {
             parser_data: ParserData {
-                inst_expansion_table: &INST_EXPANSION_TABLE,
+                inst_expansion_table: &inst_expansion_table,
                 reg_expansion_table: &REG_EXPANSION_TABLE,
             },
             lines: lex_result.lines,
@@ -148,8 +202,8 @@ impl RiscVParser {
         .parse()
     }
 
-    fn parse(mut self) -> ParseResult {
-        let mut insts = Vec::<PartialInst>::new();
+    fn parse(mut self) -> ParseResult<T> {
+        let mut insts = Vec::<PartialInst<T>>::new();
         let mut last_label: Option<Label> = None;
         let parser_data = &self.parser_data;
         for line in self.lines {
@@ -195,35 +249,35 @@ enum ImmOrLabel {
 }
 
 /// Convenience method to stuff a PartialInst into a Vec<PartialInst>
-fn ok_vec(inst: PartialInst) -> LineParseResult {
+fn ok_vec<T: MachineDataWidth>(inst: PartialInst<T>) -> LineParseResult<T> {
     Ok(vec![inst])
 }
 
 /// Convenience method to stuff a ConcreteInst into Ok(vec![PartialInst(...)])
-fn ok_wrap_concr(inst: ConcreteInst) -> LineParseResult {
+fn ok_wrap_concr<T: MachineDataWidth>(inst: ConcreteInst<T>) -> LineParseResult<T> {
     ok_vec(PartialInst::new_complete(inst))
 }
 
-/// Convenience method to turn a Vec<ConcreteInst> into Ok(Vec<PartialInst>)
-fn ok_wrap_expanded(inst: Vec<ConcreteInst>) -> LineParseResult {
+/// Convenience method to turn a Vec<ConcreteInst<T>> into Ok(Vec<PartialInst>)
+fn ok_wrap_expanded<T: MachineDataWidth>(inst: Vec<ConcreteInst<T>>) -> LineParseResult<T> {
     Ok(inst.into_iter().map(PartialInst::new_complete).collect())
 }
 
 /// Responsible for parsing a line with an instruction
-struct InstParser<'a> {
-    data: &'a ParserData,
+struct InstParser<'a, T: MachineDataWidth> {
+    data: &'a ParserData<'a, T>,
     iter: TokenIter,
     head_loc: Location,
     inst_name: &'a str,
 }
 
-impl<'a> InstParser<'a> {
+impl<'a, T: MachineDataWidth> InstParser<'a, T> {
     fn new(
-        data: &'a ParserData,
+        data: &'a ParserData<T>,
         iter: TokenIter,
         head_loc: Location,
         inst_name: &'a str,
-    ) -> InstParser<'a> {
+    ) -> InstParser<'a, T> {
         InstParser {
             data,
             iter,
@@ -425,7 +479,7 @@ impl<'a> InstParser<'a> {
 
     /// Parses an immediate that is required to be at most n bits.
     /// If the provided immediate is a negative, then the upper (32 - n + 1) bits must all be 1.
-    fn try_parse_imm(&self, n: u8, token: Token) -> Result<DataWord, ParseError> {
+    fn try_parse_imm(&self, n: u8, token: Token) -> Result<T::RegData, ParseError> {
         match token.data {
             // Check lower n bits
             // We give a pass to negative numbers with high bits set
@@ -434,13 +488,12 @@ impl<'a> InstParser<'a> {
                     // Prevent shift overflow
                     0
                 } else {
-                    (-1i32)
-                        << (if val < 0 {
-                            // Allow the sign bit to be part of the mask
-                            n - 1
-                        } else {
-                            n
-                        })
+                    (-1) << (if val < 0 {
+                        // Allow the sign bit to be part of the mask
+                        n - 1
+                    } else {
+                        n
+                    })
                 };
                 let mask_result = val & mask;
                 if mask_result != 0 && mask_result != mask {
@@ -450,7 +503,7 @@ impl<'a> InstParser<'a> {
                         &radix.format(val),
                     ))
                 } else {
-                    Ok(DataWord::from(val))
+                    Ok(T::RegData::from(val))
                 }
             }
             _ => Err(ParseError::unexpected_type(
@@ -479,8 +532,8 @@ impl<'a> InstParser<'a> {
     /// Expands an instruction that is known to be in the expansion table.
     fn try_expand_found_inst(
         &mut self,
-        parse_type: &ParseType,
-    ) -> Result<ParsedInstStream, ParseError> {
+        parse_type: &ParseType<T>,
+    ) -> Result<ParsedInstStream<T>, ParseError> {
         use ParseType::*;
         match parse_type {
             R(inst_new) => {
@@ -643,7 +696,7 @@ impl<'a> InstParser<'a> {
         }
     }
 
-    fn try_expand_inst(&mut self) -> LineParseResult {
+    fn try_expand_inst(&mut self) -> LineParseResult<T> {
         if let Some(parse_type) = self.data.inst_expansion_table.get(self.inst_name) {
             self.try_expand_found_inst(parse_type)
         } else {
@@ -653,27 +706,27 @@ impl<'a> InstParser<'a> {
 }
 
 /// Responsible for parsing a line with a directive.
-struct DirectiveParser<'a> {
-    data: &'a ParserData,
+struct DirectiveParser<'a, T: MachineDataWidth> {
+    data: &'a ParserData<'a, T>,
     iter: TokenIter,
     head_loc: Location,
     head_directive: &'a str,
 }
 
 /// Responsible for parsing a line.
-struct LineParser<'a> {
-    data: &'a ParserData,
+struct LineParser<'a, T: MachineDataWidth> {
+    data: &'a ParserData<'a, T>,
     iter: TokenIter,
     label: Option<Label>,
 }
 
-impl<'a> LineParser<'a> {
+impl<'a, T: MachineDataWidth> LineParser<'a, T> {
     /// Creates a LineParser, with a label possibly inherited from the previous line.
     fn new(
-        data: &'a ParserData,
+        data: &'a ParserData<T>,
         tokens: TokenStream,
         maybe_label: &'a Option<Label>,
-    ) -> LineParser<'a> {
+    ) -> LineParser<'a, T> {
         let mut iter = tokens.into_iter().peekable();
         let label_passed_in = maybe_label.is_some();
         // Check the first token for a label
@@ -703,7 +756,7 @@ impl<'a> LineParser<'a> {
         }
     }
 
-    fn parse(mut self) -> (Option<Label>, LineParseResult) {
+    fn parse(mut self) -> (Option<Label>, LineParseResult<T>) {
         (
             self.label,
             if let Some(head_tok) = self.iter.next() {
@@ -752,14 +805,14 @@ mod tests {
 
     /// Parses and lexes the provided string, assuming that there are no errors in either phase.
     /// Assumes that there were no lex errors.
-    fn parse_and_lex(prog: &str) -> Vec<PartialInst> {
+    fn parse_and_lex(prog: &str) -> Vec<PartialInst<Width32b>> {
         let ParseResult { insts, report } = RiscVParser::parse_lex_result(lex(prog));
         assert!(report.is_empty(), format!("{:?}", report.report()));
         insts
     }
 
     /// Parses and lexes a string assuming it contains instructions that don't need expanding.
-    fn parse_and_lex_concr(prog: &str) -> Vec<ConcreteInst> {
+    fn parse_and_lex_concr(prog: &str) -> Vec<ConcreteInst<Width32b>> {
         parse_and_lex(prog)
             .into_iter()
             .map(|inst| inst.try_into_concrete_inst())

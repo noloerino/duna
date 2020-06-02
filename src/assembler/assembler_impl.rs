@@ -1,21 +1,27 @@
 use super::parse_error::ParseErrorReport;
 use super::parser::{Label, ParseResult, RiscVParser};
 use super::partial_inst::PartialInst;
-use crate::program_state::{DataWord, RiscVProgram};
+use crate::program_state::{DataWord, MachineDataWidth, RiscVProgram};
 use std::collections::HashMap;
 
 pub struct Assembler;
 
 impl Assembler {
-    pub fn assemble_file(path: &str) -> Result<UnlinkedProgram, ParseErrorReport> {
+    pub fn assemble_file<T: MachineDataWidth>(
+        path: &str,
+    ) -> Result<UnlinkedProgram<T>, ParseErrorReport> {
         Assembler::assemble(RiscVParser::parse_file(path))
     }
 
-    pub fn assemble_str(contents: &str) -> Result<UnlinkedProgram, ParseErrorReport> {
+    pub fn assemble_str<T: MachineDataWidth>(
+        contents: &str,
+    ) -> Result<UnlinkedProgram<T>, ParseErrorReport> {
         Assembler::assemble(RiscVParser::parse_str(contents))
     }
 
-    fn assemble(parse_result: ParseResult) -> Result<UnlinkedProgram, ParseErrorReport> {
+    fn assemble<T: MachineDataWidth>(
+        parse_result: ParseResult<T>,
+    ) -> Result<UnlinkedProgram<T>, ParseErrorReport> {
         let ParseResult { insts, report } = parse_result;
         if report.is_empty() {
             Ok(UnlinkedProgram::new(insts))
@@ -26,16 +32,20 @@ impl Assembler {
 }
 
 /// Replaces index i of the instruction vector with new_inst
-fn replace_inst(insts: &mut Vec<PartialInst>, i: usize, new_inst: PartialInst) {
+fn replace_inst<T: MachineDataWidth>(
+    insts: &mut Vec<PartialInst<T>>,
+    i: usize,
+    new_inst: PartialInst<T>,
+) {
     insts[i] = new_inst;
 }
 
 /// The parser must perform two passes in order to locate/process labels.
 /// This struct encodes data for a program that still needs to be passed to the assembler.
-pub struct UnlinkedProgram {
+pub struct UnlinkedProgram<T: MachineDataWidth> {
     /// The list of instructions, which will be placed in the text segment in the order in which
     /// they appear.
-    pub insts: Vec<PartialInst>,
+    pub insts: Vec<PartialInst<T>>,
     // a potential optimization is to store generated labels and needed labels in independent vecs
     // instead of a hashmap, another vec can be used to lookup the corresponding PartialInst
     /// Maps labels to the index of the insts that define them
@@ -44,9 +54,9 @@ pub struct UnlinkedProgram {
     pub needed_labels: HashMap<Label, usize>,
 }
 
-impl UnlinkedProgram {
+impl<T: MachineDataWidth> UnlinkedProgram<T> {
     /// Constructs an instance of an UnlinkedProgram from an instruction stream.
-    pub fn new(insts: Vec<PartialInst>) -> UnlinkedProgram {
+    pub fn new(insts: Vec<PartialInst<T>>) -> UnlinkedProgram<T> {
         let local_labels = insts
             .iter()
             .enumerate()
@@ -69,7 +79,7 @@ impl UnlinkedProgram {
     /// Attempts to match needed labels to locally defined labels.
     /// Theoretically, this is idempotent, i.e. calling it multiple times will just produce the
     /// same program.
-    pub fn link_self(self) -> UnlinkedProgram {
+    pub fn link_self(self) -> UnlinkedProgram<T> {
         let UnlinkedProgram {
             mut insts,
             local_labels,
@@ -100,7 +110,7 @@ impl UnlinkedProgram {
 
     /// Attempts to produce an instance of RiscVProgram. Panics if some labels are needed
     /// but not found within the body of this program.
-    pub fn try_into_program(self) -> RiscVProgram {
+    pub fn try_into_program(self) -> RiscVProgram<T> {
         let linked = self.link_self();
         RiscVProgram::new(
             linked
