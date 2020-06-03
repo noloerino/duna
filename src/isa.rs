@@ -93,7 +93,7 @@ impl<T: MachineDataWidth> UType<T> for Auipc {
 
     fn eval(state: &UserProgState<T>, rd: IRegister, imm: BitStr32) -> UserDiff<T> {
         let pc: T::Signed = state.pc.into();
-        UserDiff::reg_write_pc_p4(state, rd, (pc + imm.into()).into())
+        UserDiff::reg_write_pc_p4(state, rd, (pc + imm.zero_pad_lsb().into()).into())
     }
 }
 

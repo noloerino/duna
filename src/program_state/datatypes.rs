@@ -179,6 +179,10 @@ impl BitStr32 {
 
     /// Sign extends the value and stores it in a DataWord.
     pub fn to_sgn_data_word(self) -> DataWord {
+        // Prevent overflow
+        if self.len == 32 {
+            return DataWord::from(self.value);
+        }
         let sign_mask = u32::max_value() << self.len as u32;
         DataWord::from(if self.index(self.len - 1).value == 1 {
             self.value | sign_mask
