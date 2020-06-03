@@ -57,9 +57,9 @@ impl fmt::Display for ProgramSection {
 
 pub struct SectionStore {
     /// Stores the contents of the .data section. The first element is at the lowest address.
-    data: Vec<u8>,
+    pub data: Vec<u8>,
     /// Stores the contents of the .rodata section. The first element is at the lowest address.
-    rodata: Vec<u8>,
+    pub rodata: Vec<u8>,
 }
 
 impl SectionStore {
@@ -187,6 +187,7 @@ impl UnlinkedProgram<Width32b> {
                 .into_iter()
                 .map(|partial_inst| partial_inst.try_into_concrete_inst())
                 .collect(),
+            linked.sections,
         )
     }
 }

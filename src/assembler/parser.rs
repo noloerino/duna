@@ -752,8 +752,8 @@ impl<'a> DirectiveParser<'a> {
 
     fn parse_section<T: MachineDataWidth>(mut self) -> LineParseResult<T> {
         let next_tok = self.iter.next().unwrap();
-        match &next_tok.data {
-            TokenType::Directive(s) => match s.as_str() {
+        if let TokenType::Directive(s) = &next_tok.data {
+            match s.as_str() {
                 "text" => {
                     self.state.curr_section = ProgramSection::Text;
                     return self.ok();
@@ -768,8 +768,7 @@ impl<'a> DirectiveParser<'a> {
                 }
                 "bss" => return Err(ParseError::unimplemented(next_tok.location, "bss section")),
                 _ => {}
-            },
-            _ => {}
+            }
         }
         Err(ParseError::unexpected_type(
             next_tok.location,
@@ -899,7 +898,7 @@ mod tests {
     /// Parses and lexes the provided string, assuming that there are no errors in either phase.
     /// Assumes that there were no lex errors.
     fn parse_and_lex(prog: &str) -> Vec<PartialInst<Width32b>> {
-        let ParseResult { insts, report } = RiscVParser::parse_lex_result(lex(prog));
+        let ParseResult { insts, report, .. } = RiscVParser::parse_lex_result(lex(prog));
         assert!(report.is_empty(), format!("{:?}", report.report()));
         insts
     }
@@ -983,7 +982,7 @@ mod tests {
     #[test]
     fn test_imm_too_big() {
         // immediates for instructions like addi can only be 12 bits long
-        let ParseResult { insts, report } = RiscVParser::parse_str("addi sp sp 0xF000");
+        let ParseResult { insts, report, .. } = RiscVParser::parse_str("addi sp sp 0xF000");
         assert!(!report.is_empty());
         assert!(insts.is_empty());
     }

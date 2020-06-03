@@ -1,7 +1,7 @@
 use super::datatypes::*;
 use super::memory::Memory;
 use super::registers::{IRegister, RegFile};
-use crate::assembler::{Assembler, ParseErrorReport};
+use crate::assembler::{Assembler, ParseErrorReport, SectionStore};
 use crate::instruction::ConcreteInst;
 use std::collections::HashMap;
 use std::str;
@@ -13,20 +13,32 @@ pub struct RiscVProgram<T: MachineDataWidth> {
 }
 
 impl RiscVProgram<Width32b> {
-    const TEXT_START: u32 = 0x0000_0008;
+    const TEXT_START: u32 = 0x1000_0000;
     const STACK_START: u32 = 0x7FFF_FFF0;
+    const DATA_START: u32 = 0x2000_0000;
 
     /// Initializes a new program instance from the provided instructions.
+    ///
     /// The instructions are loaded into memory at the start of the instruction section,
     /// which defaults to TEXT_START to avoid any accidental null pointer derefs.
+    ///
     /// The stack pointer is initialized to STACK_START.
-    pub fn new(insts: Vec<ConcreteInst<Width32b>>) -> RiscVProgram<Width32b> {
+    ///
+    /// The data given in SectionStore is used to initialize the data and rodata sections.
+    ///
+    /// Until paged memory is implemented, rodata is placed sequentially with data, and
+    /// no guarantees on read-onliness are enforced.
+    pub fn new(
+        insts: Vec<ConcreteInst<Width32b>>,
+        sections: SectionStore,
+    ) -> RiscVProgram<Width32b> {
         let mut state = ProgramState::new();
         let mut user_state = &mut state.user_state;
         let text_start: ByteAddr32 = RiscVProgram::TEXT_START.into();
         let stack_start: ByteAddr32 = RiscVProgram::STACK_START.into();
         user_state.regfile.set(IRegister::SP, stack_start.into());
         user_state.pc = text_start;
+        // store instructions
         let mut next_addr: ByteAddr32 = user_state.pc;
         for inst in &insts {
             user_state.memory.set_word(
@@ -34,6 +46,13 @@ impl RiscVProgram<Width32b> {
                 DataWord::from(inst.to_machine_code()),
             );
             next_addr = next_addr.plus_4()
+        }
+        // store data
+        let all_data = sections.data.into_iter().chain(sections.rodata.into_iter());
+        for (offs, byte) in all_data.enumerate() {
+            user_state
+                .memory
+                .set_byte((RiscVProgram::DATA_START + offs as u32).into(), byte.into())
         }
         RiscVProgram { insts, state }
     }
