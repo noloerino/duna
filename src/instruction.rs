@@ -156,13 +156,12 @@ impl<T: MachineDataWidth> fmt::Debug for ConcreteInst<T> {
 impl<T: MachineDataWidth> fmt::Display for ConcreteInst<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use ConcreteInstData::*;
-        let data = &self.data;
-        let args = match data {
+        let args = match self.data {
             R { rd, rs1, rs2, .. } => format!("{}, {}, {}", rd, rs1, rs2),
-            I { rd, rs1, imm, .. } => format!("{}, {}, {}", rd, rs1, imm.as_i32()),
-            S { rs1, rs2, imm, .. } => format!("{}, {}({})", rs2, imm.as_i32(), rs1),
-            B { rs1, rs2, imm, .. } => format!("{}, {}, {}", rs1, rs2, imm.as_i32()),
-            U { rd, imm, .. } | J { rd, imm, .. } => format!("{}, {}", rd, imm.as_i32()),
+            I { rd, rs1, imm, .. } => format!("{}, {}, {}", rd, rs1, i32::from(imm)),
+            S { rs1, rs2, imm, .. } => format!("{}, {}({})", rs2, i32::from(imm), rs1),
+            B { rs1, rs2, imm, .. } => format!("{}, {}, {}", rs1, rs2, i32::from(imm)),
+            U { rd, imm, .. } | J { rd, imm, .. } => format!("{}, {}", rd, i32::from(imm)),
         };
         write!(
             f,
@@ -200,6 +199,7 @@ pub trait RType<T: MachineDataWidth> {
 pub trait IType<T: MachineDataWidth> {
     /// Creates an instance of the IType istruction.
     fn new(rd: IRegister, rs1: IRegister, imm: T::RegData) -> ConcreteInst<T> {
+        let imm_vec = imm.to_bit_str(12);
         ConcreteInst {
             // closure must contain match, since otherwise the types for arms don't match
             eval: Box::new(move |state| {
@@ -207,29 +207,24 @@ pub trait IType<T: MachineDataWidth> {
                     &state.user_state,
                     rd,
                     rs1,
-                    imm,
+                    imm_vec,
                 ))
             }),
             data: ConcreteInstData::I {
                 fields: Self::inst_fields(),
                 rd,
                 rs1,
-                imm,
+                imm: imm_vec,
             },
         }
     }
     fn inst_fields() -> IInstFields;
-    fn eval(
-        state: &UserProgState<T>,
-        rd: IRegister,
-        rs1: IRegister,
-        imm: T::RegData,
-    ) -> UserDiff<T>;
+    fn eval(state: &UserProgState<T>, rd: IRegister, rs1: IRegister, imm: BitStr32) -> UserDiff<T>;
 }
 
 pub(crate) trait ITypeArith<T: MachineDataWidth>: IType<T> {
     fn inst_fields() -> IInstFields;
-    fn eval(rs1_val: T::RegData, imm: T::RegData) -> T::RegData;
+    fn eval(rs1_val: T::RegData, imm: BitStr32) -> T::RegData;
 }
 
 pub(crate) trait ITypeLoad<T: MachineDataWidth>: IType<T> {
@@ -281,10 +276,10 @@ pub trait BType<T: MachineDataWidth> {
             eval: Box::new(move |state| {
                 let user_state = &state.user_state;
                 if Self::eval(user_state.regfile.read(rs1), user_state.regfile.read(rs2)) {
-                    UserDiff::pc_update_op(
-                        user_state,
-                        ByteAddress::from(i32::from(user_state.pc).wrapping_add(imm_vec.as_i32())),
-                    )
+                    let pc: T::Signed = user_state.pc.into();
+                    let offs: T::Signed = imm_vec.into();
+                    let new_pc: T::Signed = pc + offs;
+                    UserDiff::pc_update_op(user_state, new_pc.into())
                 } else {
                     UserDiff::noop(user_state)
                 }
@@ -310,7 +305,7 @@ pub trait UType<T: MachineDataWidth> {
         let imm_vec = imm.to_bit_str(20);
         ConcreteInst {
             eval: Box::new(move |state| {
-                InstResult::UserStateChange(Self::eval(&state.user_state, rd, imm))
+                InstResult::UserStateChange(Self::eval(&state.user_state, rd, imm_vec))
             }),
             data: ConcreteInstData::U {
                 fields: Self::inst_fields(),
@@ -321,7 +316,7 @@ pub trait UType<T: MachineDataWidth> {
     }
 
     fn inst_fields() -> UInstFields;
-    fn eval(state: &UserProgState<T>, rd: IRegister, imm: T::RegData) -> UserDiff<T>;
+    fn eval(state: &UserProgState<T>, rd: IRegister, imm: BitStr32) -> UserDiff<T>;
 }
 
 pub trait JType<T: MachineDataWidth> {
@@ -339,5 +334,5 @@ pub trait JType<T: MachineDataWidth> {
         }
     }
     fn inst_fields() -> JInstFields;
-    fn eval(state: &UserProgState<T>, rd: IRegister, imm: T::RegData) -> UserDiff<T>;
+    fn eval(state: &UserProgState<T>, rd: IRegister, imm: BitStr32) -> UserDiff<T>;
 }

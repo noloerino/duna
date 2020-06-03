@@ -28,7 +28,8 @@ impl<T: MachineDataWidth> RType<T> for Add {
         }
     }
     fn eval(rs1_val: T::RegData, rs2_val: T::RegData) -> T::RegData {
-        T::signed_to_data(T::data_to_signed(rs1_val).wrapping_add(T::data_to_signed(rs2_val)))
+        let v1: T::Signed = rs1_val.into();
+        (v1 + rs2_val.into()).into()
     }
 }
 
@@ -42,8 +43,10 @@ impl<T: MachineDataWidth> ITypeArith<T> for Addi {
         }
     }
 
-    fn eval(rs1_val: T::RegData, imm: T::RegData) -> T::RegData {
-        T::signed_to_data(T::data_to_signed(rs1_val).wrapping_add(T::data_to_signed(imm)))
+    fn eval(rs1_val: T::RegData, imm: BitStr32) -> T::RegData {
+        let v1: T::Signed = rs1_val.into();
+        let imm_val: T::Signed = imm.into();
+        (v1 + imm_val).into()
     }
 }
 
@@ -58,7 +61,8 @@ impl<T: MachineDataWidth> RType<T> for And {
     }
 
     fn eval(rs1_val: T::RegData, rs2_val: T::RegData) -> T::RegData {
-        T::RegData::from(T::data_to_signed(rs1_val) & T::data_to_signed(rs2_val))
+        let v1: T::Signed = rs1_val.into();
+        (v1 & rs2_val.into()).into()
     }
 }
 
@@ -72,8 +76,10 @@ impl<T: MachineDataWidth> ITypeArith<T> for Andi {
         }
     }
 
-    fn eval(rs1_val: T::RegData, imm: T::RegData) -> T::RegData {
-        DataWord::from(T::data_to_signed(rs1_val) & T::data_to_signed(imm))
+    fn eval(rs1_val: T::RegData, imm: BitStr32) -> T::RegData {
+        let v1: T::Signed = rs1_val.into();
+        let imm_val: T::Signed = imm.into();
+        (v1 & imm_val).into()
     }
 }
 
@@ -85,14 +91,9 @@ impl<T: MachineDataWidth> UType<T> for Auipc {
         }
     }
 
-    fn eval(state: &UserProgState<T>, rd: IRegister, imm: T::RegData) -> UserDiff<T> {
-        UserDiff::reg_write_pc_p4(
-            state,
-            rd,
-            T::unsigned_to_data(
-                T::data_to_unsigned(state.pc).wrapping_add(T::data_to_unsigned(imm)),
-            ),
-        )
+    fn eval(state: &UserProgState<T>, rd: IRegister, imm: BitStr32) -> UserDiff<T> {
+        let pc: T::Signed = state.pc.into();
+        UserDiff::reg_write_pc_p4(state, rd, (pc + imm.into()).into())
     }
 }
 
@@ -120,7 +121,8 @@ impl<T: MachineDataWidth> BType<T> for Bge {
     }
 
     fn eval(rs1_val: T::RegData, rs2_val: T::RegData) -> bool {
-        T::data_to_signed(rs1_val) >= T::data_to_signed(rs2_val)
+        let v1: T::Signed = rs1_val.into();
+        v1 >= rs2_val.into()
     }
 }
 
@@ -134,7 +136,8 @@ impl<T: MachineDataWidth> BType<T> for Bgeu {
     }
 
     fn eval(rs1_val: T::RegData, rs2_val: T::RegData) -> bool {
-        T::data_to_unsigned(rs1_val) >= T::data_to_unsigned(rs2_val)
+        let v1: T::Unsigned = rs1_val.into();
+        v1 >= rs2_val.into()
     }
 }
 
@@ -148,7 +151,8 @@ impl<T: MachineDataWidth> BType<T> for Blt {
     }
 
     fn eval(rs1_val: T::RegData, rs2_val: T::RegData) -> bool {
-        T::data_to_signed(rs1_val) < T::data_to_signed(rs2_val)
+        let v1: T::Signed = rs1_val.into();
+        v1 < rs2_val.into()
     }
 }
 
@@ -162,7 +166,8 @@ impl<T: MachineDataWidth> BType<T> for Bltu {
     }
 
     fn eval(rs1_val: T::RegData, rs2_val: T::RegData) -> bool {
-        T::data_to_unsigned(rs1_val) < T::data_to_unsigned(rs2_val)
+        let v1: T::Unsigned = rs1_val.into();
+        v1 < rs2_val.into()
     }
 }
 
@@ -204,13 +209,10 @@ impl<T: MachineDataWidth> JType<T> for Jal {
         JInstFields { opcode: J_OPCODE }
     }
 
-    fn eval(state: &UserProgState<T>, rd: IRegister, imm: T::RegData) -> UserDiff<T> {
-        UserDiff::reg_write_op(
-            state,
-            ByteAddress::from(i32::from(state.pc).wrapping_add(imm.as_i32())),
-            rd,
-            DataWord::from(state.pc.plus_4()),
-        )
+    fn eval(state: &UserProgState<T>, rd: IRegister, imm: BitStr32) -> UserDiff<T> {
+        let pc: T::Signed = state.pc.into();
+        let offs: T::Signed = imm.into();
+        UserDiff::reg_write_op(state, (pc + offs).into(), rd, state.pc.plus_4().into())
     }
 }
 
@@ -223,17 +225,13 @@ impl<T: MachineDataWidth> IType<T> for Jalr {
         }
     }
 
-    fn eval(
-        state: &UserProgState<T>,
-        rd: IRegister,
-        rs1: IRegister,
-        imm: T::RegData,
-    ) -> UserDiff<T> {
+    fn eval(state: &UserProgState<T>, rd: IRegister, rs1: IRegister, imm: BitStr32) -> UserDiff<T> {
+        let v1: T::Signed = state.regfile.read(rs1).into();
         UserDiff::reg_write_op(
             state,
-            ByteAddress::from(i32::from(state.regfile.read(rs1)).wrapping_add(imm.as_i32())),
+            (v1 + imm.into()).into(),
             rd,
-            DataWord::from(state.pc.plus_4()),
+            state.pc.plus_4().into(),
         )
     }
 }
@@ -249,7 +247,7 @@ impl<T: MachineDataWidth> ITypeLoad<T> for Lb {
     }
 
     fn eval(mem: &Memory<T>, addr: T::ByteAddr) -> T::RegData {
-        mem.get_byte(addr).sign_extend()
+        <T::RegData>::sign_ext_from_byte(mem.get_byte(addr.into()))
     }
 }
 
@@ -264,7 +262,7 @@ impl<T: MachineDataWidth> ITypeLoad<T> for Lbu {
     }
 
     fn eval(mem: &Memory<T>, addr: T::ByteAddr) -> T::RegData {
-        mem.get_byte(addr).zero_pad()
+        <T::RegData>::zero_pad_from_byte(mem.get_byte(addr))
     }
 }
 
@@ -280,11 +278,12 @@ impl<T: MachineDataWidth> ITypeLoad<T> for Lh {
 
     // TODO define alignment behavior
     fn eval(mem: &Memory<T>, addr: T::ByteAddr) -> T::RegData {
-        let second_byte_addr = ByteAddress::from(u32::from(addr).wrapping_add(1));
-        DataWord::from(
-            (u32::from(mem.get_byte(second_byte_addr).sign_extend()) << 8)
-                | u32::from(mem.get_byte(addr).zero_pad()),
-        )
+        let og_addr: T::Signed = addr.into();
+        let second_byte_addr: T::ByteAddr = (og_addr + T::sgn_one()).into();
+        let upper_byte: T::Signed =
+            <T::RegData>::sign_ext_from_byte(mem.get_byte(second_byte_addr)).into();
+        let lower_byte: T::Signed = <T::RegData>::zero_pad_from_byte(mem.get_byte(addr)).into();
+        ((upper_byte << 8) | lower_byte).into()
     }
 }
 
@@ -300,11 +299,12 @@ impl<T: MachineDataWidth> ITypeLoad<T> for Lhu {
 
     // TODO define alignment behavior
     fn eval(mem: &Memory<T>, addr: T::ByteAddr) -> T::RegData {
-        let second_byte_addr = ByteAddress::from(u32::from(addr).wrapping_add(1));
-        DataWord::from(
-            (u32::from(mem.get_byte(second_byte_addr).zero_pad()) << 8)
-                | u32::from(mem.get_byte(addr).zero_pad()),
-        )
+        let og_addr: T::Signed = addr.into();
+        let second_byte_addr: T::ByteAddr = (og_addr + T::sgn_one()).into();
+        let upper_byte: T::Signed =
+            <T::RegData>::zero_pad_from_byte(mem.get_byte(second_byte_addr)).into();
+        let lower_byte: T::Signed = <T::RegData>::zero_pad_from_byte(mem.get_byte(addr)).into();
+        ((upper_byte << 8) | lower_byte).into()
     }
 }
 
@@ -316,8 +316,9 @@ impl<T: MachineDataWidth> UType<T> for Lui {
         }
     }
 
-    fn eval(state: &UserProgState<T>, rd: IRegister, imm: T::RegData) -> UserDiff<T> {
-        UserDiff::reg_write_pc_p4(state, rd, DataWord::from(imm.zero_pad_lsb().as_u32()))
+    fn eval(state: &UserProgState<T>, rd: IRegister, imm: BitStr32) -> UserDiff<T> {
+        let imm_val: T::Signed = imm.zero_pad_lsb().into();
+        UserDiff::reg_write_pc_p4(state, rd, imm_val.into())
     }
 }
 
@@ -350,10 +351,11 @@ impl<T: MachineDataWidth> SType<T> for Sb {
         state: &UserProgState<T>,
         rs1: IRegister,
         rs2: IRegister,
-        imm: T::RegData,
+        imm: BitStr32,
     ) -> UserDiff<T> {
         // TODO implement more granular diffs
-        let byte_addr = ByteAddress::from(i32::from(state.regfile.read(rs1)) + imm.as_i32());
+        let base_addr: T::Signed = state.regfile.read(rs1).into();
+        let byte_addr: T::ByteAddr = (base_addr + imm.into()).into();
         let new_word = state.memory.get_word(byte_addr.to_word_address()).set_byte(
             byte_addr.get_word_offset(),
             state.regfile.read(rs2).get_byte(0),
@@ -375,10 +377,11 @@ impl<T: MachineDataWidth> SType<T> for Sh {
         state: &UserProgState<T>,
         rs1: IRegister,
         rs2: IRegister,
-        imm: T::RegData,
+        imm: BitStr32,
     ) -> UserDiff<T> {
         // TODO implement more granular diffs
-        let byte_addr = ByteAddress::from(i32::from(state.regfile.read(rs1)) + imm.as_i32());
+        let base_addr: T::Signed = state.regfile.read(rs1).into();
+        let byte_addr: T::ByteAddr = (base_addr + imm.into()).into();
         let new_word = state
             .memory
             .get_word(byte_addr.to_word_address())
@@ -408,13 +411,11 @@ impl<T: MachineDataWidth> SType<T> for Sw {
         state: &UserProgState<T>,
         rs1: IRegister,
         rs2: IRegister,
-        imm: T::RegData,
+        imm: BitStr32,
     ) -> UserDiff<T> {
-        UserDiff::mem_write_op(
-            state,
-            ByteAddress::from(i32::from(state.regfile.read(rs1)) + imm.as_i32()).to_word_address(),
-            state.regfile.read(rs2),
-        )
+        let base_addr: T::Signed = state.regfile.read(rs1).into();
+        let byte_addr: T::ByteAddr = (base_addr + imm.into()).into();
+        UserDiff::mem_write_op(state, byte_addr.to_word_address(), state.regfile.read(rs2))
     }
 }
 
@@ -445,7 +446,7 @@ mod test {
 
     #[test]
     fn test_write_x0() {
-        let mut state = ProgramState::new();
+        let mut state = ProgramState::<Width32b>::new();
         state.apply_inst(&Addi::new(ZERO, ZERO, DataWord::from(0x100)));
         assert_eq!(i32::from(state.regfile_read(ZERO)), 0);
     }
@@ -487,31 +488,28 @@ mod test {
     fn test_to_machine_code() {
         // add s0, s1, s2
         const ADD_HEX: u32 = 0x0124_8433;
-        assert_eq!(Add::new(IRegister::S0, S1, S2).to_machine_code(), ADD_HEX);
+        let add_inst: ConcreteInst<Width32b> = Add::new(IRegister::S0, S1, S2);
+        assert_eq!(add_inst.to_machine_code(), ADD_HEX);
         // addi T1, T1, -1075
         const ADDI_HEX: u32 = 0xBCD3_0313;
-        assert_eq!(
-            Addi::new(T1, T1, DataWord::from(-1075)).to_machine_code(),
-            ADDI_HEX
-        );
+        let addi_inst: ConcreteInst<Width32b> = Addi::new(T1, T1, DataWord::from(-1075));
+        assert_eq!(addi_inst.to_machine_code(), ADDI_HEX);
         // auipc s1, 10
         const AUIPC_HEX: u32 = 0x0000_A497;
-        assert_eq!(
-            Auipc::new(S1, DataWord::from(10)).to_machine_code(),
-            AUIPC_HEX
-        );
+        let auipc_inst: ConcreteInst<Width32b> = Auipc::new(S1, DataWord::from(10));
+        assert_eq!(auipc_inst.to_machine_code(), AUIPC_HEX);
         // bne s1, s2, 4
         const BNE_HEX: u32 = 0x0124_9263;
-        assert_eq!(
-            Bne::new(S1, S2, DataWord::from(4)).to_machine_code(),
-            BNE_HEX
-        );
+        let bne_inst: ConcreteInst<Width32b> = Bne::new(S1, S2, DataWord::from(4));
+        assert_eq!(bne_inst.to_machine_code(), BNE_HEX);
         // ecall
         const ECALL_HEX: u32 = 0x0000_0073;
-        assert_eq!(Ecall::new().to_machine_code(), ECALL_HEX);
+        let ecall_inst: ConcreteInst<Width32b> = Ecall::new();
+        assert_eq!(ecall_inst.to_machine_code(), ECALL_HEX);
         // jal ra, 16
         const JAL_HEX: u32 = 0x0100_00EF;
-        assert_eq!(Jal::new(RA, DataWord::from(16)).to_machine_code(), JAL_HEX);
+        let jal_inst: ConcreteInst<Width32b> = Jal::new(RA, DataWord::from(16));
+        assert_eq!(jal_inst.to_machine_code(), JAL_HEX);
     }
 
     #[test]
@@ -604,7 +602,7 @@ mod test {
     #[test]
     fn test_auipc() {
         let mut state = get_init_state();
-        state.set_user_pc(ByteAddress::from(0x10FC_0000));
+        state.set_user_pc(ByteAddr32::from(0x10FC_0000));
         state.apply_inst(&Auipc::new(RD, DataWord::from(0x10)));
         assert_eq!(
             u32::from(state.regfile_read(RD)),
@@ -635,7 +633,7 @@ mod test {
                 should_take,
             } in &args
             {
-                let exp_new_pc = ByteAddress::from(
+                let exp_new_pc = ByteAddr32::from(
                     i32::from(state.get_user_pc()) + if should_take { i32::from(offs) } else { 4 },
                 );
                 state.regfile_set(RS1, rs1_val);
@@ -764,7 +762,7 @@ mod test {
     #[test]
     fn test_ecall() {
         let mut state = get_init_state();
-        let addr = ByteAddress::from(state.regfile_read(SP));
+        let addr = ByteAddr32::from(state.regfile_read(SP));
         state.memory_set_word(addr.to_word_address(), DataWord::from(0xDEAD_BEEFu32));
         // Set ecall code
         state.regfile_set(A7, Syscall::Write.to_number());
@@ -782,32 +780,29 @@ mod test {
     fn test_jal() {
         let mut state = get_init_state();
         let starting_pc_val = 0x10FC_0000;
-        state.set_user_pc(ByteAddress::from(starting_pc_val));
+        state.set_user_pc(ByteAddr32::from(starting_pc_val));
         let inst = Jal::new(RA, DataWord::from(16));
         state.apply_inst(&inst);
         assert_eq!(u32::from(state.regfile_read(RA)), starting_pc_val + 4);
-        assert_eq!(state.get_user_pc(), ByteAddress::from(starting_pc_val + 16));
-        state.set_user_pc(ByteAddress::from(starting_pc_val));
+        assert_eq!(state.get_user_pc(), ByteAddr32::from(starting_pc_val + 16));
+        state.set_user_pc(ByteAddr32::from(starting_pc_val));
         let inst = Jal::new(RA, DataWord::from(-256));
         state.apply_inst(&inst);
         assert_eq!(u32::from(state.regfile_read(RA)), starting_pc_val + 4);
-        assert_eq!(
-            state.get_user_pc(),
-            ByteAddress::from(starting_pc_val - 256)
-        );
+        assert_eq!(state.get_user_pc(), ByteAddr32::from(starting_pc_val - 256));
     }
 
     #[test]
     fn test_jalr() {
         let mut state = get_init_state();
         let starting_pc_val = 0x10FC_0000;
-        state.set_user_pc(ByteAddress::from(starting_pc_val));
+        state.set_user_pc(ByteAddr32::from(starting_pc_val));
         let tgt_pc_val = 0xABCD_EF10u32;
         let inst = Jalr::new(RA, RS1, DataWord::from(-4));
         let exp_pc_val = tgt_pc_val - 4;
         state.regfile_set(RS1, DataWord::from(tgt_pc_val));
         state.apply_inst(&inst);
-        assert_eq!(state.get_user_pc(), ByteAddress::from(exp_pc_val));
+        assert_eq!(state.get_user_pc(), ByteAddr32::from(exp_pc_val));
     }
 
     #[test]
@@ -816,7 +811,7 @@ mod test {
         let base_addr = 0xFFFF_0004u32;
         let test_data = 0xABCD_EF01u32;
         state.memory_set_word(
-            ByteAddress::from(base_addr).to_word_address(),
+            ByteAddr32::from(base_addr).to_word_address(),
             DataWord::from(test_data),
         );
         state.regfile_set(T0, DataWord::from(base_addr));
@@ -846,7 +841,7 @@ mod test {
         let base_addr = 0xFFFF_0004u32;
         let test_data = 0x0BCD_EF01u32;
         state.memory_set_word(
-            ByteAddress::from(base_addr).to_word_address(),
+            ByteAddr32::from(base_addr).to_word_address(),
             DataWord::from(test_data),
         );
         state.regfile_set(T0, DataWord::from(base_addr));
@@ -868,7 +863,7 @@ mod test {
         let base_addr = 0xFFFF_0004u32;
         let test_data = 0xABCD_EF01u32;
         state.memory_set_word(
-            ByteAddress::from(base_addr).to_word_address(),
+            ByteAddr32::from(base_addr).to_word_address(),
             DataWord::from(test_data),
         );
         state.regfile_set(T0, DataWord::from(base_addr));
@@ -893,12 +888,12 @@ mod test {
             state.apply_inst(&Sb::new(RS1, RS2, DataWord::from(i)));
         }
         assert_eq!(
-            state.memory_get_word(ByteAddress::from(addr).to_word_address()),
+            state.memory_get_word(ByteAddr32::from(addr).to_word_address()),
             DataWord::from(0x00DE_DEDEu32)
         );
         state.apply_inst(&Sb::new(RS1, RS2, DataWord::from(3)));
         assert_eq!(
-            state.memory_get_word(ByteAddress::from(addr).to_word_address()),
+            state.memory_get_word(ByteAddr32::from(addr).to_word_address()),
             DataWord::from(0xDEDE_DEDEu32)
         );
     }

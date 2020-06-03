@@ -148,8 +148,8 @@ fn impl_itype_arith_derive(ast: &syn::DeriveInput) -> TokenStream {
                 <#name as ITypeArith<T>>::inst_fields()
             }
 
-            fn eval(state: &UserProgState<T>, rd: IRegister, rs1: IRegister, imm: T::RegData) -> UserDiff<T> {
-                let new_rd_val = <#name as ITypeArith<T>>::eval(state.regfile.read(rs1), imm);
+            fn eval(state: &UserProgState<T>, rd: IRegister, rs1: IRegister, imm: BitStr32) -> UserDiff<T> {
+                let new_rd_val = <#name as ITypeArith<T>>::eval(state.regfile.read(rs1), imm.into());
                 UserDiff::reg_write_pc_p4(state, rd, new_rd_val)
             }
         }
@@ -165,10 +165,10 @@ fn impl_itype_load_derive(ast: &syn::DeriveInput) -> TokenStream {
                 <#name as ITypeLoad<T>>::inst_fields()
             }
 
-            fn eval(state: &UserProgState<T>, rd: IRegister, rs1: IRegister, imm: T::RegData) -> UserDiff<T> {
-                let rs1_val = state.regfile.read(rs1);
-                let addr = T::RegData::from(T::signed_from_data(rs1_val).wrapping_add(T::signed_from_data(imm)));
-                let new_rd_val = <#name as ITypeLoad<T>>::eval(&state.memory, T::ByteAddr::from(addr));
+            fn eval(state: &UserProgState<T>, rd: IRegister, rs1: IRegister, imm: BitStr32) -> UserDiff<T> {
+                let rs1_val: T::Signed = state.regfile.read(rs1).into();
+                let addr: T::RegData = (rs1_val + imm.into()).into();
+                let new_rd_val = <#name as ITypeLoad<T>>::eval(&state.memory, addr.into());
                 UserDiff::reg_write_pc_p4(state, rd, new_rd_val)
             }
         }

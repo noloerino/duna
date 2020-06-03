@@ -2,7 +2,7 @@ use duna_macro::*;
 use std::cmp::{max, min};
 use std::fmt;
 use std::num::Wrapping;
-use std::ops::{Add, BitAnd};
+use std::ops::{Add, BitAnd, BitOr, Shl};
 
 /// Represents a data type that can be used to hold data in a register.
 pub trait RegSize: Copy + Clone + PartialEq {
@@ -16,20 +16,33 @@ pub trait RegSize: Copy + Clone + PartialEq {
 
     /// Converts this into a bit string, truncating if necessary.
     fn to_bit_str(self, len: u8) -> BitStr32;
+
+    fn zero_pad_from_byte(b: DataByte) -> Self;
+
+    fn sign_ext_from_byte(b: DataByte) -> Self;
 }
 
 /// Encodes the difference between a 32-bit and 64-bit system.
 pub trait MachineDataWidth {
-    type Signed: From<Self::RegData>
+    type Signed: From<BitStr32>
+        + From<Self::RegData>
         + From<Self::ByteAddr>
-        + Add<Self::Signed>
-        + BitAnd<Self::Signed>;
+        + Eq
+        + Ord
+        + Add<Output = Self::Signed>
+        + BitAnd<Output = Self::Signed>
+        + BitOr<Output = Self::Signed>
+        + Shl<usize, Output = Self::Signed>;
     type Unsigned: From<Self::RegData>
         + From<Self::ByteAddr>
-        + Add<Self::Unsigned>
-        + BitAnd<Self::Unsigned>;
+        + Eq
+        + Ord
+        + Add<Output = Self::Unsigned>;
     type RegData: RegSize + From<Self::Signed> + From<Self::Unsigned> + From<Self::ByteAddr>;
     type ByteAddr: ByteAddress + From<Self::Signed> + From<Self::Unsigned> + From<Self::RegData>;
+
+    fn sgn_zero() -> Self::Signed;
+    fn sgn_one() -> Self::Signed;
 }
 
 pub struct Width32b;
@@ -39,6 +52,14 @@ impl MachineDataWidth for Width32b {
     type Unsigned = Wrapping<u32>;
     type RegData = DataWord;
     type ByteAddr = ByteAddr32;
+
+    fn sgn_zero() -> Self::Signed {
+        Wrapping(0i32)
+    }
+
+    fn sgn_one() -> Self::Signed {
+        Wrapping(1i32)
+    }
 }
 
 pub struct Width64b;
@@ -48,6 +69,14 @@ impl MachineDataWidth for Width64b {
     type Unsigned = Wrapping<u64>;
     type RegData = DataDword;
     type ByteAddr = ByteAddr64;
+
+    fn sgn_zero() -> Self::Signed {
+        Wrapping(0i64)
+    }
+
+    fn sgn_one() -> Self::Signed {
+        Wrapping(1i64)
+    }
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -107,10 +136,6 @@ impl BitStr32 {
         })
     }
 
-    pub fn as_i32(self) -> i32 {
-        i32::from(self.to_sgn_data_word())
-    }
-
     pub const fn as_u32(self) -> u32 {
         self.value
     }
@@ -120,6 +145,31 @@ impl Add for BitStr32 {
     type Output = Self;
     fn add(self, other: Self) -> Self {
         self.concat(other)
+    }
+}
+
+impl From<BitStr32> for i32 {
+    fn from(value: BitStr32) -> i32 {
+        value.to_sgn_data_word().into()
+    }
+}
+
+impl From<BitStr32> for i64 {
+    fn from(value: BitStr32) -> i64 {
+        // rust sign extends automatically
+        i32::from(value) as i64
+    }
+}
+
+impl From<BitStr32> for Wrapping<i32> {
+    fn from(value: BitStr32) -> Wrapping<i32> {
+        Wrapping(i32::from(value))
+    }
+}
+
+impl From<BitStr32> for Wrapping<i64> {
+    fn from(value: BitStr32) -> Wrapping<i64> {
+        Wrapping(i64::from(value))
     }
 }
 
@@ -157,6 +207,19 @@ impl RegSize for DataDword {
 
     fn to_bit_str(self, len: u8) -> BitStr32 {
         BitStr32::new(self.value as u32, len)
+    }
+
+    fn zero_pad_from_byte(b: DataByte) -> DataDword {
+        DataDword {
+            value: b.value as u64,
+        }
+    }
+
+    fn sign_ext_from_byte(b: DataByte) -> DataDword {
+        DataDword {
+            // signed upcasts sign extend
+            value: ((b.value as i8) as i64) as u64,
+        }
     }
 }
 
@@ -207,6 +270,18 @@ impl RegSize for DataWord {
 
     fn to_bit_str(self, len: u8) -> BitStr32 {
         BitStr32::new(self.value, len)
+    }
+
+    fn zero_pad_from_byte(b: DataByte) -> DataWord {
+        DataWord {
+            value: b.value as u32,
+        }
+    }
+
+    fn sign_ext_from_byte(b: DataByte) -> DataWord {
+        DataWord {
+            value: ((b.value as i8) as i32) as u32,
+        }
     }
 }
 
@@ -263,22 +338,6 @@ pub struct DataByte {
 impl DataByte {
     pub const fn zero() -> DataByte {
         DataByte { value: 0 }
-    }
-
-    pub const fn zero_pad(self) -> DataWord {
-        DataWord {
-            value: self.value as u32,
-        }
-    }
-
-    pub fn sign_extend(self) -> DataWord {
-        if (self.value >> 7) > 0 {
-            DataWord {
-                value: (self.value as u32) | 0xFFFF_FF00,
-            }
-        } else {
-            self.zero_pad()
-        }
     }
 }
 
@@ -391,9 +450,9 @@ mod test {
     #[test]
     fn test_bv_as_i32() {
         let bv = BitStr32::new(-4i32 as u32, 12);
-        assert_eq!(bv.as_i32(), -4);
+        assert_eq!(i32::from(bv), -4);
         let wrap = BitStr32::new(-1i32 as u32, 12);
-        assert_eq!(wrap.as_i32(), -1);
+        assert_eq!(wrap.into(), -1);
     }
 
     #[test]
@@ -407,7 +466,7 @@ mod test {
         let all_ones = 0xFFFF_FFFF;
         let bv = BitStr32::new(all_ones, 12);
         assert_eq!(bv.as_u32(), 0xFFF);
-        assert_eq!(bv.as_i32(), all_ones as i32);
+        assert_eq!(i32::from(bv), all_ones as i32);
     }
 
     #[test]
