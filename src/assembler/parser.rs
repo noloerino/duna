@@ -1,9 +1,10 @@
+use super::assembler_impl::{ProgramSection, SectionStore};
 use super::lexer::*;
 use super::parse_error::{ParseError, ParseErrorReport, ParseErrorReporter};
 use super::partial_inst::PartialInst;
 use crate::instruction::*;
 use crate::isa;
-use crate::program_state::{IRegister, MachineDataWidth, RegSize, Width32b};
+use crate::program_state::*;
 use crate::pseudo_inst::*;
 use std::collections::HashMap;
 use std::iter::Peekable;
@@ -15,7 +16,24 @@ type ParsedInstStream<T> = Vec<PartialInst<T>>;
 type LineParseResult<T> = Result<ParsedInstStream<T>, ParseError>;
 pub struct ParseResult<T: MachineDataWidth> {
     pub insts: ParsedInstStream<T>,
+    pub sections: SectionStore,
     pub report: ParseErrorReport,
+}
+
+/// State about the program being parsed.
+/// curr_section defaults to text.
+struct ParseState {
+    curr_section: ProgramSection,
+    sections: SectionStore,
+}
+
+impl ParseState {
+    fn new() -> ParseState {
+        ParseState {
+            curr_section: ProgramSection::Text,
+            sections: SectionStore::new(),
+        }
+    }
 }
 
 #[derive(Copy, Clone)]
@@ -52,6 +70,7 @@ pub struct RiscVParser<'a, T: MachineDataWidth> {
     parser_data: ParserData<'a, T>,
     lines: LineTokenStream,
     reporter: ParseErrorReporter,
+    state: ParseState,
 }
 
 type TokenIter = Peekable<IntoIter<Token>>;
@@ -143,6 +162,7 @@ impl RiscVParser<'_, Width32b> {
             },
             lines: lex_result.lines,
             reporter: lex_result.reporter,
+            state: ParseState::new(),
         }
         .parse()
     }
@@ -153,7 +173,7 @@ impl RiscVParser<'_, Width32b> {
         let parser_data = &self.parser_data;
         for line in self.lines {
             let (found_label, parse_result) =
-                LineParser::new(parser_data, line, &last_label).parse();
+                LineParser::new(parser_data, line, &last_label, &mut self.state).parse();
             match parse_result {
                 Ok(mut new_insts) => {
                     // if insts is not empty, then that means the label was already used
@@ -174,6 +194,7 @@ impl RiscVParser<'_, Width32b> {
         }
         ParseResult {
             insts,
+            sections: self.state.sections,
             report: self.reporter.into_report(),
         }
     }
@@ -206,6 +227,44 @@ fn ok_wrap_concr<T: MachineDataWidth>(inst: ConcreteInst<T>) -> LineParseResult<
 /// Convenience method to turn a Vec<ConcreteInst<T>> into Ok(Vec<PartialInst>)
 fn ok_wrap_expanded<T: MachineDataWidth>(inst: Vec<ConcreteInst<T>>) -> LineParseResult<T> {
     Ok(inst.into_iter().map(PartialInst::new_complete).collect())
+}
+
+/// Parses an immediate that is required to be at most n bits.
+/// If the provided immediate is a negative, then the upper (64 - n + 1) bits must all be 1.
+/// An i64 is returned, which should then be converted into a RegData type by a parser.
+fn try_parse_imm(n: u8, token: Token) -> Result<i64, ParseError> {
+    match token.data {
+        // Check lower n bits
+        // We give a pass to negative numbers with high bits set
+        TokenType::Immediate(val, radix) => {
+            let mask = if n == 64 {
+                // Prevent shift overflow
+                0
+            } else {
+                (-1) << (if val < 0 {
+                    // Allow the sign bit to be part of the mask
+                    n - 1
+                } else {
+                    n
+                })
+            };
+            let mask_result = val & mask;
+            if mask_result != 0 && mask_result != mask {
+                Err(ParseError::imm_too_big(
+                    token.location,
+                    n,
+                    &radix.format(val),
+                ))
+            } else {
+                Ok(val)
+            }
+        }
+        _ => Err(ParseError::unexpected_type(
+            token.location,
+            "immediate",
+            token.data,
+        )),
+    }
 }
 
 /// Responsible for parsing a line with an instruction
@@ -423,40 +482,9 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
     }
 
     /// Parses an immediate that is required to be at most n bits.
-    /// If the provided immediate is a negative, then the upper (32 - n + 1) bits must all be 1.
+    /// If the provided immediate is a negative, then the upper (64 - n + 1) bits must all be 1.
     fn try_parse_imm(&self, n: u8, token: Token) -> Result<T::RegData, ParseError> {
-        match token.data {
-            // Check lower n bits
-            // We give a pass to negative numbers with high bits set
-            TokenType::Immediate(val, radix) => {
-                let mask = if n == 32 {
-                    // Prevent shift overflow
-                    0
-                } else {
-                    (-1) << (if val < 0 {
-                        // Allow the sign bit to be part of the mask
-                        n - 1
-                    } else {
-                        n
-                    })
-                };
-                let mask_result = val & mask;
-                if mask_result != 0 && mask_result != mask {
-                    Err(ParseError::imm_too_big(
-                        token.location,
-                        n,
-                        &radix.format(val),
-                    ))
-                } else {
-                    Ok(val.into())
-                }
-            }
-            _ => Err(ParseError::unexpected_type(
-                token.location,
-                "immediate",
-                token.data,
-            )),
-        }
+        try_parse_imm(n, token).map(|res_i64| res_i64.into())
     }
 
     /// Attempts to expand a token into a label reference or an immediate of at most max_imm_len.
@@ -651,11 +679,108 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
 }
 
 /// Responsible for parsing a line with a directive.
-struct DirectiveParser<'a, T: MachineDataWidth> {
-    data: &'a ParserData<'a, T>,
+struct DirectiveParser<'a> {
     iter: TokenIter,
     head_loc: Location,
     head_directive: &'a str,
+    state: &'a mut ParseState,
+}
+
+impl<'a> DirectiveParser<'a> {
+    fn new(
+        iter: TokenIter,
+        state: &'a mut ParseState,
+        head_loc: Location,
+        head_directive: &'a str,
+    ) -> DirectiveParser<'a> {
+        DirectiveParser {
+            iter,
+            state,
+            head_loc,
+            head_directive,
+        }
+    }
+
+    fn parse<T: MachineDataWidth>(self) -> LineParseResult<T> {
+        match self.head_directive {
+            "section" => self.parse_section(),
+            "byte" => self.parse_data(DataWidth::Byte),
+            "2byte" | "half" | "short" => self.parse_data(DataWidth::Half),
+            "4byte" | "word" | "long" => self.parse_data(DataWidth::Word),
+            "8byte" | "dword" | "quad" => self.parse_data(DataWidth::DoubleWord),
+            _ => Err(ParseError::unsupported_directive(
+                self.head_loc,
+                self.head_directive.to_string(),
+            )),
+        }
+    }
+
+    fn parse_data<T: MachineDataWidth>(mut self, kind: DataWidth) -> LineParseResult<T> {
+        use ProgramSection::*;
+        let state = &mut self.state;
+        match state.curr_section {
+            Text => Err(ParseError::unimplemented(
+                self.head_loc,
+                "cannot insert literals in .text section (only instructions allowed)",
+            )),
+            section => {
+                while let Some(tok) = self.iter.next() {
+                    use DataWidth::*;
+                    match kind {
+                        Byte => {
+                            let val: u8 = try_parse_imm(8, tok)? as u8;
+                            state.sections.add_byte(section, val)
+                        }
+                        Half => {
+                            let val: u16 = try_parse_imm(16, tok)? as u16;
+                            state.sections.add_half(section, val)
+                        }
+                        Word => {
+                            let val: u32 = try_parse_imm(32, tok)? as u32;
+                            state.sections.add_word(section, val)
+                        }
+                        DoubleWord => {
+                            let val: u64 = try_parse_imm(32, tok)? as u64;
+                            state.sections.add_doubleword(section, val)
+                        }
+                    }
+                }
+                self.ok()
+            }
+        }
+    }
+
+    fn parse_section<T: MachineDataWidth>(mut self) -> LineParseResult<T> {
+        let next_tok = self.iter.next().unwrap();
+        match &next_tok.data {
+            TokenType::Directive(s) => match s.as_str() {
+                "text" => {
+                    self.state.curr_section = ProgramSection::Text;
+                    return self.ok();
+                }
+                "data" => {
+                    self.state.curr_section = ProgramSection::Data;
+                    return self.ok();
+                }
+                "rodata" => {
+                    self.state.curr_section = ProgramSection::Rodata;
+                    return self.ok();
+                }
+                "bss" => return Err(ParseError::unimplemented(next_tok.location, "bss section")),
+                _ => {}
+            },
+            _ => {}
+        }
+        Err(ParseError::unexpected_type(
+            next_tok.location,
+            "one of [.text, .bss, .data, .rodata]",
+            next_tok.data,
+        ))
+    }
+
+    fn ok<T: MachineDataWidth>(self) -> LineParseResult<T> {
+        Ok(Vec::new())
+    }
 }
 
 /// Responsible for parsing a line.
@@ -663,6 +788,7 @@ struct LineParser<'a, T: MachineDataWidth> {
     data: &'a ParserData<'a, T>,
     iter: TokenIter,
     label: Option<Label>,
+    state: &'a mut ParseState,
 }
 
 impl<'a, T: MachineDataWidth> LineParser<'a, T> {
@@ -671,6 +797,7 @@ impl<'a, T: MachineDataWidth> LineParser<'a, T> {
         data: &'a ParserData<T>,
         tokens: TokenStream,
         maybe_label: &'a Option<Label>,
+        state: &'a mut ParseState,
     ) -> LineParser<'a, T> {
         let mut iter = tokens.into_iter().peekable();
         let label_passed_in = maybe_label.is_some();
@@ -698,6 +825,7 @@ impl<'a, T: MachineDataWidth> LineParser<'a, T> {
             data,
             iter,
             label: this_label,
+            state,
         }
     }
 
@@ -707,8 +835,20 @@ impl<'a, T: MachineDataWidth> LineParser<'a, T> {
             if let Some(head_tok) = self.iter.next() {
                 use TokenType::*;
                 match head_tok.data {
-                    Name(name) => InstParser::new(self.data, self.iter, head_tok.location, &name)
-                        .try_expand_inst(),
+                    Name(name) => {
+                        if self.state.curr_section == ProgramSection::Text {
+                            InstParser::new(self.data, self.iter, head_tok.location, &name)
+                                .try_expand_inst()
+                        } else {
+                            Err(ParseError::unsupported_directive(
+                                head_tok.location,
+                                format!(
+                                    "instructions can only be in the .text section (current section is {})",
+                                    self.state.curr_section
+                                ),
+                            ))
+                        }
+                    }
                     // first label def is handled by contructor
                     // TODO handle multiple labels on same line
                     LabelDef(label_name) => Err(ParseError::generic(
@@ -718,8 +858,14 @@ impl<'a, T: MachineDataWidth> LineParser<'a, T> {
                             label_name
                         ),
                     )),
-                    Directive(_section_name) => Ok(Vec::new()), // TODO
-                    Comment(..) => Ok(Vec::new()),              // deliberate no-op
+                    Directive(section_name) => DirectiveParser::new(
+                        self.iter,
+                        &mut self.state,
+                        head_tok.location,
+                        &section_name,
+                    )
+                    .parse(),
+                    Comment(..) => Ok(Vec::new()), // deliberate no-op
                     Comma => Err(ParseError::bad_head(head_tok.location, ",")),
                     Immediate(n, style) => {
                         Err(ParseError::bad_head(head_tok.location, &style.format(n)))

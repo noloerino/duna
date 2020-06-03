@@ -228,6 +228,14 @@ impl From<BitStr32> for Wrapping<i64> {
     }
 }
 
+#[derive(Copy, Clone, PartialEq)]
+pub enum DataWidth {
+    Byte,
+    Half,
+    Word,
+    DoubleWord,
+}
+
 /// Represents a 64-bit double-word of data.
 #[derive(Debug, Copy, Clone, PartialEq, ConvertInt64)]
 pub struct DataDword {

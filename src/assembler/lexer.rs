@@ -446,7 +446,7 @@ impl Lexer<'_> {
     }
 
     /// Consume the lexer's iterator to produce a stream of tokens and any possible errors.
-    pub fn lex(self) -> LexResult {
+    fn lex(self) -> LexResult {
         let mut toks = Vec::<TokenStream>::new();
         let mut reporter = ParseErrorReporter::new(
             self.file_name.unwrap_or("<no file name>").to_string(),

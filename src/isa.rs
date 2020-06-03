@@ -939,6 +939,8 @@ mod test {
 }
 
 // pub enum Instruction {
+//     Addw,
+//     Addiw,
 //     Ebreak,
 //     Ld,
 //     Lwu,
@@ -946,6 +948,7 @@ mod test {
 //     Ori,
 //     Sd,
 //     Sll,
+//     Sllw,
 //     Slli,
 //     Slt,
 //     Slti,
@@ -953,9 +956,14 @@ mod test {
 //     Sltu,
 //     Sra,
 //     Srai,
+//     Sraiw,
+//     Sraw,
 //     Srl,
 //     Srli,
+//     Srlis,
+//     Srlw,
 //     Sub,
+//     Subw,
 //     Xor,
 //     Xori,
 // }

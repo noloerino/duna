@@ -115,6 +115,8 @@ impl ParseErrorReporter {
 enum ParseErrorType {
     /// A catch-all for any kind of error I was too lazy to add a type for.
     Generic(String),
+    /// Indicates that a feature is currently unimplemented.
+    Unimplemented(String),
     /// A bad character was encountered while lexing an integer literal.
     BadIntLiteral(ImmRenderType, String),
     /// An unrecognized escape character was provided.
@@ -151,6 +153,8 @@ enum ParseErrorType {
     UnexpectedType { exp_name: String, got: TokenType },
     /// A parentheses was left unclosed, and the provided token was found instead.
     UnclosedParen(TokenType),
+    /// An unsupported directive was found.
+    UnsupportedDirective(String),
 }
 
 impl fmt::Display for ParseErrorType {
@@ -159,6 +163,7 @@ impl fmt::Display for ParseErrorType {
         use ParseErrorType::*;
         match self {
             Generic(msg) => write!(f, "{}", msg),
+            Unimplemented(msg) => write!(f, "{} is unimplemented", msg),
             BadIntLiteral(render_type, n) => write!(
                 f,
                 "encountered unexpected character while parsing {} integer literal {}",
@@ -216,6 +221,7 @@ impl fmt::Display for ParseErrorType {
             ),
             UnexpectedType { exp_name, got } => write!(f, "expected {}, got {}", exp_name, got),
             UnclosedParen(got) => write!(f, "expected closing parentheses, got {}", got),
+            UnsupportedDirective(got) => write!(f, "unsupported assembler directive {}", got),
         }
     }
 }
@@ -235,6 +241,13 @@ impl ParseError {
         ParseError {
             location,
             tpe: ParseErrorType::Generic(msg.to_string()),
+        }
+    }
+
+    pub fn unimplemented(location: Location, msg: &str) -> Self {
+        ParseError {
+            location,
+            tpe: ParseErrorType::Unimplemented(msg.to_string()),
         }
     }
 }
@@ -329,6 +342,10 @@ impl ParseError {
 
     pub fn unclosed_paren(location: Location, got: TokenType) -> Self {
         ParseError::new(location, ParseErrorType::UnclosedParen(got))
+    }
+
+    pub fn unsupported_directive(location: Location, got: String) -> Self {
+        ParseError::new(location, ParseErrorType::UnsupportedDirective(got))
     }
 }
 
