@@ -1,7 +1,7 @@
 use super::parse_error::ParseErrorReport;
 use super::parser::{Label, ParseResult, RiscVParser};
 use super::partial_inst::PartialInst;
-use crate::program_state::{DataWord, MachineDataWidth, RiscVProgram, Width32b};
+use crate::program_state::{MachineDataWidth, RiscVProgram, Width32b};
 use std::collections::HashMap;
 
 pub struct Assembler;
@@ -122,6 +122,7 @@ mod tests {
     use super::*;
     use crate::instruction::BType;
     use crate::isa::Beq;
+    use crate::program_state::DataWord;
     use crate::program_state::IRegister::ZERO;
 
     #[test]

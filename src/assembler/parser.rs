@@ -3,7 +3,7 @@ use super::parse_error::{ParseError, ParseErrorReport, ParseErrorReporter};
 use super::partial_inst::PartialInst;
 use crate::instruction::*;
 use crate::isa;
-use crate::program_state::{DataWord, IRegister, MachineDataWidth, RegSize, Width32b};
+use crate::program_state::{IRegister, MachineDataWidth, RegSize, Width32b};
 use crate::pseudo_inst::*;
 use std::collections::HashMap;
 use std::iter::Peekable;
@@ -11,8 +11,8 @@ use std::vec::IntoIter;
 
 pub type Label = String;
 
-type ParsedInstStream<T: MachineDataWidth> = Vec<PartialInst<T>>;
-type LineParseResult<T: MachineDataWidth> = Result<ParsedInstStream<T>, ParseError>;
+type ParsedInstStream<T> = Vec<PartialInst<T>>;
+type LineParseResult<T> = Result<ParsedInstStream<T>, ParseError>;
 pub struct ParseResult<T: MachineDataWidth> {
     pub insts: ParsedInstStream<T>,
     pub report: ParseErrorReport,
@@ -107,8 +107,9 @@ lazy_static! {
             ("jr", OneReg(Jr::expand)),
             ("ret", NoArgs(Ret::expand)),
         ]
-        .into_iter()
-        .map(|(s, t)| (s.to_string(), *t))
+        .iter()
+        .cloned()
+        .map(|(s, t)| (s.to_string(), t))
         .collect()
     };
     static ref REG_EXPANSION_TABLE: HashMap<String, IRegister> = {
@@ -740,7 +741,7 @@ mod tests {
     use crate::instruction::ConcreteInst;
     use crate::isa::*;
     use crate::program_state::IRegister::*;
-    use crate::program_state::Width32b;
+    use crate::program_state::{DataWord, Width32b};
 
     /// Lexes a program. Asserts that the lex has no errors.
     fn lex(prog: &str) -> LexResult {

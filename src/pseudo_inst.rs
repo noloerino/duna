@@ -1,6 +1,6 @@
 use crate::instruction::*;
 use crate::isa::*;
-use crate::program_state::{BitStr32, DataWord, IRegister, MachineDataWidth, RegSize};
+use crate::program_state::{BitStr32, IRegister, MachineDataWidth, RegSize};
 use IRegister::*;
 
 pub struct Nop;
@@ -82,7 +82,7 @@ impl Ret {
 mod tests {
     use super::*;
     use crate::instruction::ConcreteInst;
-    use crate::program_state::Width32b;
+    use crate::program_state::{DataWord, Width32b};
 
     type Expanded = Vec<ConcreteInst<Width32b>>;
 
