@@ -1,21 +1,17 @@
 use super::parse_error::ParseErrorReport;
 use super::parser::{Label, ParseResult, RiscVParser};
 use super::partial_inst::PartialInst;
-use crate::program_state::{DataWord, MachineDataWidth, RiscVProgram};
+use crate::program_state::{DataWord, MachineDataWidth, RiscVProgram, Width32b};
 use std::collections::HashMap;
 
 pub struct Assembler;
 
 impl Assembler {
-    pub fn assemble_file<T: MachineDataWidth>(
-        path: &str,
-    ) -> Result<UnlinkedProgram<T>, ParseErrorReport> {
+    pub fn assemble_file(path: &str) -> Result<UnlinkedProgram<Width32b>, ParseErrorReport> {
         Assembler::assemble(RiscVParser::parse_file(path))
     }
 
-    pub fn assemble_str<T: MachineDataWidth>(
-        contents: &str,
-    ) -> Result<UnlinkedProgram<T>, ParseErrorReport> {
+    pub fn assemble_str(contents: &str) -> Result<UnlinkedProgram<Width32b>, ParseErrorReport> {
         Assembler::assemble(RiscVParser::parse_str(contents))
     }
 
@@ -91,9 +87,8 @@ impl<T: MachineDataWidth> UnlinkedProgram<T> {
                 Some(&tgt_index) => {
                     // Figure out how many instructions we need to jump
                     let inst_distance = (tgt_index as isize) - (inst_index as isize);
-                    let byte_distance: isize = inst_distance * 4;
-                    let new_inst =
-                        insts[inst_index].fulfill_label(DataWord::from(byte_distance as i32));
+                    let byte_distance = (inst_distance * 4) as i64;
+                    let new_inst = insts[inst_index].fulfill_label(byte_distance.into());
                     replace_inst(&mut insts, inst_index, PartialInst::new_complete(new_inst));
                 }
                 None => {

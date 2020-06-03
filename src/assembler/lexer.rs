@@ -306,9 +306,9 @@ impl<'a> LineLexer<'a> {
             }
         }
         let digit_str = digits.into_iter().collect::<String>();
-        // We need to use u32 to avoid overflow for large literals like 0xFFFF_FFFF
-        if let Ok(unsgn_val) = u32::from_str_radix(&digit_str, fmt.radix()) {
-            let val = unsgn_val as i32;
+        // We need to use u64 to avoid overflow for large literals like 0xFFFF_FFFF_FFFF_FFFF
+        if let Ok(unsgn_val) = u64::from_str_radix(&digit_str, fmt.radix()) {
+            let val = unsgn_val as i64;
             Ok(TokenType::Immediate(if negate { -val } else { val }, fmt))
         } else {
             Err(ParseError::bad_int_literal(state.location, fmt, digit_str))
