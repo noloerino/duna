@@ -205,17 +205,65 @@ mod tests {
         let program = &format!(
             "
             .section .data
-            .word 0xabcd0123
-            .word 0xbeefdead
+                .word 0xabcd0123
+                .word 0xbeefdead
             .section .text
-            li s1, {data_start}
-            lw a0, 4(s1)
+                li s1, {data_start}
+                lw a0, 4(s1)
             ",
             data_start = RiscVProgram::DATA_START
         );
         let unlinked = Assembler::assemble_str(program).expect("Assembler errored out");
         let mut concrete = unlinked.try_into_program();
         assert_eq!(concrete.run(), 0xBEEF_DEADu32 as i32);
+    }
+
+    #[test]
+    fn test_zero_directive() {
+        let program = &format!(
+            "
+            .data
+                .zero 3
+                .byte 0xFF
+            .text
+                li s1, {data_start}
+                lw a0, 0(s1)
+            ",
+            data_start = RiscVProgram::DATA_START
+        );
+
+        let unlinked = Assembler::assemble_str(program).expect("Assembler errored out");
+        let mut concrete = unlinked.try_into_program();
+        assert_eq!(concrete.run(), 0xFF00_0000u32 as i32);
+    }
+
+    #[test]
+    fn test_asciz_directive() {
+        let program = &format!(
+            "
+            .data
+                .asciz \"beef\" # 5 bytes due to null terminator
+                .string \"a\" # ascii value 97
+            .text
+                li s1, {data_start}
+                # Set up print syscall
+                li a7, 64
+                li a0, 1
+                mv a1, s1
+                li a2, 4
+                ecall
+                lbu a0, 5(s1)
+            ",
+            data_start = RiscVProgram::DATA_START
+        );
+
+        let unlinked = Assembler::assemble_str(program).expect("Assembler errored out");
+        let mut concrete = unlinked.try_into_program();
+        assert_eq!(concrete.run(), 97i32); // ascii for 'a'
+        assert_eq!(
+            String::from_utf8(concrete.state.get_stdout().to_vec()),
+            Ok("beef".to_string())
+        );
     }
 
     #[test]

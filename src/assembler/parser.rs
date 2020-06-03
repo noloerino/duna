@@ -284,6 +284,26 @@ fn check_no_more_args(iter: &mut TokenIter, name: &str, needed: u8) -> Result<()
     }
 }
 
+/// Attempts to advance the next token of the iterator, returning a ParseError if there are none.
+fn try_next_tok(
+    iter: &mut TokenIter,
+    head_loc: Location,
+    name: &str,
+    needed_args: u8,
+    found_so_far: u8,
+) -> Result<Token, ParseError> {
+    if let Some(tok) = iter.next() {
+        Ok(tok)
+    } else {
+        Err(ParseError::wrong_argc(
+            head_loc,
+            name,
+            needed_args,
+            found_so_far,
+        ))
+    }
+}
+
 /// Responsible for parsing a line with an instruction
 struct InstParser<'a, T: MachineDataWidth> {
     data: &'a ParserData<'a, T>,
@@ -440,16 +460,13 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
 
     /// Attempts to advance the next token of the iterator, returning a ParseError if there are none.
     fn try_next_tok(&mut self, needed_args: u8, found_so_far: u8) -> Result<Token, ParseError> {
-        if let Some(tok) = self.iter.next() {
-            Ok(tok)
-        } else {
-            Err(ParseError::wrong_argc(
-                self.head_loc,
-                self.inst_name,
-                needed_args,
-                found_so_far,
-            ))
-        }
+        try_next_tok(
+            &mut self.iter,
+            self.head_loc,
+            self.inst_name,
+            needed_args,
+            found_so_far,
+        )
     }
 
     /// Attempts to peek the next token of the iterator, returning a ParseError if there are none.
@@ -724,6 +741,8 @@ impl<'a> DirectiveParser<'a> {
             "2byte" | "half" | "short" => self.parse_data(DataWidth::Half),
             "4byte" | "word" | "long" => self.parse_data(DataWidth::Word),
             "8byte" | "dword" | "quad" => self.parse_data(DataWidth::DoubleWord),
+            "zero" => self.parse_zero(),
+            "asciz" | "string" => self.parse_string(),
             _ => Err(ParseError::unsupported_directive(
                 self.head_loc,
                 self.head_directive.to_string(),
@@ -731,6 +750,7 @@ impl<'a> DirectiveParser<'a> {
         }
     }
 
+    /// Parses integer literal declarations through .byte, .word, etc.
     fn parse_data<T: MachineDataWidth>(mut self, kind: DataWidth) -> LineParseResult<T> {
         use ProgramSection::*;
         let state = &mut self.state;
@@ -768,7 +788,7 @@ impl<'a> DirectiveParser<'a> {
     }
 
     fn parse_section<T: MachineDataWidth>(mut self) -> LineParseResult<T> {
-        let next_tok = self.iter.next().unwrap();
+        let next_tok = self.try_next_tok(1, 0)?;
         if let TokenType::Directive(s) = &next_tok.data {
             match s.as_str() {
                 "text" => {
@@ -792,6 +812,73 @@ impl<'a> DirectiveParser<'a> {
             "one of [.text, .bss, .data, .rodata]",
             next_tok.data,
         ))
+    }
+
+    fn parse_string<T: MachineDataWidth>(mut self) -> LineParseResult<T> {
+        if let ProgramSection::Text = self.state.curr_section {
+            return Err(ParseError::unimplemented(
+                self.head_loc,
+                "cannot insert literals in .text section (only instructions allowed)",
+            ));
+        }
+        let next_tok = self.try_next_tok(1, 0)?;
+        if let TokenType::StringLiteral(s) = &next_tok.data {
+            for c in s.chars() {
+                self.state
+                    .sections
+                    .add_byte(self.state.curr_section, c as u8)
+            }
+            // add null terminator
+            self.state.sections.add_byte(self.state.curr_section, 0);
+            self.ok(1)
+        } else {
+            Err(ParseError::unexpected_type(
+                next_tok.location,
+                "string literal",
+                next_tok.data,
+            ))
+        }
+    }
+
+    fn parse_zero<T: MachineDataWidth>(mut self) -> LineParseResult<T> {
+        if let ProgramSection::Text = self.state.curr_section {
+            return Err(ParseError::unimplemented(
+                self.head_loc,
+                "cannot insert literals in .text section (only instructions allowed)",
+            ));
+        }
+        let next_tok = self.try_next_tok(1, 0)?;
+        if let TokenType::Immediate(n, ..) = next_tok.data {
+            // insert n bytes of zeroes
+            if n < 0 {
+                Err(ParseError::unexpected_type(
+                    next_tok.location,
+                    "positive integer literal",
+                    next_tok.data,
+                ))
+            } else {
+                for _ in 0..n {
+                    self.state.sections.add_byte(self.state.curr_section, 0)
+                }
+                self.ok(1)
+            }
+        } else {
+            Err(ParseError::unexpected_type(
+                next_tok.location,
+                "integer literal",
+                next_tok.data,
+            ))
+        }
+    }
+
+    fn try_next_tok(&mut self, needed_args: u8, found_so_far: u8) -> Result<Token, ParseError> {
+        try_next_tok(
+            &mut self.iter,
+            self.head_loc,
+            self.head_directive,
+            needed_args,
+            found_so_far,
+        )
     }
 
     /// Checks that the iterator has run out of tokens; returns ok if so.
