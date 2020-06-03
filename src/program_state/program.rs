@@ -13,9 +13,9 @@ pub struct RiscVProgram<T: MachineDataWidth> {
 }
 
 impl RiscVProgram<Width32b> {
-    const TEXT_START: u32 = 0x1000_0000;
-    const STACK_START: u32 = 0x7FFF_FFF0;
-    const DATA_START: u32 = 0x2000_0000;
+    pub const TEXT_START: u32 = 0x1000_0000;
+    pub const STACK_START: u32 = 0x7FFF_FFF0;
+    pub const DATA_START: u32 = 0x2000_0000;
 
     /// Initializes a new program instance from the provided instructions.
     ///

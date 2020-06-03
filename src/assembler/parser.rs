@@ -267,6 +267,23 @@ fn try_parse_imm(n: u8, token: Token) -> Result<i64, ParseError> {
     }
 }
 
+/// Checks this line's iterator to ensure that there are no more tokens remaining, save
+/// for a possible comment.
+/// This is used for situations where a fixed number of arguments is expected, as we're
+/// free to consume the iterator since more tokens would be an error regardless.
+fn check_no_more_args(iter: &mut TokenIter, name: &str, needed: u8) -> Result<(), ParseError> {
+    let next = iter.next();
+    if let Some(tok) = next {
+        if let TokenType::Comment(_) = tok.data {
+            Ok(())
+        } else {
+            Err(ParseError::too_many_args(tok.location, name, needed))
+        }
+    } else {
+        Ok(())
+    }
+}
+
 /// Responsible for parsing a line with an instruction
 struct InstParser<'a, T: MachineDataWidth> {
     data: &'a ParserData<'a, T>,
@@ -295,20 +312,7 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
     /// This is used for situations where a fixed number of arguments is expected, as we're
     /// free to consume the iterator since more tokens would be an error regardless.
     fn check_no_more_args(&mut self, needed: u8) -> Result<(), ParseError> {
-        let next = self.iter.next();
-        if let Some(tok) = next {
-            if let TokenType::Comment(_) = tok.data {
-                Ok(())
-            } else {
-                Err(ParseError::too_many_args(
-                    self.head_loc,
-                    self.inst_name,
-                    needed,
-                ))
-            }
-        } else {
-            Ok(())
-        }
+        check_no_more_args(&mut self.iter, self.inst_name, needed)
     }
 
     /// Attempts to consume exactly N arguments from the iterator, possibly comma-separated.
@@ -681,9 +685,9 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
 /// Responsible for parsing a line with a directive.
 struct DirectiveParser<'a> {
     iter: TokenIter,
+    state: &'a mut ParseState,
     head_loc: Location,
     head_directive: &'a str,
-    state: &'a mut ParseState,
 }
 
 impl<'a> DirectiveParser<'a> {
@@ -704,6 +708,18 @@ impl<'a> DirectiveParser<'a> {
     fn parse<T: MachineDataWidth>(self) -> LineParseResult<T> {
         match self.head_directive {
             "section" => self.parse_section(),
+            "text" => {
+                self.state.curr_section = ProgramSection::Text;
+                self.ok(0)
+            }
+            "data" => {
+                self.state.curr_section = ProgramSection::Data;
+                self.ok(0)
+            }
+            "rodata" => {
+                self.state.curr_section = ProgramSection::Rodata;
+                self.ok(0)
+            }
             "byte" => self.parse_data(DataWidth::Byte),
             "2byte" | "half" | "short" => self.parse_data(DataWidth::Half),
             "4byte" | "word" | "long" => self.parse_data(DataWidth::Word),
@@ -745,7 +761,8 @@ impl<'a> DirectiveParser<'a> {
                         }
                     }
                 }
-                self.ok()
+                // should never fail since we've consumed the whole iterator
+                self.ok(0)
             }
         }
     }
@@ -756,15 +773,15 @@ impl<'a> DirectiveParser<'a> {
             match s.as_str() {
                 "text" => {
                     self.state.curr_section = ProgramSection::Text;
-                    return self.ok();
+                    return self.ok(1);
                 }
                 "data" => {
                     self.state.curr_section = ProgramSection::Data;
-                    return self.ok();
+                    return self.ok(1);
                 }
                 "rodata" => {
                     self.state.curr_section = ProgramSection::Rodata;
-                    return self.ok();
+                    return self.ok(1);
                 }
                 "bss" => return Err(ParseError::unimplemented(next_tok.location, "bss section")),
                 _ => {}
@@ -777,7 +794,9 @@ impl<'a> DirectiveParser<'a> {
         ))
     }
 
-    fn ok<T: MachineDataWidth>(self) -> LineParseResult<T> {
+    /// Checks that the iterator has run out of tokens; returns ok if so.
+    fn ok<T: MachineDataWidth>(mut self, needed_argc: u8) -> LineParseResult<T> {
+        check_no_more_args(&mut self.iter, self.head_directive, needed_argc)?;
         Ok(Vec::new())
     }
 }
@@ -909,6 +928,31 @@ mod tests {
             .into_iter()
             .map(|inst| inst.try_into_concrete_inst())
             .collect()
+    }
+
+    #[test]
+    /// Tests the loading of immediates in the .data section.
+    fn test_data_directives() {
+        let prog = ".section .data\n.byte 0x12\n.word 0xdeadbeef";
+        let ParseResult {
+            report,
+            sections,
+            insts,
+        } = RiscVParser::parse_str(prog);
+        assert!(report.is_empty(), insts.is_empty());
+        assert_eq!(sections.data, vec![0x12, 0xef, 0xbe, 0xad, 0xde]);
+    }
+
+    #[test]
+    fn test_data_directives_bad() {
+        let programs = [
+            ".data 1",                     // requires .byte or similar
+            ".section .data\n.byte 0x123", // immediate too large
+        ];
+        for prog in &programs {
+            let ParseResult { report, .. } = RiscVParser::parse_str(prog);
+            assert!(!report.is_empty());
+        }
     }
 
     #[test]

@@ -201,6 +201,24 @@ mod tests {
     use crate::program_state::IRegister::ZERO;
 
     #[test]
+    fn test_basic_data() {
+        let program = &format!(
+            "
+            .section .data
+            .word 0xabcd0123
+            .word 0xbeefdead
+            .section .text
+            li s1, {data_start}
+            lw a0, 4(s1)
+            ",
+            data_start = RiscVProgram::DATA_START
+        );
+        let unlinked = Assembler::assemble_str(program).expect("Assembler errored out");
+        let mut concrete = unlinked.try_into_program();
+        assert_eq!(concrete.run(), 0xBEEF_DEADu32 as i32);
+    }
+
+    #[test]
     fn test_forward_local_label() {
         let program = "beq x0, x0, l1\nnop\nnop\nl1:nop";
         let unlinked = Assembler::assemble_str(program).expect("Assembler errored out");
