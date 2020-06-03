@@ -18,7 +18,7 @@ pub struct ParseResult<T: MachineDataWidth> {
     pub report: ParseErrorReport,
 }
 
-#[derive(Clone)]
+#[derive(Copy, Clone)]
 /// Describes the arguments needed for a type of function.
 /// Due to their unique parsing rules, Jal, Jalr, and Li are hardcoded.
 enum ParseType<T: MachineDataWidth> {
@@ -59,7 +59,6 @@ type TokenIter = Peekable<IntoIter<Token>>;
 lazy_static! {
     static ref RV32_INST_EXPANSION_TABLE: HashMap<String, ParseType<Width32b>> = {
         use isa::*;
-
         use ParseType::*;
         [
             ("add", R(Add::new)),

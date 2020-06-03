@@ -32,7 +32,7 @@ pub trait RegSize: Copy + Clone + PartialEq + fmt::Display + From<BitStr32> + Fr
 }
 
 /// Encodes the difference between a 32-bit and 64-bit system.
-pub trait MachineDataWidth {
+pub trait MachineDataWidth: Clone + Copy {
     type Signed: From<BitStr32>
         + From<Self::RegData>
         + From<Self::ByteAddr>
@@ -41,12 +41,16 @@ pub trait MachineDataWidth {
         + Add<Output = Self::Signed>
         + BitAnd<Output = Self::Signed>
         + BitOr<Output = Self::Signed>
-        + Shl<usize, Output = Self::Signed>;
+        + Shl<usize, Output = Self::Signed>
+        + Copy
+        + Clone;
     type Unsigned: From<Self::RegData>
         + From<Self::ByteAddr>
         + Eq
         + Ord
-        + Add<Output = Self::Unsigned>;
+        + Add<Output = Self::Unsigned>
+        + Copy
+        + Clone;
     type RegData: RegSize + From<Self::Signed> + From<Self::Unsigned> + From<Self::ByteAddr>;
     type ByteAddr: ByteAddress + From<Self::Signed> + From<Self::Unsigned> + From<Self::RegData>;
 
@@ -58,6 +62,7 @@ pub trait MachineDataWidth {
     fn usize_to_usgn(n: usize) -> Self::Unsigned;
 }
 
+#[derive(Clone, Copy)]
 pub struct Width32b;
 
 impl MachineDataWidth for Width32b {
@@ -91,6 +96,7 @@ impl MachineDataWidth for Width32b {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct Width64b;
 
 impl MachineDataWidth for Width64b {
@@ -456,8 +462,8 @@ impl From<DataByte> for i8 {
     }
 }
 
-pub trait ByteAddress: From<u64> {
-    type WordAddress: Eq + Hash;
+pub trait ByteAddress: Clone + Copy {
+    type WordAddress: Eq + Hash + Copy + Clone;
 
     fn to_word_address(self) -> Self::WordAddress;
 

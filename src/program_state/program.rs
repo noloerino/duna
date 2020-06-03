@@ -27,7 +27,7 @@ impl RiscVProgram<Width32b> {
         let stack_start: ByteAddr32 = RiscVProgram::STACK_START.into();
         user_state.regfile.set(IRegister::SP, stack_start.into());
         user_state.pc = text_start;
-        let next_addr: ByteAddr32 = user_state.pc;
+        let mut next_addr: ByteAddr32 = user_state.pc;
         for inst in &insts {
             user_state.memory.set_word(
                 next_addr.to_word_address(),
