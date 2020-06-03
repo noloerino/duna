@@ -303,6 +303,42 @@ fn try_next_tok(
         ))
     }
 }
+/// Attempts to consume possibly comma-separate arguments from the iterator.
+/// The first and last tokens cannot be commas. If repeated commas appear anywhere,
+/// an error is returned.
+/// This consumes until a comment token or the end of the iterator is reached.
+fn consume_unbounded_commasep_args(iter: &mut TokenIter) -> Result<Vec<Token>, ParseError> {
+    use TokenType::*;
+    let mut toks = Vec::new();
+    // track if we just visited a comma
+    // initialize to true to prevent leading commas
+    let mut was_comma = true;
+    for tok in iter {
+        match tok.data {
+            Name(..) | Immediate(..) | StringLiteral(..) => {
+                was_comma = false;
+                toks.push(tok)
+            }
+            Comma => {
+                if was_comma {
+                    return Err(ParseError::bad_arg(
+                        tok.location,
+                        &format!("{:?}", tok.data),
+                    ));
+                }
+                was_comma = true;
+            }
+            Comment(..) => return Ok(toks),
+            _ => {
+                return Err(ParseError::bad_arg(
+                    tok.location,
+                    &format!("{:?}", tok.data),
+                ));
+            }
+        }
+    }
+    Ok(toks)
+}
 
 /// Responsible for parsing a line with an instruction
 struct InstParser<'a, T: MachineDataWidth> {
@@ -382,36 +418,7 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
     /// an error is returned.
     /// This consumes until a comment token or the end of the iterator is reached.
     fn consume_unbounded_commasep_args(&mut self) -> Result<Vec<Token>, ParseError> {
-        use TokenType::*;
-        let mut toks = Vec::new();
-        // track if we just visited a comma
-        // initialize to true to prevent leading commas
-        let mut was_comma = true;
-        for tok in &mut self.iter {
-            match tok.data {
-                Name(..) | Immediate(..) => {
-                    was_comma = false;
-                    toks.push(tok)
-                }
-                Comma => {
-                    if was_comma {
-                        return Err(ParseError::bad_arg(
-                            tok.location,
-                            &format!("{:?}", tok.data),
-                        ));
-                    }
-                    was_comma = true;
-                }
-                Comment(..) => return Ok(toks),
-                _ => {
-                    return Err(ParseError::bad_arg(
-                        tok.location,
-                        &format!("{:?}", tok.data),
-                    ));
-                }
-            }
-        }
-        Ok(toks)
+        consume_unbounded_commasep_args(&mut self.iter)
     }
 
     /// Consumes tokens for arguments for a memory operation.
@@ -742,7 +749,8 @@ impl<'a> DirectiveParser<'a> {
             "4byte" | "word" | "long" => self.parse_data(DataWidth::Word),
             "8byte" | "dword" | "quad" => self.parse_data(DataWidth::DoubleWord),
             "zero" => self.parse_zero(),
-            "asciz" | "string" => self.parse_string(),
+            "ascii" => self.parse_string(false),
+            "asciz" | "string" => self.parse_string(true),
             _ => Err(ParseError::unsupported_directive(
                 self.head_loc,
                 self.head_directive.to_string(),
@@ -750,7 +758,7 @@ impl<'a> DirectiveParser<'a> {
         }
     }
 
-    /// Parses integer literal declarations through .byte, .word, etc.
+    /// Emits zero or more integer literal declarations through .byte, .word, etc.
     fn parse_data<T: MachineDataWidth>(mut self, kind: DataWidth) -> LineParseResult<T> {
         use ProgramSection::*;
         let state = &mut self.state;
@@ -760,7 +768,8 @@ impl<'a> DirectiveParser<'a> {
                 "cannot insert literals in .text section (only instructions allowed)",
             )),
             section => {
-                while let Some(tok) = self.iter.next() {
+                let toks = consume_unbounded_commasep_args(&mut self.iter)?;
+                for tok in toks {
                     use DataWidth::*;
                     match kind {
                         Byte => {
@@ -814,30 +823,36 @@ impl<'a> DirectiveParser<'a> {
         ))
     }
 
-    fn parse_string<T: MachineDataWidth>(mut self) -> LineParseResult<T> {
+    /// Emits zero or more string literals.
+    ///
+    /// See https://sourceware.org/binutils/docs/as/Ascii.html#Ascii
+    fn parse_string<T: MachineDataWidth>(mut self, null_terminated: bool) -> LineParseResult<T> {
         if let ProgramSection::Text = self.state.curr_section {
             return Err(ParseError::unimplemented(
                 self.head_loc,
                 "cannot insert literals in .text section (only instructions allowed)",
             ));
         }
-        let next_tok = self.try_next_tok(1, 0)?;
-        if let TokenType::StringLiteral(s) = &next_tok.data {
-            for c in s.chars() {
-                self.state
-                    .sections
-                    .add_byte(self.state.curr_section, c as u8)
+        let toks = consume_unbounded_commasep_args(&mut self.iter)?;
+        for tok in toks {
+            if let TokenType::StringLiteral(s) = &tok.data {
+                for c in s.chars() {
+                    self.state
+                        .sections
+                        .add_byte(self.state.curr_section, c as u8)
+                }
+                if null_terminated {
+                    self.state.sections.add_byte(self.state.curr_section, 0);
+                }
+            } else {
+                return Err(ParseError::unexpected_type(
+                    tok.location,
+                    "string literal",
+                    tok.data,
+                ));
             }
-            // add null terminator
-            self.state.sections.add_byte(self.state.curr_section, 0);
-            self.ok(1)
-        } else {
-            Err(ParseError::unexpected_type(
-                next_tok.location,
-                "string literal",
-                next_tok.data,
-            ))
         }
+        self.ok(0)
     }
 
     fn parse_zero<T: MachineDataWidth>(mut self) -> LineParseResult<T> {

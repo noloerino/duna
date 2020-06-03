@@ -1,5 +1,6 @@
 mod assembler_impl;
 mod lexer;
+mod linker;
 mod parse_error;
 mod parser;
 mod partial_inst;

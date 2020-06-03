@@ -8,9 +8,11 @@ fn main() {
         .version("0.1")
         .author("Jonathan Shi <jhshi@berkeley.edu>")
         .arg(
+            // TODO allow using stdin
             Arg::with_name("INPUT")
                 .help("The input assembly file to run.")
                 .required(true)
+                .min_values(1)
                 .index(1),
         )
         .get_matches();
