@@ -1,7 +1,7 @@
-use duna::program_state::RiscVProgram;
+use duna::program_state::{RiscVProgram, Width32b};
 use std::path::Path;
 
-fn program_from_file(filename: &str) -> RiscVProgram {
+fn program_from_file(filename: &str) -> RiscVProgram<Width32b> {
     let program = RiscVProgram::from_file(
         Path::new("tests/asm_files")
             .join(filename)

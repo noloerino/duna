@@ -247,7 +247,7 @@ impl<T: MachineDataWidth> ITypeLoad<T> for Lb {
     }
 
     fn eval(mem: &Memory<T>, addr: T::ByteAddr) -> T::RegData {
-        <T::RegData>::sign_ext_from_byte(mem.get_byte(addr.into()))
+        <T::RegData>::sign_ext_from_byte(mem.get_byte(addr))
     }
 }
 
@@ -769,7 +769,7 @@ mod test {
         let addr = ByteAddr32::from(state.regfile_read(SP));
         state.memory_set_word(addr.to_word_address(), DataWord::from(0xDEAD_BEEFu32));
         // Set ecall code
-        state.regfile_set(A7, Syscall::Write.to_number());
+        state.regfile_set(A7, Syscall::Write.to_number::<Width32b>());
         // We're writing 4 bytes to stdout, which has fd 1
         state.regfile_set(A0, DataWord::from(1));
         state.regfile_set(A1, DataWord::from(addr));

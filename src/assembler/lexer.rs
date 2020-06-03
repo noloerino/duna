@@ -528,7 +528,7 @@ mod tests {
             ("-0b101", Bin, -0b101),
             ("-3", Dec, -3),
             ("-874", Dec, -874),
-            ("0xABCD_0123", Hex, 0xABCD_0123u32 as i32),
+            ("0xABCD_0123", Hex, 0xABCD_0123 as i64),
         ];
         for (line, fmt, exp) in cases {
             let mut reporter = get_test_reporter(line);
