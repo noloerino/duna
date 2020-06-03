@@ -1,6 +1,7 @@
 use duna_macro::*;
 use std::cmp::{max, min};
 use std::fmt;
+use std::hash::Hash;
 use std::num::Wrapping;
 use std::ops::{Add, BitAnd, BitOr, Shl};
 
@@ -22,6 +23,12 @@ pub trait RegSize: Copy + Clone + PartialEq + fmt::Display + From<BitStr32> + Fr
     fn zero_pad_from_byte(b: DataByte) -> Self;
 
     fn sign_ext_from_byte(b: DataByte) -> Self;
+
+    /// Gets the lower 32 bits of this object.
+    fn get_lower_word(self) -> DataWord;
+
+    /// Sign extends a DataWord into this type if necessary.
+    fn sign_ext_from_word(value: DataWord) -> Self;
 }
 
 /// Encodes the difference between a 32-bit and 64-bit system.
@@ -45,6 +52,10 @@ pub trait MachineDataWidth {
 
     fn sgn_zero() -> Self::Signed;
     fn sgn_one() -> Self::Signed;
+    fn sgn_to_isize(n: Self::Signed) -> isize;
+    fn isize_to_sgn(n: isize) -> Self::Signed;
+    fn usgn_to_usize(n: Self::Unsigned) -> usize;
+    fn usize_to_usgn(n: usize) -> Self::Unsigned;
 }
 
 pub struct Width32b;
@@ -62,6 +73,22 @@ impl MachineDataWidth for Width32b {
     fn sgn_one() -> Self::Signed {
         Wrapping(1i32)
     }
+
+    fn sgn_to_isize(n: Wrapping<i32>) -> isize {
+        n.0 as isize
+    }
+
+    fn isize_to_sgn(n: isize) -> Wrapping<i32> {
+        Wrapping(n as i32)
+    }
+
+    fn usgn_to_usize(n: Wrapping<u32>) -> usize {
+        n.0 as usize
+    }
+
+    fn usize_to_usgn(n: usize) -> Wrapping<u32> {
+        Wrapping(n as u32)
+    }
 }
 
 pub struct Width64b;
@@ -78,6 +105,22 @@ impl MachineDataWidth for Width64b {
 
     fn sgn_one() -> Self::Signed {
         Wrapping(1i64)
+    }
+
+    fn sgn_to_isize(n: Wrapping<i64>) -> isize {
+        n.0 as isize
+    }
+
+    fn isize_to_sgn(n: isize) -> Wrapping<i64> {
+        Wrapping(n as i64)
+    }
+
+    fn usgn_to_usize(n: Wrapping<u64>) -> usize {
+        n.0 as usize
+    }
+
+    fn usize_to_usgn(n: usize) -> Wrapping<u64> {
+        Wrapping(n as u64)
     }
 }
 
@@ -223,6 +266,14 @@ impl RegSize for DataDword {
             value: ((b.value as i8) as i64) as u64,
         }
     }
+
+    fn get_lower_word(self) -> DataWord {
+        DataWord::from(self.value as u32)
+    }
+
+    fn sign_ext_from_word(value: DataWord) -> DataDword {
+        DataDword::from((value.value as i32) as u64)
+    }
 }
 
 impl fmt::Display for DataDword {
@@ -298,6 +349,14 @@ impl RegSize for DataWord {
         DataWord {
             value: ((b.value as i8) as i32) as u32,
         }
+    }
+
+    fn get_lower_word(self) -> DataWord {
+        DataWord::from(self.value)
+    }
+
+    fn sign_ext_from_word(value: DataWord) -> DataWord {
+        value
     }
 }
 
@@ -397,8 +456,8 @@ impl From<DataByte> for i8 {
     }
 }
 
-pub trait ByteAddress {
-    type WordAddress;
+pub trait ByteAddress: From<u64> {
+    type WordAddress: Eq + Hash;
 
     fn to_word_address(self) -> Self::WordAddress;
 
@@ -475,6 +534,12 @@ impl From<DataWord> for ByteAddr32 {
     }
 }
 
+impl From<u64> for ByteAddr32 {
+    fn from(value: u64) -> ByteAddr32 {
+        ByteAddr32::new(value as u32)
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -484,7 +549,7 @@ mod test {
         let bv = BitStr32::new(-4i32 as u32, 12);
         assert_eq!(i32::from(bv), -4);
         let wrap = BitStr32::new(-1i32 as u32, 12);
-        assert_eq!(wrap.into(), -1);
+        assert_eq!(i32::from(wrap), -1);
     }
 
     #[test]

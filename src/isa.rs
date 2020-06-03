@@ -334,7 +334,7 @@ impl<T: MachineDataWidth> ITypeLoad<T> for Lw {
 
     // TODO define alignment behavior
     fn eval(mem: &Memory<T>, addr: T::ByteAddr) -> T::RegData {
-        mem.get_word(addr.to_word_address())
+        <T::RegData>::sign_ext_from_word(mem.get_word(addr.to_word_address()))
     }
 }
 
@@ -415,7 +415,11 @@ impl<T: MachineDataWidth> SType<T> for Sw {
     ) -> UserDiff<T> {
         let base_addr: T::Signed = state.regfile.read(rs1).into();
         let byte_addr: T::ByteAddr = (base_addr + imm.into()).into();
-        UserDiff::mem_write_op(state, byte_addr.to_word_address(), state.regfile.read(rs2))
+        UserDiff::mem_write_op(
+            state,
+            byte_addr.to_word_address(),
+            state.regfile.read(rs2).get_lower_word(),
+        )
     }
 }
 

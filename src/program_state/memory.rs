@@ -2,7 +2,7 @@ use super::datatypes::*;
 use std::collections::HashMap;
 
 pub struct Memory<T: MachineDataWidth> {
-    store: HashMap<<T::ByteAddr as ByteAddress>::WordAddress, T::RegData>,
+    store: HashMap<<T::ByteAddr as ByteAddress>::WordAddress, DataWord>,
 }
 
 impl<T: MachineDataWidth> Memory<T> {
@@ -30,11 +30,11 @@ impl<T: MachineDataWidth> Memory<T> {
         self.get_word(word_addr).get_byte(offs)
     }
 
-    pub fn set_word(&mut self, addr: <T::ByteAddr as ByteAddress>::WordAddress, value: T::RegData) {
+    pub fn set_word(&mut self, addr: <T::ByteAddr as ByteAddress>::WordAddress, value: DataWord) {
         self.store.insert(addr, value);
     }
 
-    pub fn get_word(&self, addr: <T::ByteAddr as ByteAddress>::WordAddress) -> T::RegData {
+    pub fn get_word(&self, addr: <T::ByteAddr as ByteAddress>::WordAddress) -> DataWord {
         if let Some(&v) = self.store.get(&addr) {
             v
         } else {

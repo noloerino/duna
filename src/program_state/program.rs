@@ -12,30 +12,28 @@ pub struct RiscVProgram<T: MachineDataWidth> {
     // TODO add symbol table, relocation data, etc.?
 }
 
-impl<T: MachineDataWidth> RiscVProgram<T> {
-    const TEXT_START: u64 = 0x0000_0008;
-    const STACK_START: u64 = 0x7FFF_FFF0;
+impl RiscVProgram<Width32b> {
+    const TEXT_START: u32 = 0x0000_0008;
+    const STACK_START: u32 = 0x7FFF_FFF0;
 
     /// Initializes a new program instance from the provided instructions.
     /// The instructions are loaded into memory at the start of the instruction section,
     /// which defaults to TEXT_START to avoid any accidental null pointer derefs.
     /// The stack pointer is initialized to STACK_START.
-    pub fn new(insts: Vec<ConcreteInst<T>>) -> RiscVProgram<T> {
+    pub fn new(insts: Vec<ConcreteInst<Width32b>>) -> RiscVProgram<Width32b> {
         let mut state = ProgramState::new();
         let mut user_state = &mut state.user_state;
-        let text_start = T::ByteAddr::new(RiscVProgram::TEXT_START);
-        let stack_start = T::ByteAddr::new(RiscVProgram::STACK_START);
-        user_state
-            .regfile
-            .set(IRegister::SP, T::addr_to_data(stack_start));
+        let text_start: ByteAddr32 = RiscVProgram::TEXT_START.into();
+        let stack_start: ByteAddr32 = RiscVProgram::STACK_START.into();
+        user_state.regfile.set(IRegister::SP, stack_start.into());
         user_state.pc = text_start;
-        let mut next_addr = (user_state.pc as T::ByteAddr).to_word_address();
+        let next_addr: ByteAddr32 = user_state.pc;
         for inst in &insts {
             user_state.memory.set_word(
-                next_addr,
-                <T::RegData as From<u64>>::from(inst.to_machine_code() as u64),
+                next_addr.to_word_address(),
+                DataWord::from(inst.to_machine_code()),
             );
-            next_addr += 1
+            next_addr = next_addr.plus_4()
         }
         RiscVProgram { insts, state }
     }
@@ -47,29 +45,27 @@ impl<T: MachineDataWidth> RiscVProgram<T> {
         }
     }
 
-    pub fn from_file(path: &str) -> Result<RiscVProgram<T>, ParseErrorReport> {
+    pub fn from_file(path: &str) -> Result<RiscVProgram<Width32b>, ParseErrorReport> {
         Ok(Assembler::assemble_file(path)?.try_into_program())
     }
 
     /// Runs the program to completion, returning the value in register a0.
-    pub fn run(&mut self) -> T::Signed {
+    pub fn run(&mut self) -> i32 {
         // for now, just use the instruction vec to determine the next instruction
         let pc_start = RiscVProgram::TEXT_START;
         // for now, if we're out of instructions just call it a day
         // if pc dipped below pc_start, panic for now is also fine
         while let Some(inst) = self.insts.get(
-            T::unsigned_to_addr(
-                T::addr_to_unsigned(self.state.user_state.pc) - T::addr_to_unsigned(pc_start),
-            )
-            .to_word_address() as usize,
+            ByteAddr32::from(u32::from(self.state.user_state.pc) - pc_start).to_word_address()
+                as usize,
         ) {
             self.state.apply_inst(inst);
         }
-        T::data_to_signed(self.state.user_state.regfile.read(IRegister::A0))
+        i32::from(self.state.user_state.regfile.read(IRegister::A0))
     }
 }
 
-impl<T: MachineDataWidth> str::FromStr for RiscVProgram<T> {
+impl str::FromStr for RiscVProgram<Width32b> {
     type Err = ParseErrorReport;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -116,14 +112,14 @@ impl<T: MachineDataWidth> ProgramState<T> {
         self.user_state.regfile.set(reg, val);
     }
 
-    pub fn memory_get_word(&self, addr: <T::ByteAddr as ByteAddress>::WordAddress) -> T::RegData {
+    pub fn memory_get_word(&self, addr: <T::ByteAddr as ByteAddress>::WordAddress) -> DataWord {
         self.user_state.memory.get_word(addr)
     }
 
     pub fn memory_set_word(
         &mut self,
         addr: <T::ByteAddr as ByteAddress>::WordAddress,
-        val: T::RegData,
+        val: DataWord,
     ) {
         self.user_state.memory.set_word(addr, val);
     }
@@ -142,11 +138,9 @@ impl<T: MachineDataWidth> ProgramState<T> {
         let a0 = rf.read(A0);
         let a1 = rf.read(A1);
         let a2 = rf.read(A2);
-        if let Some(nr) =
-            Syscall::from_number::<T>(T::data_to_signed(self.user_state.regfile.read(A7)))
-        {
+        if let Some(nr) = Syscall::from_number::<T>(self.user_state.regfile.read(A7).into()) {
             match nr {
-                Syscall::Write => self.syscall_write(a0, T::data_to_addr(a1), a2),
+                Syscall::Write => self.syscall_write(a0, a1.into(), a2),
                 _ => self.syscall_unknown(),
             }
         } else {
@@ -222,7 +216,7 @@ lazy_static! {
     /// Syscall numbers for RV32.
     /// See https://github.com/hrw/syscalls-table/blob/master/tables/syscalls-riscv32.
     /// See https://fedora.juszkiewicz.com.pl/syscalls.html for other ISAs
-    static ref RISCV_SYSCALL_TABLE: HashMap<i32, Syscall> = {
+    static ref RISCV_SYSCALL_TABLE: HashMap<isize, Syscall> = {
         use Syscall::*;
         [
             (63, Read),
@@ -234,7 +228,7 @@ lazy_static! {
         .cloned()
         .collect()
     };
-    static ref RISCV_SYSCALL_NUMBERS: HashMap<Syscall, i32> =
+    static ref RISCV_SYSCALL_NUMBERS: HashMap<Syscall, isize> =
         RISCV_SYSCALL_TABLE
         .iter()
         .map(|(n, syscall)| {(*syscall, *n)})
@@ -244,12 +238,12 @@ lazy_static! {
 impl Syscall {
     /// Returns the syscall identified by number N, or none if no such syscall exists.
     pub fn from_number<T: MachineDataWidth>(n: T::Signed) -> Option<Syscall> {
-        RISCV_SYSCALL_TABLE.get(&n).cloned()
+        RISCV_SYSCALL_TABLE.get(&T::sgn_to_isize(n)).cloned()
     }
 
     /// Returns the number corresponding to the syscall, or -1 if it is unimplemented.
-    pub fn to_number(self) -> DataWord {
-        DataWord::from(RISCV_SYSCALL_NUMBERS.get(&self).copied().unwrap_or(-1))
+    pub fn to_number<T: MachineDataWidth>(self) -> T::RegData {
+        T::isize_to_sgn(RISCV_SYSCALL_NUMBERS.get(&self).copied().unwrap_or(-1)).into()
     }
 }
 
@@ -281,15 +275,12 @@ impl PrivProgState {
             NoChange => UserDiff::noop(user_state),
             FileWrite { fd: _, buf, len } => {
                 let memory = &user_state.memory;
-                let count = T::unsigned_to_usize(T::data_to_unsigned(*len));
-                let bytes: Vec<u8> =
-                    (0..count)
-                        .map(|i| {
-                            u8::from(memory.get_byte(T::data_to_addr(
-                                T::data_to_unsigned(*buf).wrapping_add(i),
-                            )))
-                        })
-                        .collect();
+                let len_val: T::Unsigned = (*len).into();
+                let count: usize = T::usgn_to_usize(len_val);
+                let base_addr: T::Unsigned = (*buf).into();
+                let bytes: Vec<u8> = (0..count)
+                    .map(|i| u8::from(memory.get_byte((base_addr + T::usize_to_usgn(i)).into())))
+                    .collect();
                 // TODO impl for other files
                 print!("{}", String::from_utf8_lossy(&bytes));
                 self.stdout.extend(bytes);
@@ -336,7 +327,7 @@ impl<T: MachineDataWidth> Default for UserProgState<T> {
 impl<T: MachineDataWidth> UserProgState<T> {
     pub fn new() -> UserProgState<T> {
         UserProgState {
-            pc: T::unsigned_to_addr(0),
+            pc: T::sgn_zero().into(),
             regfile: RegFile::new(),
             memory: Memory::new(),
         }
@@ -346,7 +337,7 @@ impl<T: MachineDataWidth> UserProgState<T> {
         self.pc = diff.pc.new_pc;
         if let Some(RegDiff {
             reg,
-            val: WordChange { new_value, .. },
+            val: RegDataChange { new_value, .. },
         }) = diff.reg
         {
             self.regfile.set(reg, new_value);
@@ -364,7 +355,7 @@ impl<T: MachineDataWidth> UserProgState<T> {
         self.pc = diff.pc.old_pc;
         if let Some(RegDiff {
             reg,
-            val: WordChange { old_value, .. },
+            val: RegDataChange { old_value, .. },
         }) = diff.reg
         {
             self.regfile.set(reg, old_value);
@@ -380,9 +371,15 @@ impl<T: MachineDataWidth> UserProgState<T> {
 }
 
 #[derive(Copy, Clone)]
-struct WordChange<T: MachineDataWidth> {
+struct RegDataChange<T: MachineDataWidth> {
     old_value: T::RegData,
     new_value: T::RegData,
+}
+
+#[derive(Copy, Clone)]
+struct WordChange {
+    old_value: DataWord,
+    new_value: DataWord,
 }
 
 /// A change to the program counter.
@@ -394,13 +391,13 @@ struct PcDiff<T: MachineDataWidth> {
 /// A change to a register.
 struct RegDiff<T: MachineDataWidth> {
     reg: IRegister,
-    val: WordChange<T>,
+    val: RegDataChange<T>,
 }
 
 /// A change to memory.
 struct MemDiff<T: MachineDataWidth> {
     addr: <T::ByteAddr as ByteAddress>::WordAddress,
-    val: WordChange<T>,
+    val: WordChange,
 }
 
 /// Represents the type of trap being raised from user mode.
@@ -499,7 +496,7 @@ impl<T: MachineDataWidth> UserDiff<T> {
             new_pc,
             Some(RegDiff {
                 reg,
-                val: WordChange {
+                val: RegDataChange {
                     old_value: state.regfile.read(reg),
                     new_value: val,
                 },
@@ -521,7 +518,7 @@ impl<T: MachineDataWidth> UserDiff<T> {
     pub fn mem_write_op(
         state: &UserProgState<T>,
         addr: <T::ByteAddr as ByteAddress>::WordAddress,
-        val: T::RegData,
+        val: DataWord,
     ) -> UserDiff<T> {
         UserDiff::new_pc_p4(
             state,

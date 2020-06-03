@@ -15,9 +15,9 @@ impl Assembler {
         Assembler::assemble(RiscVParser::parse_str(contents))
     }
 
-    fn assemble<T: MachineDataWidth>(
-        parse_result: ParseResult<T>,
-    ) -> Result<UnlinkedProgram<T>, ParseErrorReport> {
+    fn assemble(
+        parse_result: ParseResult<Width32b>,
+    ) -> Result<UnlinkedProgram<Width32b>, ParseErrorReport> {
         let ParseResult { insts, report } = parse_result;
         if report.is_empty() {
             Ok(UnlinkedProgram::new(insts))
@@ -50,9 +50,9 @@ pub struct UnlinkedProgram<T: MachineDataWidth> {
     pub needed_labels: HashMap<Label, usize>,
 }
 
-impl<T: MachineDataWidth> UnlinkedProgram<T> {
+impl UnlinkedProgram<Width32b> {
     /// Constructs an instance of an UnlinkedProgram from an instruction stream.
-    pub fn new(insts: Vec<PartialInst<T>>) -> UnlinkedProgram<T> {
+    pub fn new(insts: Vec<PartialInst<Width32b>>) -> UnlinkedProgram<Width32b> {
         let local_labels = insts
             .iter()
             .enumerate()
@@ -75,7 +75,7 @@ impl<T: MachineDataWidth> UnlinkedProgram<T> {
     /// Attempts to match needed labels to locally defined labels.
     /// Theoretically, this is idempotent, i.e. calling it multiple times will just produce the
     /// same program.
-    pub fn link_self(self) -> UnlinkedProgram<T> {
+    pub fn link_self(self) -> UnlinkedProgram<Width32b> {
         let UnlinkedProgram {
             mut insts,
             local_labels,
@@ -105,7 +105,7 @@ impl<T: MachineDataWidth> UnlinkedProgram<T> {
 
     /// Attempts to produce an instance of RiscVProgram. Panics if some labels are needed
     /// but not found within the body of this program.
-    pub fn try_into_program(self) -> RiscVProgram<T> {
+    pub fn try_into_program(self) -> RiscVProgram<Width32b> {
         let linked = self.link_self();
         RiscVProgram::new(
             linked

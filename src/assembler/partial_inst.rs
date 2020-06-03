@@ -1,19 +1,19 @@
 use super::parser::Label;
 use crate::instruction::ConcreteInst;
-use crate::program_state::{DataWord, IRegister, MachineDataWidth};
+use crate::program_state::{IRegister, MachineDataWidth};
 
 pub(crate) enum NeededRegs<T: MachineDataWidth> {
     Two {
-        assemble: fn(IRegister, IRegister, DataWord) -> ConcreteInst<T>,
+        assemble: fn(IRegister, IRegister, T::RegData) -> ConcreteInst<T>,
         reg1: IRegister,
         reg2: IRegister,
     },
     One {
-        assemble: fn(IRegister, DataWord) -> ConcreteInst<T>,
+        assemble: fn(IRegister, T::RegData) -> ConcreteInst<T>,
         reg: IRegister,
     },
     Zero {
-        assemble: fn(DataWord) -> ConcreteInst<T>,
+        assemble: fn(T::RegData) -> ConcreteInst<T>,
     },
 }
 
