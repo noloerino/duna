@@ -5,7 +5,9 @@ use std::num::Wrapping;
 use std::ops::{Add, BitAnd, BitOr, Shl};
 
 /// Represents a data type that can be used to hold data in a register.
-pub trait RegSize: Copy + Clone + PartialEq {
+/// Any size must implement conversion from i64 and BitStr32 in order to accomodate immediates
+/// produced from parsing.
+pub trait RegSize: Copy + Clone + PartialEq + fmt::Display + From<BitStr32> + From<i64> {
     fn zero() -> Self;
 
     /// Returns a copy of the value with the ith byte set to val.
@@ -223,10 +225,24 @@ impl RegSize for DataDword {
     }
 }
 
+impl fmt::Display for DataDword {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.value)
+    }
+}
+
 impl From<ByteAddr64> for DataDword {
     fn from(value: ByteAddr64) -> DataDword {
         DataDword {
             value: u64::from(value),
+        }
+    }
+}
+
+impl From<BitStr32> for DataDword {
+    fn from(value: BitStr32) -> DataDword {
+        DataDword {
+            value: value.value as u64,
         }
     }
 }
@@ -291,10 +307,26 @@ impl fmt::Display for DataWord {
     }
 }
 
+impl From<i64> for DataWord {
+    fn from(value: i64) -> DataWord {
+        DataWord {
+            value: value as u32,
+        }
+    }
+}
+
 impl From<ByteAddr32> for DataWord {
     fn from(value: ByteAddr32) -> DataWord {
         DataWord {
             value: u32::from(value),
+        }
+    }
+}
+
+impl From<BitStr32> for DataWord {
+    fn from(value: BitStr32) -> DataWord {
+        DataWord {
+            value: value.as_u32(),
         }
     }
 }

@@ -3,7 +3,7 @@ use super::parse_error::{ParseError, ParseErrorReport, ParseErrorReporter};
 use super::partial_inst::PartialInst;
 use crate::instruction::*;
 use crate::isa;
-use crate::program_state::{DataWord, IRegister, MachineDataWidth, Width32b};
+use crate::program_state::{DataWord, IRegister, MachineDataWidth, RegSize, Width32b};
 use crate::pseudo_inst::*;
 use std::collections::HashMap;
 use std::iter::Peekable;
@@ -24,23 +24,23 @@ pub struct ParseResult<T: MachineDataWidth> {
 enum ParseType<T: MachineDataWidth> {
     // Base ISA
     R(fn(IRegister, IRegister, IRegister) -> ConcreteInst<T>),
-    Arith(fn(IRegister, IRegister, DataWord) -> ConcreteInst<T>),
+    Arith(fn(IRegister, IRegister, T::RegData) -> ConcreteInst<T>),
     Env(fn() -> ConcreteInst<T>),
-    MemL(fn(IRegister, IRegister, DataWord) -> ConcreteInst<T>),
-    MemS(fn(IRegister, IRegister, DataWord) -> ConcreteInst<T>),
-    B(fn(IRegister, IRegister, DataWord) -> ConcreteInst<T>),
+    MemL(fn(IRegister, IRegister, T::RegData) -> ConcreteInst<T>),
+    MemS(fn(IRegister, IRegister, T::RegData) -> ConcreteInst<T>),
+    B(fn(IRegister, IRegister, T::RegData) -> ConcreteInst<T>),
     // Covers "jal ra, label", "jal label", "jal -4" etc.
     Jal,
     // Covers "jalr ra, 0(x1)", "jalr x1", etc.
     Jalr,
-    U(fn(IRegister, DataWord) -> ConcreteInst<T>),
+    U(fn(IRegister, T::RegData) -> ConcreteInst<T>),
     // Pseudo-instructions
     Li,
     RegReg(fn(IRegister, IRegister) -> ConcreteInst<T>),
     NoArgs(fn() -> ConcreteInst<T>),
     OneReg(fn(IRegister) -> ConcreteInst<T>),
     // Covers "j label", "j -4", etc.
-    LikeJ(fn(DataWord) -> ConcreteInst<T>),
+    LikeJ(fn(T::RegData) -> ConcreteInst<T>),
 }
 
 struct ParserData<'a, T: MachineDataWidth> {
@@ -57,7 +57,6 @@ pub struct RiscVParser<'a, T: MachineDataWidth> {
 type TokenIter = Peekable<IntoIter<Token>>;
 
 lazy_static! {
-    /*
     static ref RV32_INST_EXPANSION_TABLE: HashMap<String, ParseType<Width32b>> = {
         use isa::*;
 
@@ -109,12 +108,10 @@ lazy_static! {
             ("jr", OneReg(Jr::expand)),
             ("ret", NoArgs(Ret::expand)),
         ]
-        .iter()
-        .cloned()
-        .map(|(s, t)| (s.to_string(), t))
+        .into_iter()
+        .map(|(s, t)| (s.to_string(), *t))
         .collect()
     };
-    */
     static ref REG_EXPANSION_TABLE: HashMap<String, IRegister> = {
         let mut reg_expansion_table: HashMap<String, IRegister> = IRegister::REG_ARRAY
             .iter()
@@ -129,71 +126,19 @@ lazy_static! {
     };
 }
 
-impl<T: MachineDataWidth> RiscVParser<'_, T> {
-    pub fn parse_file(path: &str) -> ParseResult<T> {
+impl RiscVParser<'_, Width32b> {
+    pub fn parse_file(path: &str) -> ParseResult<Width32b> {
         RiscVParser::parse_lex_result(Lexer::lex_file(path))
     }
 
-    pub fn parse_str(contents: &str) -> ParseResult<T> {
+    pub fn parse_str(contents: &str) -> ParseResult<Width32b> {
         RiscVParser::parse_lex_result(Lexer::lex_str(contents))
     }
 
-    pub fn parse_lex_result(lex_result: LexResult) -> ParseResult<T> {
-        use isa::*;
-        use ParseType::*;
-        let inst_expansion_table: HashMap<String, ParseType<T>> = [
-            ("add", R(Add::new)),
-            ("addi", Arith(Addi::new)),
-            ("and", R(And::new)),
-            ("andi", Arith(Andi::new)),
-            ("auipc", U(Auipc::new)),
-            ("beq", B(Beq::new)),
-            ("bge", B(Bge::new)),
-            ("bgeu", B(Bgeu::new)),
-            ("blt", B(Blt::new)),
-            ("bltu", B(Bltu::new)),
-            ("bne", B(Bne::new)),
-            // ("ebreak", Env),
-            ("ecall", Env(Ecall::new)),
-            ("jal", ParseType::Jal),
-            ("jalr", ParseType::Jalr),
-            ("lb", MemL(Lb::new)),
-            ("lbu", MemL(Lbu::new)),
-            ("lh", MemL(Lh::new)),
-            ("lhu", MemL(Lhu::new)),
-            ("lui", U(Lui::new)),
-            ("lw", MemL(Lw::new)),
-            // ("or", R),
-            // ("ori", Arith),
-            ("sb", MemS(Sb::new)),
-            ("sh", MemS(Sh::new)),
-            // ("sll", R),
-            // ("slli", Arith),
-            // ("slt", R),
-            // ("slti", Arith),
-            // ("sltiu", Arith),
-            // ("sltu", R),
-            // ("sra", R),
-            // ("srai", Arith),
-            // ("srl", R),
-            // ("srli", Arith),
-            // ("sub", R),
-            ("sw", MemS(Sw::new)),
-            // ("xor", R),
-            // ("xori", Arith),
-            ("li", ParseType::Li),
-            ("mv", RegReg(Mv::expand)),
-            ("nop", NoArgs(Nop::expand)),
-            ("j", LikeJ(J::expand)),
-            ("jr", OneReg(Jr::expand)),
-            ("ret", NoArgs(Ret::expand)),
-        ]
-        .into_iter()
-        .map(|(s, t)| (s.to_string(), *t))
-        .collect();
+    pub fn parse_lex_result(lex_result: LexResult) -> ParseResult<Width32b> {
         RiscVParser {
             parser_data: ParserData {
-                inst_expansion_table: &inst_expansion_table,
+                inst_expansion_table: &RV32_INST_EXPANSION_TABLE,
                 reg_expansion_table: &REG_EXPANSION_TABLE,
             },
             lines: lex_result.lines,
@@ -202,8 +147,8 @@ impl<T: MachineDataWidth> RiscVParser<'_, T> {
         .parse()
     }
 
-    fn parse(mut self) -> ParseResult<T> {
-        let mut insts = Vec::<PartialInst<T>>::new();
+    fn parse(mut self) -> ParseResult<Width32b> {
+        let mut insts = Vec::<PartialInst<Width32b>>::new();
         let mut last_label: Option<Label> = None;
         let parser_data = &self.parser_data;
         for line in self.lines {
@@ -237,14 +182,14 @@ impl<T: MachineDataWidth> RiscVParser<'_, T> {
 /// Contains arguments for a memory operation (load or store).
 /// The registers correspond to the order in which they appear: for stores, RS2 precedes RS1;
 /// for loads, RD preceds RS1.
-struct MemArgs {
+struct MemArgs<T: RegSize> {
     first_reg: IRegister,
     second_reg: IRegister,
-    imm: DataWord,
+    imm: T,
 }
 
-enum ImmOrLabel {
-    Imm(DataWord),
+enum ImmOrLabel<T: RegSize> {
+    Imm(T),
     Label(Label),
 }
 
@@ -389,7 +334,7 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
     /// Consumes tokens for arguments for a memory operation.
     /// These are either of the form "inst reg, imm, reg)" e.g. "lw x1 -4 x2"
     /// or "inst reg, (imm)reg" e.g "lw x1, 4(x2)" (commas optional in both cases)
-    fn consume_mem_args(&mut self) -> Result<MemArgs, ParseError> {
+    fn consume_mem_args(&mut self) -> Result<MemArgs<T::RegData>, ParseError> {
         // first consumed token must be register name
         let first_tok = self.try_next_tok(3, 0)?;
         let first_reg = self.try_parse_reg(first_tok)?;
@@ -503,7 +448,7 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
                         &radix.format(val),
                     ))
                 } else {
-                    Ok(T::RegData::from(val))
+                    Ok(val.into())
                 }
             }
             _ => Err(ParseError::unexpected_type(
@@ -519,7 +464,7 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
         &self,
         max_imm_len: u8,
         token: Token,
-    ) -> Result<ImmOrLabel, ParseError> {
+    ) -> Result<ImmOrLabel<T::RegData>, ParseError> {
         if let TokenType::Name(name) = &token.data {
             // label case
             Ok(ImmOrLabel::Label(name.clone()))
@@ -577,7 +522,7 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
                 let last_arg = self.try_parse_imm_or_label_ref(13, args.remove(0))?;
                 match last_arg {
                     ImmOrLabel::Imm(imm) => {
-                        if u32::from(imm) & 1 > 0 {
+                        if u8::from(imm.get_byte(0)) & 1 > 0 {
                             Err(ParseError::generic(
                                 self.head_loc,
                                 &format!(
@@ -793,8 +738,10 @@ impl<'a, T: MachineDataWidth> LineParser<'a, T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::instruction::ConcreteInst;
     use crate::isa::*;
     use crate::program_state::IRegister::*;
+    use crate::program_state::Width32b;
 
     /// Lexes a program. Asserts that the lex has no errors.
     fn lex(prog: &str) -> LexResult {
@@ -823,7 +770,7 @@ mod tests {
     /// Tests parsing of a label in the middle and a label at the end.
     fn test_label_defs() {
         let insts = parse_and_lex("add a0, sp, fp\nl1: addi sp, sp, -4\naddi sp, sp, 4\nl2:");
-        let expected_concrete = [
+        let expected_concrete: [ConcreteInst<Width32b>; 3] = [
             Add::new(A0, SP, FP),
             Addi::new(SP, SP, DataWord::from(-4)),
             Addi::new(SP, SP, DataWord::from(4)),
