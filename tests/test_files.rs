@@ -85,3 +85,16 @@ fn test_basic_link() {
     program.dump_insts();
     assert_eq!(program.run() as u32, 0xABCD_0123u32);
 }
+
+#[test]
+/// Tests linking files that require global symbols.
+fn test_global_link() {
+    let mut program = Linker::with_main("tests/asm_files/global_link_0.s")
+        .unwrap()
+        .with_file("tests/asm_files/global_link_1.s")
+        .unwrap()
+        .link()
+        .unwrap();
+    program.dump_insts();
+    assert_eq!(program.run(), 0x1234);
+}

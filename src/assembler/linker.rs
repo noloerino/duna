@@ -1,7 +1,6 @@
 use super::assembler_impl::{Assembler, UnlinkedProgram};
 use super::parse_error::ParseErrorReport;
 use crate::program_state::{RiscVProgram, Width32b};
-use std::collections::HashMap;
 
 pub struct Linker {
     main: UnlinkedProgram<Width32b>,
@@ -28,37 +27,40 @@ impl Linker {
         // First, resolve all local labels, then combine all the programs together and consider
         // the union of all the global symbol tables as the new "local" symbol table.
         let mut errs = Vec::new();
-        let mut new_program = UnlinkedProgram {
-            // TODO move global labels
-            local_labels: HashMap::new(),
-            ..self.main.link_self()
-        };
+        let UnlinkedProgram {
+            insts: mut all_insts,
+            sections,
+            mut needed_labels,
+            mut defined_global_labels,
+            ..
+        } = self.main;
         for program in self.programs {
             let UnlinkedProgram {
-                mut insts,
-                needed_labels,
+                insts: mut new_insts,
+                needed_labels: new_needed_labels,
+                defined_global_labels: new_global_labels,
                 // TODO combine sections
                 // sections,
                 ..
-            } = program.link_self();
-            let prev_inst_size = new_program.insts.len();
-            new_program.insts.append(&mut insts);
-            for (label, idx) in needed_labels.into_iter() {
-                if new_program.needed_labels.contains_key(&label) {
+            } = program;
+            let prev_inst_size = all_insts.len();
+            all_insts.append(&mut new_insts);
+            for (idx, label) in new_needed_labels.into_iter() {
+                needed_labels.insert(idx + prev_inst_size, label);
+            }
+            for (label, idx) in new_global_labels {
+                if defined_global_labels.contains_key(&label) {
                     errs.push(LinkError {
                         file_name: "TODO".to_string(),
-                        content: format!("redeclared label: {}", label),
-                    });
-                } else {
-                    new_program
-                        .needed_labels
-                        .insert(label, idx + prev_inst_size);
+                        content: format!("multiple definitions for global symbol {}", label),
+                    })
                 }
+                defined_global_labels.insert(label, idx + prev_inst_size);
             }
         }
         if errs.is_empty() {
             // TODO handle missing labels here
-            Ok(new_program.try_into_program())
+            Ok(UnlinkedProgram::new(all_insts, sections, Default::default()).try_into_program())
         } else {
             Err(errs)
         }

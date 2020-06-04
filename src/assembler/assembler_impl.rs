@@ -2,7 +2,7 @@ use super::parse_error::ParseErrorReport;
 use super::parser::{Label, ParseResult, RiscVParser};
 use super::partial_inst::PartialInst;
 use crate::program_state::{MachineDataWidth, RiscVProgram, Width32b};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 
 pub struct Assembler;
@@ -22,10 +22,11 @@ impl Assembler {
         let ParseResult {
             insts,
             sections,
+            declared_globals,
             report,
         } = parse_result;
         if report.is_empty() {
-            Ok(UnlinkedProgram::new(insts, sections))
+            Ok(UnlinkedProgram::new(insts, sections, declared_globals))
         } else {
             Err(report)
         }
@@ -107,72 +108,68 @@ impl Default for SectionStore {
 pub struct UnlinkedProgram<T: MachineDataWidth> {
     /// The list of instructions, which will be placed in the text segment in the order in which
     /// they appear.
-    pub insts: Vec<PartialInst<T>>,
+    pub(super) insts: Vec<PartialInst<T>>,
     // a potential optimization is to store generated labels and needed labels in independent vecs
     // instead of a hashmap, another vec can be used to lookup the corresponding PartialInst
     // TODO put labels in sections
-    /// Maps labels to the index of the insts that define them
-    pub(super) local_labels: HashMap<Label, usize>,
-    /// Maps needed labels to the index of the insts that need them
-    pub needed_labels: HashMap<Label, usize>,
+    /// Maps index of the insts that needs a label to the label it needs
+    pub(super) needed_labels: HashMap<usize, Label>,
+    /// Maps global labels to the index of the insts that define them
+    pub(super) defined_global_labels: HashMap<Label, usize>,
     pub(super) sections: SectionStore,
 }
 
 impl UnlinkedProgram<Width32b> {
     /// Constructs an instance of an UnlinkedProgram from an instruction stream.
-    pub fn new(
-        insts: Vec<PartialInst<Width32b>>,
+    /// Also attempts to match needed labels to locally defined labels, and populates the needed
+    /// and global symbol tables.
+    pub(super) fn new(
+        mut insts: Vec<PartialInst<Width32b>>,
         sections: SectionStore,
+        declared_globals: HashSet<String>,
     ) -> UnlinkedProgram<Width32b> {
-        let local_labels = insts
+        let local_labels: HashMap<Label, usize> = insts
             .iter()
             .enumerate()
             .filter_map(|(i, partial_inst)| {
                 partial_inst.label.as_ref().map(|label| (label.clone(), i))
             })
             .collect();
-        let needed_labels = insts
+        let all_needed_labels: HashMap<usize, Label> = insts
             .iter()
             .enumerate()
-            .filter_map(|(i, partial_inst)| (Some((partial_inst.get_needed_label()?.clone(), i))))
+            .filter_map(|(i, partial_inst)| (Some((i, partial_inst.get_needed_label()?.clone()))))
             .collect();
-        UnlinkedProgram {
-            insts,
-            local_labels,
-            needed_labels,
-            sections,
-        }
-    }
-
-    /// Attempts to match needed labels to locally defined labels.
-    /// Theoretically, this is idempotent, i.e. calling it multiple times will just produce the
-    /// same program.
-    pub fn link_self(self) -> UnlinkedProgram<Width32b> {
-        let UnlinkedProgram {
-            mut insts,
-            local_labels,
-            needed_labels,
-            sections,
-        } = self;
-        let mut unresolved_labels = HashMap::new();
-        for (label, inst_index) in needed_labels.into_iter() {
-            match local_labels.get(&label) {
-                Some(&tgt_index) => {
-                    // Figure out how many instructions we need to jump
-                    let inst_distance = (tgt_index as isize) - (inst_index as isize);
-                    let byte_distance = (inst_distance * 4) as i64;
-                    let new_inst = insts[inst_index].fulfill_label(byte_distance.into());
-                    insts[inst_index] = PartialInst::new_complete(new_inst);
+        let defined_global_labels: HashMap<Label, usize> = local_labels
+            .iter()
+            .filter_map(|(label, index)| {
+                if declared_globals.contains(label) {
+                    Some((label.to_string(), *index))
+                } else {
+                    None
                 }
-                None => {
-                    unresolved_labels.insert(label, inst_index);
-                }
+            })
+            .collect();
+        // map of labels after resolving local ones
+        let mut needed_labels = HashMap::new();
+        for (inst_index, label) in all_needed_labels.into_iter() {
+            if let Some(&tgt_index) = local_labels.get(&label) {
+                // Figure out how many instructions we need to jump
+                let inst_distance = (tgt_index as isize) - (inst_index as isize);
+                let byte_distance = (inst_distance * 4) as i64;
+                let new_inst = insts[inst_index].fulfill_label(byte_distance.into());
+                insts[inst_index] = PartialInst::new_complete(new_inst);
+            } else if declared_globals.contains(&label) {
+                needed_labels.insert(inst_index, label);
+            } else {
+                // TODO error handling
+                panic!("{} is neither a local nor global label", label);
             }
         }
         UnlinkedProgram {
             insts,
-            local_labels,
-            needed_labels: unresolved_labels,
+            needed_labels,
+            defined_global_labels,
             sections,
         }
     }
@@ -180,14 +177,12 @@ impl UnlinkedProgram<Width32b> {
     /// Attempts to produce an instance of RiscVProgram. Panics if some labels are needed
     /// but not found within the body of this program.
     pub fn try_into_program(self) -> RiscVProgram<Width32b> {
-        let linked = self.link_self();
         RiscVProgram::new(
-            linked
-                .insts
+            self.insts
                 .into_iter()
                 .map(|partial_inst| partial_inst.try_into_concrete_inst())
                 .collect(),
-            linked.sections,
+            self.sections,
         )
     }
 }

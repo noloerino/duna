@@ -6,7 +6,7 @@ use crate::instruction::*;
 use crate::isa;
 use crate::program_state::*;
 use crate::pseudo_inst::*;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::iter::Peekable;
 use std::vec::IntoIter;
 
@@ -17,14 +17,20 @@ type LineParseResult<T> = Result<ParsedInstStream<T>, ParseError>;
 pub struct ParseResult<T: MachineDataWidth> {
     pub insts: ParsedInstStream<T>,
     pub sections: SectionStore,
+    pub declared_globals: HashSet<String>,
     pub report: ParseErrorReport,
 }
 
 /// State about the program being parsed.
-/// curr_section defaults to text.
 struct ParseState {
+    /// The section in which parsed values should be placed.
+    /// This should default to text.
     curr_section: ProgramSection,
     sections: SectionStore,
+    /// These labels were given to a .global declaration, which means either the
+    /// current file defined the symbol and is making it visible to the linker, or
+    /// the current file will look for the symbol in another file.
+    declared_globals: HashSet<String>,
 }
 
 impl ParseState {
@@ -32,6 +38,7 @@ impl ParseState {
         ParseState {
             curr_section: ProgramSection::Text,
             sections: SectionStore::new(),
+            declared_globals: HashSet::new(),
         }
     }
 }
@@ -195,6 +202,7 @@ impl RiscVParser<'_, Width32b> {
         ParseResult {
             insts,
             sections: self.state.sections,
+            declared_globals: self.state.declared_globals,
             report: self.reporter.into_report(),
         }
     }
@@ -714,6 +722,8 @@ struct DirectiveParser<'a> {
     head_directive: &'a str,
 }
 
+type DirectiveParseResult = Result<(), ParseError>;
+
 impl<'a> DirectiveParser<'a> {
     fn new(
         iter: TokenIter,
@@ -729,8 +739,9 @@ impl<'a> DirectiveParser<'a> {
         }
     }
 
-    fn parse<T: MachineDataWidth>(self) -> LineParseResult<T> {
+    fn parse(self) -> DirectiveParseResult {
         match self.head_directive {
+            // sections
             "section" => self.parse_section(),
             "text" => {
                 self.state.curr_section = ProgramSection::Text;
@@ -744,6 +755,7 @@ impl<'a> DirectiveParser<'a> {
                 self.state.curr_section = ProgramSection::Rodata;
                 self.ok(0)
             }
+            // literal insertions
             "byte" => self.parse_data(DataWidth::Byte),
             "2byte" | "half" | "short" => self.parse_data(DataWidth::Half),
             "4byte" | "word" | "long" => self.parse_data(DataWidth::Word),
@@ -751,6 +763,9 @@ impl<'a> DirectiveParser<'a> {
             "zero" => self.parse_zero(),
             "ascii" => self.parse_string(false),
             "asciz" | "string" => self.parse_string(true),
+            // symbol declarations
+            "global" | "globl" => self.parse_global_label(),
+            // TODO: equ, set, equiv (refactor symbol table to have enum value)
             _ => Err(ParseError::unsupported_directive(
                 self.head_loc,
                 self.head_directive.to_string(),
@@ -759,7 +774,7 @@ impl<'a> DirectiveParser<'a> {
     }
 
     /// Emits zero or more integer literal declarations through .byte, .word, etc.
-    fn parse_data<T: MachineDataWidth>(mut self, kind: DataWidth) -> LineParseResult<T> {
+    fn parse_data(mut self, kind: DataWidth) -> DirectiveParseResult {
         use ProgramSection::*;
         let state = &mut self.state;
         match state.curr_section {
@@ -796,7 +811,7 @@ impl<'a> DirectiveParser<'a> {
         }
     }
 
-    fn parse_section<T: MachineDataWidth>(mut self) -> LineParseResult<T> {
+    fn parse_section(mut self) -> DirectiveParseResult {
         let next_tok = self.try_next_tok(1, 0)?;
         if let TokenType::Directive(s) = &next_tok.data {
             match s.as_str() {
@@ -826,7 +841,7 @@ impl<'a> DirectiveParser<'a> {
     /// Emits zero or more string literals.
     ///
     /// See https://sourceware.org/binutils/docs/as/Ascii.html#Ascii
-    fn parse_string<T: MachineDataWidth>(mut self, null_terminated: bool) -> LineParseResult<T> {
+    fn parse_string(mut self, null_terminated: bool) -> DirectiveParseResult {
         if let ProgramSection::Text = self.state.curr_section {
             return Err(ParseError::unimplemented(
                 self.head_loc,
@@ -855,7 +870,7 @@ impl<'a> DirectiveParser<'a> {
         self.ok(0)
     }
 
-    fn parse_zero<T: MachineDataWidth>(mut self) -> LineParseResult<T> {
+    fn parse_zero(mut self) -> DirectiveParseResult {
         if let ProgramSection::Text = self.state.curr_section {
             return Err(ParseError::unimplemented(
                 self.head_loc,
@@ -886,6 +901,22 @@ impl<'a> DirectiveParser<'a> {
         }
     }
 
+    /// Indicates that a symbol is declared globally.
+    fn parse_global_label(mut self) -> DirectiveParseResult {
+        let next_tok = self.try_next_tok(1, 0)?;
+        if let TokenType::Name(name) = next_tok.data {
+            // redeclared labels are ok in this context
+            self.state.declared_globals.insert(name);
+            self.ok(1)
+        } else {
+            Err(ParseError::unexpected_type(
+                next_tok.location,
+                "integer literal",
+                next_tok.data,
+            ))
+        }
+    }
+
     fn try_next_tok(&mut self, needed_args: u8, found_so_far: u8) -> Result<Token, ParseError> {
         try_next_tok(
             &mut self.iter,
@@ -897,9 +928,11 @@ impl<'a> DirectiveParser<'a> {
     }
 
     /// Checks that the iterator has run out of tokens; returns ok if so.
-    fn ok<T: MachineDataWidth>(mut self, needed_argc: u8) -> LineParseResult<T> {
+    /// needed_argc is the number of arguments that were needed in total, not the number that
+    /// still need to be consumed (which is always 0, since we're checking if we ran out of args).
+    fn ok(mut self, needed_argc: u8) -> DirectiveParseResult {
         check_no_more_args(&mut self.iter, self.head_directive, needed_argc)?;
-        Ok(Vec::new())
+        Ok(())
     }
 }
 
@@ -984,7 +1017,8 @@ impl<'a, T: MachineDataWidth> LineParser<'a, T> {
                         head_tok.location,
                         &section_name,
                     )
-                    .parse(),
+                    .parse()
+                    .and(Ok(Vec::new())),
                     Comment(..) => Ok(Vec::new()), // deliberate no-op
                     Comma => Err(ParseError::bad_head(head_tok.location, ",")),
                     Immediate(n, style) => {
@@ -1040,6 +1074,7 @@ mod tests {
             report,
             sections,
             insts,
+            ..
         } = RiscVParser::parse_str(prog);
         assert!(report.is_empty(), insts.is_empty());
         assert_eq!(sections.data, vec![0x12, 0xef, 0xbe, 0xad, 0xde]);
