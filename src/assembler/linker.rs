@@ -60,7 +60,10 @@ impl Linker {
         }
         if errs.is_empty() {
             // TODO handle missing labels here
-            Ok(UnlinkedProgram::new(all_insts, sections, Default::default()).try_into_program())
+            Ok(
+                UnlinkedProgram::new(None, all_insts, sections, Default::default())
+                    .try_into_program(),
+            )
         } else {
             Err(errs)
         }

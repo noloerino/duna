@@ -9,14 +9,15 @@ pub struct Assembler;
 
 impl Assembler {
     pub fn assemble_file(path: &str) -> Result<UnlinkedProgram<Width32b>, ParseErrorReport> {
-        Assembler::assemble(RiscVParser::parse_file(path))
+        Assembler::assemble(Some(path.to_string()), RiscVParser::parse_file(path))
     }
 
     pub fn assemble_str(contents: &str) -> Result<UnlinkedProgram<Width32b>, ParseErrorReport> {
-        Assembler::assemble(RiscVParser::parse_str(contents))
+        Assembler::assemble(None, RiscVParser::parse_str(contents))
     }
 
     fn assemble(
+        source_path: Option<String>,
         parse_result: ParseResult<Width32b>,
     ) -> Result<UnlinkedProgram<Width32b>, ParseErrorReport> {
         let ParseResult {
@@ -26,7 +27,12 @@ impl Assembler {
             report,
         } = parse_result;
         if report.is_empty() {
-            Ok(UnlinkedProgram::new(insts, sections, declared_globals))
+            Ok(UnlinkedProgram::new(
+                source_path,
+                insts,
+                sections,
+                declared_globals,
+            ))
         } else {
             Err(report)
         }
@@ -106,6 +112,7 @@ impl Default for SectionStore {
 /// The parser must perform two passes in order to locate/process labels.
 /// This struct encodes data for a program that still needs to be passed to the assembler.
 pub struct UnlinkedProgram<T: MachineDataWidth> {
+    pub(super) source_path: String,
     /// The list of instructions, which will be placed in the text segment in the order in which
     /// they appear.
     pub(super) insts: Vec<PartialInst<T>>,
@@ -124,6 +131,7 @@ impl UnlinkedProgram<Width32b> {
     /// Also attempts to match needed labels to locally defined labels, and populates the needed
     /// and global symbol tables.
     pub(super) fn new(
+        source_path: Option<String>,
         mut insts: Vec<PartialInst<Width32b>>,
         sections: SectionStore,
         declared_globals: HashSet<String>,
@@ -171,6 +179,7 @@ impl UnlinkedProgram<Width32b> {
             }
         }
         UnlinkedProgram {
+            source_path: source_path.unwrap_or("<unnamed>".to_string()),
             insts,
             needed_labels,
             defined_global_labels,
