@@ -6,7 +6,7 @@
   "scripts": {
     "build": "webpack --config webpack.config.js",
     "start": "webpack-dev-server",
-    "lint": "prettier --write bootstrap.js index.js index.html"
+    "lint": "prettier --write bootstrap.js index.ts index.html"
   },
   "repository": {
     "type": "git",

@@ -3,9 +3,9 @@ import { memory } from "duna_frontend/duna_frontend_bg";
 
 init();
 
-const codeArea = document.getElementById("code");
-const stdout = document.getElementById("stdout");
-const exitCode = document.getElementById("exit-code");
+const codeArea = <HTMLTextAreaElement>document.getElementById("code");
+const stdout = <HTMLTextAreaElement>document.getElementById("stdout");
+const exitCode = <HTMLSpanElement>document.getElementById("exit-code");
 
 const getProgram = function () {
   return codeArea.value;
@@ -14,7 +14,7 @@ const getProgram = function () {
 const assembleAndRunProgram = function () {
   const program = getProgram();
   const simResult = simulate(program);
-  exitCode.innerText = simResult.exit_code;
+  exitCode.innerText = simResult.exit_code.toString();
   stdout.value = simResult.get_stdout();
 };
 
