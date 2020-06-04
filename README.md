@@ -1,4 +1,7 @@
 # duna
+![](https://github.com/noloerino/duna/workflows/Rust/badge.svg)
+[![Coverage Status](https://coveralls.io/repos/github/noloerino/duna/badge.svg?branch=master)](https://coveralls.io/github/noloerino/duna?branch=master)
+
 A 32-bit RISCV emulator built in Rust. Inspired by [Venus](https://github.com/ThaumicMekanism/venus).
 
 ## Current functionality
