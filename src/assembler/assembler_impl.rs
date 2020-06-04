@@ -112,10 +112,10 @@ pub struct UnlinkedProgram<T: MachineDataWidth> {
     // instead of a hashmap, another vec can be used to lookup the corresponding PartialInst
     // TODO put labels in sections
     /// Maps labels to the index of the insts that define them
-    local_labels: HashMap<Label, usize>,
+    pub(super) local_labels: HashMap<Label, usize>,
     /// Maps needed labels to the index of the insts that need them
     pub needed_labels: HashMap<Label, usize>,
-    sections: SectionStore,
+    pub(super) sections: SectionStore,
 }
 
 impl UnlinkedProgram<Width32b> {

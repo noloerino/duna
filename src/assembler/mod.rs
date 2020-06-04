@@ -6,4 +6,5 @@ mod parser;
 mod partial_inst;
 
 pub use assembler_impl::{Assembler, ProgramSection, SectionStore};
+pub use linker::Linker;
 pub use parse_error::ParseErrorReport;

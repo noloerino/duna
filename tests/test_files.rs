@@ -1,3 +1,4 @@
+use duna::assembler::Linker;
 use duna::program_state::{RiscVProgram, Width32b};
 use std::path::Path;
 
@@ -70,4 +71,17 @@ fn test_write_stdout() {
 /// Tests jumping and branching to locally defined labels.
 fn test_local_labels() {
     check_a0_at_end("local_labels.s", 0xABCD_0123u32);
+}
+
+#[test]
+/// Tests linking two files that have no label dependencies.
+fn test_basic_link() {
+    let mut program = Linker::with_main("tests/asm_files/local_labels.s")
+        .unwrap()
+        .with_file("tests/asm_files/local_labels.s")
+        .unwrap()
+        .link()
+        .unwrap();
+    program.dump_insts();
+    assert_eq!(program.run() as u32, 0xABCD_0123u32);
 }
