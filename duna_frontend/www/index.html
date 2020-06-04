@@ -1,20 +1,31 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <meta charset="utf-8">
+    <meta charset="utf-8" />
     <title>Duna Emulator</title>
   </head>
   <body>
     <noscript>Duna requires Javascript and WebAssembly to run.</noscript>
     <script src="./bootstrap.js"></script>
     <div>
-        <textarea id="code" rows="20" cols="80" placeholder="your code here"></textarea>
-        <textarea id="stdout" rows="20" cols="40" disabled placeholder="console output appears here"></textarea>
-        <p>Program exited with code <span id="exit-code">--</span></p>
+      <textarea
+        id="code"
+        rows="20"
+        cols="80"
+        placeholder="your code here"
+      ></textarea>
+      <textarea
+        id="stdout"
+        rows="20"
+        cols="40"
+        disabled
+        placeholder="console output appears here"
+      ></textarea>
+      <p>Program exited with code <span id="exit-code">--</span></p>
     </div>
     <!-- TODO replace this with assemble/simulate buttons -->
     <div>
-        <button id="go">Go!</button>
+      <button id="go">Go!</button>
     </div>
   </body>
 </html>
