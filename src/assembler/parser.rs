@@ -259,7 +259,7 @@ fn try_parse_imm(n: u8, token: Token) -> Result<i64, ParseError> {
             let mask_result = val & mask;
             if mask_result != 0 && mask_result != mask {
                 Err(ParseError::imm_too_big(
-                    token.location,
+                    &token.location,
                     n,
                     &radix.format(val),
                 ))
@@ -268,7 +268,7 @@ fn try_parse_imm(n: u8, token: Token) -> Result<i64, ParseError> {
             }
         }
         _ => Err(ParseError::unexpected_type(
-            token.location,
+            &token.location,
             "immediate",
             token.data,
         )),
@@ -285,7 +285,7 @@ fn check_no_more_args(iter: &mut TokenIter, name: &str, needed: u8) -> Result<()
         if let TokenType::Comment(_) = tok.data {
             Ok(())
         } else {
-            Err(ParseError::too_many_args(tok.location, name, needed))
+            Err(ParseError::too_many_args(&tok.location, name, needed))
         }
     } else {
         Ok(())
@@ -295,7 +295,7 @@ fn check_no_more_args(iter: &mut TokenIter, name: &str, needed: u8) -> Result<()
 /// Attempts to advance the next token of the iterator, returning a ParseError if there are none.
 fn try_next_tok(
     iter: &mut TokenIter,
-    head_loc: Location,
+    head_loc: &Location,
     name: &str,
     needed_args: u8,
     found_so_far: u8,
@@ -304,7 +304,7 @@ fn try_next_tok(
         Ok(tok)
     } else {
         Err(ParseError::wrong_argc(
-            head_loc,
+            &head_loc,
             name,
             needed_args,
             found_so_far,
@@ -330,7 +330,7 @@ fn consume_unbounded_commasep_args(iter: &mut TokenIter) -> Result<Vec<Token>, P
             Comma => {
                 if was_comma {
                     return Err(ParseError::bad_arg(
-                        tok.location,
+                        &tok.location,
                         &format!("{:?}", tok.data),
                     ));
                 }
@@ -339,7 +339,7 @@ fn consume_unbounded_commasep_args(iter: &mut TokenIter) -> Result<Vec<Token>, P
             Comment(..) => return Ok(toks),
             _ => {
                 return Err(ParseError::bad_arg(
-                    tok.location,
+                    &tok.location,
                     &format!("{:?}", tok.data),
                 ));
             }
@@ -352,7 +352,7 @@ fn consume_unbounded_commasep_args(iter: &mut TokenIter) -> Result<Vec<Token>, P
 struct InstParser<'a, T: MachineDataWidth> {
     data: &'a ParserData<'a, T>,
     iter: TokenIter,
-    head_loc: Location,
+    head_loc: &'a Location,
     inst_name: &'a str,
 }
 
@@ -360,7 +360,7 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
     fn new(
         data: &'a ParserData<T>,
         iter: TokenIter,
-        head_loc: Location,
+        head_loc: &'a Location,
         inst_name: &'a str,
     ) -> InstParser<'a, T> {
         InstParser {
@@ -402,14 +402,14 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
                     }
                     _ => {
                         return Err(ParseError::bad_arg(
-                            tok.location,
+                            &tok.location,
                             &format!("{:?}", tok.data),
                         ))
                     }
                 },
                 None => {
                     return Err(ParseError::wrong_argc(
-                        self.head_loc,
+                        &self.head_loc,
                         self.inst_name,
                         n,
                         found.len() as u8,
@@ -460,7 +460,7 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
             if let TokenType::RParen = maybe_rparen.data {
             } else {
                 return Err(ParseError::unclosed_paren(
-                    maybe_rparen.location,
+                    &maybe_rparen.location,
                     maybe_rparen.data,
                 ));
             }
@@ -490,7 +490,7 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
             Ok(tok)
         } else {
             Err(ParseError::wrong_argc(
-                self.head_loc,
+                &self.head_loc,
                 self.inst_name,
                 needed_args,
                 found_so_far,
@@ -506,11 +506,11 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
                     .get(name)
                     .cloned()
                     .ok_or_else(|| {
-                        ParseError::unexpected_type(token.location, "register name", token.data)
+                        ParseError::unexpected_type(&token.location, "register name", token.data)
                     })
             }
             _ => Err(ParseError::unexpected_type(
-                token.location,
+                &token.location,
                 "register name",
                 token.data,
             )),
@@ -588,7 +588,7 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
                     ImmOrLabel::Imm(imm) => {
                         if u8::from(imm.get_byte(0)) & 1 > 0 {
                             Err(ParseError::generic(
-                                self.head_loc,
+                                &self.head_loc,
                                 &format!(
                                     "branch immediates must be multiples of two, got {}",
                                     imm.to_string()
@@ -631,7 +631,7 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
                         }
                     }
                     _ => Err(ParseError::wrong_diff_argc(
-                        self.head_loc,
+                        &self.head_loc,
                         self.inst_name,
                         1,
                         2,
@@ -656,7 +656,7 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
                         ok_wrap_concr(isa::Jalr::new(rd, rs1, imm))
                     }
                     _ => Err(ParseError::wrong_diff_argc(
-                        self.head_loc,
+                        &self.head_loc,
                         self.inst_name,
                         1,
                         3,
@@ -709,7 +709,7 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
         if let Some(parse_type) = self.data.inst_expansion_table.get(self.inst_name) {
             self.try_expand_found_inst(parse_type)
         } else {
-            Err(ParseError::bad_inst_name(self.head_loc, self.inst_name))
+            Err(ParseError::bad_inst_name(&self.head_loc, self.inst_name))
         }
     }
 }
@@ -718,7 +718,7 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
 struct DirectiveParser<'a> {
     iter: TokenIter,
     state: &'a mut ParseState,
-    head_loc: Location,
+    head_loc: &'a Location,
     head_directive: &'a str,
 }
 
@@ -728,7 +728,7 @@ impl<'a> DirectiveParser<'a> {
     fn new(
         iter: TokenIter,
         state: &'a mut ParseState,
-        head_loc: Location,
+        head_loc: &'a Location,
         head_directive: &'a str,
     ) -> DirectiveParser<'a> {
         DirectiveParser {
@@ -767,7 +767,7 @@ impl<'a> DirectiveParser<'a> {
             "global" | "globl" => self.parse_global_label(),
             // TODO: equ, set, equiv (refactor symbol table to have enum value)
             _ => Err(ParseError::unsupported_directive(
-                self.head_loc,
+                &self.head_loc,
                 self.head_directive.to_string(),
             )),
         }
@@ -779,7 +779,7 @@ impl<'a> DirectiveParser<'a> {
         let state = &mut self.state;
         match state.curr_section {
             Text => Err(ParseError::unimplemented(
-                self.head_loc,
+                &self.head_loc,
                 "cannot insert literals in .text section (only instructions allowed)",
             )),
             section => {
@@ -827,12 +827,12 @@ impl<'a> DirectiveParser<'a> {
                     self.state.curr_section = ProgramSection::Rodata;
                     return self.ok(1);
                 }
-                "bss" => return Err(ParseError::unimplemented(next_tok.location, "bss section")),
+                "bss" => return Err(ParseError::unimplemented(&next_tok.location, "bss section")),
                 _ => {}
             }
         }
         Err(ParseError::unexpected_type(
-            next_tok.location,
+            &next_tok.location,
             "one of [.text, .bss, .data, .rodata]",
             next_tok.data,
         ))
@@ -844,7 +844,7 @@ impl<'a> DirectiveParser<'a> {
     fn parse_string(mut self, null_terminated: bool) -> DirectiveParseResult {
         if let ProgramSection::Text = self.state.curr_section {
             return Err(ParseError::unimplemented(
-                self.head_loc,
+                &self.head_loc,
                 "cannot insert literals in .text section (only instructions allowed)",
             ));
         }
@@ -861,7 +861,7 @@ impl<'a> DirectiveParser<'a> {
                 }
             } else {
                 return Err(ParseError::unexpected_type(
-                    tok.location,
+                    &tok.location,
                     "string literal",
                     tok.data,
                 ));
@@ -873,7 +873,7 @@ impl<'a> DirectiveParser<'a> {
     fn parse_zero(mut self) -> DirectiveParseResult {
         if let ProgramSection::Text = self.state.curr_section {
             return Err(ParseError::unimplemented(
-                self.head_loc,
+                &self.head_loc,
                 "cannot insert literals in .text section (only instructions allowed)",
             ));
         }
@@ -882,7 +882,7 @@ impl<'a> DirectiveParser<'a> {
             // insert n bytes of zeroes
             if n < 0 {
                 Err(ParseError::unexpected_type(
-                    next_tok.location,
+                    &next_tok.location,
                     "positive integer literal",
                     next_tok.data,
                 ))
@@ -894,7 +894,7 @@ impl<'a> DirectiveParser<'a> {
             }
         } else {
             Err(ParseError::unexpected_type(
-                next_tok.location,
+                &next_tok.location,
                 "integer literal",
                 next_tok.data,
             ))
@@ -910,7 +910,7 @@ impl<'a> DirectiveParser<'a> {
             self.ok(1)
         } else {
             Err(ParseError::unexpected_type(
-                next_tok.location,
+                &next_tok.location,
                 "integer literal",
                 next_tok.data,
             ))
@@ -990,11 +990,11 @@ impl<'a, T: MachineDataWidth> LineParser<'a, T> {
                 match head_tok.data {
                     Name(name) => {
                         if self.state.curr_section == ProgramSection::Text {
-                            InstParser::new(self.data, self.iter, head_tok.location, &name)
+                            InstParser::new(self.data, self.iter, &head_tok.location, &name)
                                 .try_expand_inst()
                         } else {
                             Err(ParseError::unsupported_directive(
-                                head_tok.location,
+                                &head_tok.location,
                                 format!(
                                     "instructions can only be in the .text section (current section is {})",
                                     self.state.curr_section
@@ -1005,7 +1005,7 @@ impl<'a, T: MachineDataWidth> LineParser<'a, T> {
                     // first label def is handled by contructor
                     // TODO handle multiple labels on same line
                     LabelDef(label_name) => Err(ParseError::generic(
-                        head_tok.location,
+                        &head_tok.location,
                         &format!(
                             "Multiple labels on the same line is unimplemented (found label {})",
                             label_name
@@ -1014,19 +1014,19 @@ impl<'a, T: MachineDataWidth> LineParser<'a, T> {
                     Directive(section_name) => DirectiveParser::new(
                         self.iter,
                         &mut self.state,
-                        head_tok.location,
+                        &head_tok.location,
                         &section_name,
                     )
                     .parse()
                     .and(Ok(Vec::new())),
                     Comment(..) => Ok(Vec::new()), // deliberate no-op
-                    Comma => Err(ParseError::bad_head(head_tok.location, ",")),
+                    Comma => Err(ParseError::bad_head(&head_tok.location, ",")),
                     Immediate(n, style) => {
-                        Err(ParseError::bad_head(head_tok.location, &style.format(n)))
+                        Err(ParseError::bad_head(&head_tok.location, &style.format(n)))
                     }
-                    StringLiteral(s) => Err(ParseError::bad_head(head_tok.location, &s)),
-                    LParen => Err(ParseError::bad_head(head_tok.location, "(")),
-                    RParen => Err(ParseError::bad_head(head_tok.location, ")")),
+                    StringLiteral(s) => Err(ParseError::bad_head(&head_tok.location, &s)),
+                    LParen => Err(ParseError::bad_head(&head_tok.location, "(")),
+                    RParen => Err(ParseError::bad_head(&head_tok.location, ")")),
                 }
             } else {
                 Ok(Vec::new())

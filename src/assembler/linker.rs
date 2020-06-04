@@ -16,6 +16,7 @@ impl Linker {
     }
 
     pub fn with_file(mut self, path: &str) -> Result<Linker, ParseErrorReport> {
+        // TODO defer parsing to link() call so all errors get reported
         self.programs.push(Assembler::assemble_file(path)?);
         Ok(self)
     }
@@ -60,10 +61,7 @@ impl Linker {
         }
         if errs.is_empty() {
             // TODO handle missing labels here
-            Ok(
-                UnlinkedProgram::new(None, all_insts, sections, Default::default())
-                    .try_into_program(),
-            )
+            Ok(UnlinkedProgram::new(all_insts, sections, Default::default()).try_into_program())
         } else {
             Err(errs)
         }
