@@ -1,6 +1,6 @@
 use super::parse_error::ParseErrorReport;
 use super::parser::{Label, ParseResult, RiscVParser};
-use super::partial_inst::PartialInst;
+use super::partial_inst::{PartialInst, PartialInstType};
 use crate::program_state::{MachineDataWidth, RiscVProgram, Width32b};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
@@ -157,8 +157,12 @@ impl UnlinkedProgram<Width32b> {
                 // Figure out how many instructions we need to jump
                 let inst_distance = (tgt_index as isize) - (inst_index as isize);
                 let byte_distance = (inst_distance * 4) as i64;
-                let new_inst = insts[inst_index].fulfill_label(byte_distance.into());
-                insts[inst_index] = PartialInst::new_complete(new_inst);
+                if let PartialInstType::NeedsLabel(inst) = &insts[inst_index].tpe {
+                    insts[inst_index] =
+                        PartialInst::new_complete(inst.fulfill_label(byte_distance.into()))
+                } else {
+                    panic!("cannot fulfill label for complete instruction")
+                };
             } else if declared_globals.contains(&label) {
                 needed_labels.insert(inst_index, label);
             } else {

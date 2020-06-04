@@ -22,6 +22,22 @@ pub(crate) struct NeedsLabel<T: MachineDataWidth> {
     needed_label: Label,
 }
 
+impl<T: MachineDataWidth> NeedsLabel<T> {
+    /// Attempts to replace the needed label with the provided immediate
+    pub fn fulfill_label(&self, imm: T::RegData) -> ConcreteInst<T> {
+        use NeededRegs::*;
+        match self.tpe {
+            Two {
+                assemble,
+                reg1,
+                reg2,
+            } => assemble(reg1, reg2, imm),
+            One { assemble, reg } => assemble(reg, imm),
+            Zero { assemble } => assemble(imm),
+        }
+    }
+}
+
 pub(crate) enum PartialInstType<T: MachineDataWidth> {
     Complete(ConcreteInst<T>),
     NeedsLabel(NeedsLabel<T>),
@@ -112,25 +128,6 @@ impl<T: MachineDataWidth> PartialInst<T> {
                 "Failed to coerce into concrete instruction (missing label {:?})",
                 self.get_needed_label()
             )
-        }
-    }
-
-    /// Attempts to replace the needed label with the provided immediate
-    /// TODO move this onto NeedsLabel instead?
-    pub fn fulfill_label(&self, imm: T::RegData) -> ConcreteInst<T> {
-        use NeededRegs::*;
-        use PartialInstType::*;
-        match &self.tpe {
-            NeedsLabel(data) => match data.tpe {
-                Two {
-                    assemble,
-                    reg1,
-                    reg2,
-                } => assemble(reg1, reg2, imm),
-                One { assemble, reg } => assemble(reg, imm),
-                Zero { assemble } => assemble(imm),
-            },
-            Complete(..) => panic!("Cannot fulfill label for complete instruction"),
         }
     }
 }

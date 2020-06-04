@@ -9,7 +9,6 @@ use std::str;
 pub struct RiscVProgram<T: MachineDataWidth> {
     pub insts: Vec<ConcreteInst<T>>,
     pub state: ProgramState<T>,
-    // TODO add symbol table, relocation data, etc.?
 }
 
 impl RiscVProgram<Width32b> {
@@ -267,10 +266,11 @@ impl Syscall {
 }
 
 /// Contains program state that is visited only to privileged entities, i.e. a kernel thread.
+/// TODO add kernel thread information (tid, file descriptors, etc.)
 pub struct PrivProgState {
     /// Holds the contents of all bytes that have been printed to stdout (used mostly for testing)
-    /// TODO add kernel thread information (tid, file descriptors, etc.)
-    pub stdout: Vec<u8>,
+    stdout: Vec<u8>,
+    // file_descriptors: Vec<Vec<u8>>
 }
 
 impl Default for PrivProgState {
@@ -424,7 +424,7 @@ struct MemDiff<T: MachineDataWidth> {
 pub enum TrapKind {
     /// Corresponds to an ecall instruction issued from user mode.
     Ecall,
-    /// TODO
+    /// TODO implement paged memory
     PageFault,
 }
 
