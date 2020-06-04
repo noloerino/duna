@@ -169,6 +169,7 @@ impl<'a> LineLexer<'a> {
             if is_delim(c) {
                 // sike, it's a label
                 if c == ':' {
+                    self.iter.next();
                     return Ok(TokenType::LabelDef(string_from_utf8(cs)));
                 }
                 break;
