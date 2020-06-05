@@ -1,5 +1,5 @@
 use super::lexer::Location;
-use super::parse_error::{ParseError, ParseErrorReport, ParseErrorReporter};
+use super::parse_error::{ErrLocation, ParseError, ParseErrorReport, ParseErrorReporter};
 use super::parser::{Label, ParseResult, RiscVParser};
 use super::partial_inst::{PartialInst, PartialInstType};
 use crate::program_state::{MachineDataWidth, RiscVProgram, Width32b};
@@ -133,7 +133,7 @@ impl UnlinkedProgram<Width32b> {
         sections: SectionStore,
         declared_globals: HashSet<String>,
     ) -> (UnlinkedProgram<Width32b>, ParseErrorReport) {
-        let mut reporter = ParseErrorReporter::new("TODO".to_string());
+        let mut reporter = ParseErrorReporter::new();
         let local_labels: HashMap<Label, usize> = insts
             .iter()
             .enumerate()
@@ -173,11 +173,14 @@ impl UnlinkedProgram<Width32b> {
                 needed_labels.insert(inst_index, label);
             } else {
                 // let location = insts[inst_index].location;
-                let location = &Location {
-                    file_name: "TODO".to_string(),
-                    lineno: 0,
-                    offs: 0,
-                };
+                let location = ErrLocation::new(
+                    &Location {
+                        file_name: "TODO".to_string(),
+                        lineno: 0,
+                        offs: 0,
+                    },
+                    "<not found>",
+                );
                 reporter.add_error(ParseError::undeclared_label(location, &label));
             }
         }
@@ -193,7 +196,7 @@ impl UnlinkedProgram<Width32b> {
     }
 
     pub fn into_program(self) -> Result<RiscVProgram<Width32b>, ParseErrorReport> {
-        let mut reporter = ParseErrorReporter::new("TODO".to_string());
+        let mut reporter = ParseErrorReporter::new();
         let insts = self
             .insts
             .into_iter()

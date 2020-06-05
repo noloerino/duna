@@ -1,6 +1,6 @@
 use super::assembler_impl::{Assembler, UnlinkedProgram};
 use super::lexer::Location;
-use super::parse_error::{ParseError, ParseErrorReport, ParseErrorReporter};
+use super::parse_error::{ErrLocation, ParseError, ParseErrorReport, ParseErrorReporter};
 use crate::program_state::{RiscVProgram, Width32b};
 
 pub struct Linker {
@@ -27,7 +27,7 @@ impl Linker {
         // Link main local labels
         let main_result: Result<UnlinkedProgram<Width32b>, ParseErrorReport> =
             Assembler::assemble_file(&self.main_path);
-        let mut report = ParseErrorReporter::new("TODO".to_string()).into_report();
+        let mut report = ParseErrorReporter::new().into_report();
         // Link other programs' local labels
         let programs: Vec<UnlinkedProgram<Width32b>> = self
             .other_paths
@@ -50,7 +50,7 @@ impl Linker {
         if !report.is_empty() {
             return Err(report);
         }
-        let mut reporter = ParseErrorReporter::new("TODO".to_string());
+        let mut reporter = ParseErrorReporter::new();
 
         // We essentially produce a single giant unlinked program from all constituent programs.
         // First, resolve all local labels, then combine all the programs together and consider
@@ -79,11 +79,14 @@ impl Linker {
             for (label, idx) in new_global_labels {
                 if defined_global_labels.contains_key(&label) {
                     reporter.add_error(ParseError::redefined_label(
-                        &Location {
-                            file_name: "TODO".to_string(),
-                            lineno: 0,
-                            offs: 0,
-                        },
+                        ErrLocation::new(
+                            &Location {
+                                file_name: "TODO".to_string(),
+                                lineno: 0,
+                                offs: 0,
+                            },
+                            "<not found>",
+                        ),
                         &label,
                     ))
                 }

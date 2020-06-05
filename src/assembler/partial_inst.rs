@@ -1,5 +1,5 @@
 use super::lexer::Location;
-use super::parse_error::ParseError;
+use super::parse_error::{ErrLocation, ParseError};
 use super::parser::Label;
 use crate::instruction::ConcreteInst;
 use crate::program_state::{IRegister, MachineDataWidth};
@@ -126,11 +126,14 @@ impl<T: MachineDataWidth> PartialInst<T> {
             PartialInstType::NeedsLabel(NeedsLabel { needed_label, .. }) => Err(
                 // TODO make location available on label
                 ParseError::undefined_label(
-                    &Location {
-                        file_name: "TODO".to_string(),
-                        lineno: 0,
-                        offs: 0,
-                    },
+                    ErrLocation::new(
+                        &Location {
+                            file_name: "TODO".to_string(),
+                            lineno: 0,
+                            offs: 0,
+                        },
+                        "<not found>",
+                    ),
                     &needed_label,
                 ),
             ),

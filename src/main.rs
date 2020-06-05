@@ -1,6 +1,6 @@
 // #![allow(dead_code)]
 use clap::{App, Arg};
-use duna::program_state::RiscVProgram;
+use duna::assembler::Linker;
 use std::process;
 
 fn main() {
@@ -16,9 +16,15 @@ fn main() {
                 .index(1),
         )
         .get_matches();
-    let file_name = matches.value_of("INPUT").unwrap();
-    let parse_result = RiscVProgram::from_file(file_name);
-    let mut program = match parse_result {
+    let mut file_names = matches.values_of("INPUT").unwrap();
+    // min_values was set to 1, so this is guaranteed
+    let main_path = file_names.next().unwrap();
+    let mut linker = Linker::with_main(main_path);
+    for file in file_names {
+        linker = linker.with_file(file);
+    }
+    let link_result = linker.link();
+    let mut program = match link_result {
         Ok(p) => p,
         Err(errs) => {
             errs.report();

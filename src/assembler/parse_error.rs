@@ -1,12 +1,7 @@
-use super::lexer::{ImmRenderType, LineNo, Location, TokenType};
-use std::collections::BTreeSet;
-use std::collections::HashMap;
+use super::lexer::{ImmRenderType, Location, TokenType};
 use std::fmt;
 
 pub struct ParseErrorReport {
-    /// Maps a line number to the raw contents of the corresponding line.
-    // TODO key on (file, lineno) instead, or have errors contain lines themselves
-    lines: HashMap<LineNo, String>,
     /// Assume the errors are sorted by location
     pub errs: Vec<ParseError>,
 }
@@ -26,7 +21,6 @@ impl ParseErrorReport {
         self.errs.append(&mut other.errs);
     }
 
-    #[cfg(test)]
     pub fn get_errs(&self) -> &[ParseError] {
         self.errs.as_slice()
     }
@@ -40,18 +34,11 @@ impl fmt::Debug for ParseErrorReport {
                 file_name,
                 lineno,
                 offs,
-            } = &err.location;
+            } = &err.errloc.location;
             // TODO fix spacing if lineno is more than one digit
-            writeln!(f, " --> {}:{}", file_name, err.location)?;
+            writeln!(f, " --> {}:{}", file_name, err.errloc.location)?;
             writeln!(f, "  |")?;
-            writeln!(
-                f,
-                "{} | {}",
-                lineno,
-                self.lines
-                    .get(&lineno)
-                    .unwrap_or(&"line not found".to_string())
-            )?;
+            writeln!(f, "{} | {}", lineno, err.errloc.line_contents)?;
             write!(f, "  |")?;
             // throw informational caret in
             // +1 because there's one space between the pipe and the string in the line above
@@ -74,16 +61,12 @@ impl fmt::Debug for ParseErrorReport {
 
 /// Reports parse-time errors
 pub struct ParseErrorReporter {
-    original_text: String,
     pub errs: Vec<ParseError>,
 }
 
 impl ParseErrorReporter {
-    pub fn new(original_text: String) -> ParseErrorReporter {
-        ParseErrorReporter {
-            original_text,
-            errs: Vec::new(),
-        }
+    pub fn new() -> ParseErrorReporter {
+        ParseErrorReporter { errs: Vec::new() }
     }
 
     pub fn add_error(&mut self, err: ParseError) {
@@ -100,19 +83,7 @@ impl ParseErrorReporter {
     }
 
     pub fn into_report(self) -> ParseErrorReport {
-        let mut errs = self.errs;
-        let needed_linenos: BTreeSet<LineNo> = errs.iter().map(|e| e.location.lineno).collect();
-        errs.sort_by(|a, b| a.location.partial_cmp(&b.location).unwrap());
-        let mut line_map: HashMap<usize, String> = HashMap::new();
-        for (lineno, line) in self.original_text.lines().enumerate() {
-            if needed_linenos.contains(&lineno) {
-                line_map.insert(lineno, line.to_string());
-            }
-        }
-        ParseErrorReport {
-            lines: line_map,
-            errs,
-        }
+        ParseErrorReport { errs: self.errs }
     }
 }
 
@@ -248,59 +219,74 @@ impl fmt::Display for ParseErrorType {
     }
 }
 
-#[derive(Eq, PartialEq, Debug)]
-pub struct ParseError {
+#[derive(PartialEq, Debug)]
+pub struct ErrLocation {
     location: Location,
+    line_contents: String,
+}
+
+impl ErrLocation {
+    pub fn new(location: &Location, line_contents: &str) -> ErrLocation {
+        ErrLocation {
+            location: location.clone(),
+            line_contents: line_contents.to_string(),
+        }
+    }
+}
+
+#[derive(PartialEq, Debug)]
+pub struct ParseError {
+    errloc: ErrLocation,
     tpe: ParseErrorType,
 }
 
 impl ParseError {
-    fn new(location: &Location, tpe: ParseErrorType) -> Self {
+    fn new(location: ErrLocation, tpe: ParseErrorType) -> Self {
         ParseError {
-            location: location.clone(),
+            errloc: location,
             tpe,
         }
     }
 
-    pub fn generic(location: &Location, msg: &str) -> Self {
+    pub fn generic(location: ErrLocation, msg: &str) -> Self {
         ParseError::new(location, ParseErrorType::Generic(msg.to_string()))
     }
 
-    pub fn unimplemented(location: &Location, msg: &str) -> Self {
+    pub fn unimplemented(location: ErrLocation, msg: &str) -> Self {
         ParseError::new(location, ParseErrorType::Unimplemented(msg.to_string()))
     }
 }
 
 // functions for errors encountered by lexer
 impl ParseError {
-    pub fn bad_int_literal(location: &Location, render_type: ImmRenderType, n: String) -> Self {
+    pub fn bad_int_literal(location: ErrLocation, render_type: ImmRenderType, n: String) -> Self {
         ParseError::new(location, ParseErrorType::BadIntLiteral(render_type, n))
     }
 
-    pub fn bad_escape(location: &Location, escaped: char) -> Self {
+    pub fn bad_escape(location: ErrLocation, escaped: char) -> Self {
         ParseError::new(location, ParseErrorType::BadEscape(escaped))
     }
 
-    pub fn unclosed_string_literal(location: &Location) -> Self {
+    pub fn unclosed_string_literal(location: ErrLocation) -> Self {
         ParseError::new(location, ParseErrorType::UnclosedStringLiteral)
     }
 }
 
 // functions for errors encountered by parser
 impl ParseError {
-    pub fn bad_head(location: &Location, got: &str) -> Self {
+    pub fn bad_head(location: ErrLocation, got: &str) -> Self {
         ParseError::new(location, ParseErrorType::BadFirstToken(got.to_string()))
     }
 
-    pub fn bad_inst_name(location: &Location, got: &str) -> Self {
+    pub fn bad_inst_name(location: ErrLocation, got: &str) -> Self {
         ParseError::new(location, ParseErrorType::ExpectedInstName(got.to_string()))
     }
 
-    pub fn bad_arg(location: &Location, got: &str) -> Self {
+    pub fn bad_arg(location: ErrLocation, got: &str) -> Self {
         ParseError::new(location, ParseErrorType::ExpectedRegOrImm(got.to_string()))
     }
 
-    pub fn wrong_argc(location: &Location, inst_name: &str, needed: u8, got: u8) -> Self {
+    pub fn wrong_argc(location: ErrLocation, inst_name: &str, needed: u8, got: u8) -> Self {
         ParseError::new(
             location,
             ParseErrorType::WrongArgc {
@@ -312,7 +298,7 @@ impl ParseError {
     }
 
     pub fn wrong_diff_argc(
-        location: &Location,
+        location: ErrLocation,
         inst_name: &str,
         allowed_1: u8,
         allowed_2: u8,
@@ -329,7 +315,7 @@ impl ParseError {
         )
     }
 
-    pub fn too_many_args(location: &Location, inst_name: &str, needed: u8) -> Self {
+    pub fn too_many_args(location: ErrLocation, inst_name: &str, needed: u8) -> Self {
         ParseError::new(
             location,
             ParseErrorType::TooManyArgs {
@@ -339,7 +325,7 @@ impl ParseError {
         )
     }
 
-    pub fn imm_too_big(location: &Location, max_bit_len: u8, imm_str: &str) -> Self {
+    pub fn imm_too_big(location: ErrLocation, max_bit_len: u8, imm_str: &str) -> Self {
         ParseError::new(
             location,
             ParseErrorType::ImmTooBig {
@@ -349,7 +335,7 @@ impl ParseError {
         )
     }
 
-    pub fn unexpected_type(location: &Location, exp_name: &str, got: TokenType) -> Self {
+    pub fn unexpected_type(location: ErrLocation, exp_name: &str, got: TokenType) -> Self {
         ParseError::new(
             location,
             ParseErrorType::UnexpectedType {
@@ -359,11 +345,11 @@ impl ParseError {
         )
     }
 
-    pub fn unclosed_paren(location: &Location, got: TokenType) -> Self {
+    pub fn unclosed_paren(location: ErrLocation, got: TokenType) -> Self {
         ParseError::new(location, ParseErrorType::UnclosedParen(got))
     }
 
-    pub fn unsupported_directive(location: &Location, got: &str) -> Self {
+    pub fn unsupported_directive(location: ErrLocation, got: &str) -> Self {
         ParseError::new(
             location,
             ParseErrorType::UnsupportedDirective(got.to_string()),
@@ -373,15 +359,15 @@ impl ParseError {
 
 // functions for errors encountered by assembler/linker
 impl ParseError {
-    pub fn undeclared_label(location: &Location, label: &str) -> Self {
+    pub fn undeclared_label(location: ErrLocation, label: &str) -> Self {
         ParseError::new(location, ParseErrorType::UndeclaredLabel(label.to_string()))
     }
 
-    pub fn redefined_label(location: &Location, label: &str) -> Self {
+    pub fn redefined_label(location: ErrLocation, label: &str) -> Self {
         ParseError::new(location, ParseErrorType::RedefinedLabel(label.to_string()))
     }
 
-    pub fn undefined_label(location: &Location, label: &str) -> Self {
+    pub fn undefined_label(location: ErrLocation, label: &str) -> Self {
         ParseError::new(location, ParseErrorType::UndefinedLabel(label.to_string()))
     }
 }

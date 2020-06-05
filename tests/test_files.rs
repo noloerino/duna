@@ -94,3 +94,20 @@ fn test_global_link() {
     program.dump_insts();
     assert_eq!(program.run(), 0x1234);
 }
+
+#[test]
+/// Tests reporting errors in multiple linked files.
+fn test_link_multi_err() {
+    let report = Linker::with_main("tests/asm_files/parse_err_1.s")
+        .with_file("tests/asm_files/parse_err_2.s")
+        .link()
+        .err() // needed because RiscVProgram is not Debug
+        .expect("linker did not error when it should have");
+    let errs = report.get_errs();
+    report.report();
+    assert_eq!(errs.len(), 2);
+    // checks ordering
+    assert!(format!("{}", errs[0]).contains("parse_err_1.s"));
+    assert!(format!("{}", errs[1]).contains("parse_err_2.s"));
+    report.report();
+}
