@@ -1,41 +1,68 @@
 use super::assembler_impl::{Assembler, UnlinkedProgram};
-use super::parse_error::ParseErrorReport;
+use super::lexer::Location;
+use super::parse_error::{ParseError, ParseErrorReport, ParseErrorReporter};
 use crate::program_state::{RiscVProgram, Width32b};
 
 pub struct Linker {
-    main: UnlinkedProgram<Width32b>,
-    programs: Vec<UnlinkedProgram<Width32b>>,
+    main_path: String,
+    other_paths: Vec<String>, // main: UnlinkedProgram<Width32b>,
+                              // programs: Vec<UnlinkedProgram<Width32b>>
 }
 
 impl Linker {
-    pub fn with_main(path: &str) -> Result<Linker, ParseErrorReport> {
-        Ok(Linker {
-            main: Assembler::assemble_file(path)?,
-            programs: Vec::new(),
-        })
+    pub fn with_main(path: &str) -> Linker {
+        Linker {
+            main_path: path.to_string(),
+            other_paths: Vec::new(),
+        }
     }
 
-    pub fn with_file(mut self, path: &str) -> Result<Linker, ParseErrorReport> {
-        // TODO defer parsing to link() call so all errors get reported
-        self.programs.push(Assembler::assemble_file(path)?);
-        Ok(self)
+    pub fn with_file(mut self, path: &str) -> Linker {
+        self.other_paths.push(path.to_string());
+        self
     }
 
     /// Attempts to link the provided programs together into a single executable.
-    /// TODO implement global labels
-    pub fn link(self) -> Result<RiscVProgram<Width32b>, Vec<LinkError>> {
+    pub fn link(self) -> Result<RiscVProgram<Width32b>, ParseErrorReport> {
+        // Link main local labels
+        let main_result: Result<UnlinkedProgram<Width32b>, ParseErrorReport> =
+            Assembler::assemble_file(&self.main_path);
+        let mut report = ParseErrorReporter::new("TODO".to_string()).into_report();
+        // Link other programs' local labels
+        let programs: Vec<UnlinkedProgram<Width32b>> = self
+            .other_paths
+            .into_iter()
+            .filter_map(|path| match Assembler::assemble_file(&path) {
+                Ok(prog) => Some(prog),
+                Err(new_report) => {
+                    report.merge(new_report);
+                    None
+                }
+            })
+            .collect();
+        let main = match main_result {
+            Ok(prog) => prog,
+            Err(mut main_report) => {
+                main_report.merge(report);
+                return Err(main_report);
+            }
+        };
+        if !report.is_empty() {
+            return Err(report);
+        }
+        let mut reporter = ParseErrorReporter::new("TODO".to_string());
+
         // We essentially produce a single giant unlinked program from all constituent programs.
         // First, resolve all local labels, then combine all the programs together and consider
         // the union of all the global symbol tables as the new "local" symbol table.
-        let mut errs = Vec::new();
         let UnlinkedProgram {
             insts: mut all_insts,
             sections,
             mut needed_labels,
             mut defined_global_labels,
             ..
-        } = self.main;
-        for program in self.programs {
+        } = main;
+        for program in programs {
             let UnlinkedProgram {
                 insts: mut new_insts,
                 needed_labels: new_needed_labels,
@@ -51,45 +78,27 @@ impl Linker {
             }
             for (label, idx) in new_global_labels {
                 if defined_global_labels.contains_key(&label) {
-                    errs.push(LinkError {
-                        file_name: "TODO".to_string(),
-                        content: format!("multiple definitions for global symbol {}", label),
-                    })
+                    reporter.add_error(ParseError::redefined_label(
+                        &Location {
+                            file_name: "TODO".to_string(),
+                            lineno: 0,
+                            offs: 0,
+                        },
+                        &label,
+                    ))
                 }
                 defined_global_labels.insert(label, idx + prev_inst_size);
             }
         }
-        if errs.is_empty() {
-            // TODO handle missing labels here
-            Ok(UnlinkedProgram::new(all_insts, sections, Default::default()).try_into_program())
+        if reporter.is_empty() {
+            let (linked, errs) = UnlinkedProgram::new(all_insts, sections, Default::default());
+            if errs.is_empty() {
+                Ok(linked.into_program()?)
+            } else {
+                Err(errs)
+            }
         } else {
-            Err(errs)
+            Err(reporter.into_report())
         }
     }
 }
-
-// #[derive(PartialEq, Hash)]
-// struct FileLineNo {
-//     file_name: String,
-//     line: LineNo,
-// }
-
-#[derive(Debug)]
-pub struct LinkError {
-    file_name: String,
-    content: String,
-}
-
-// pub struct LinkErrorReport {
-//     lines: HashMap<FileLineNo, String>,
-//     pub errs: Vec<LinkError>,
-// }
-
-// impl LinkErrorReport {
-//     fn new() -> LinkErrorReport {
-//         LinkErrorReport {
-//             lines: HashMap::new(),
-//             errs: Vec::new(),
-//         }
-//     }
-// }

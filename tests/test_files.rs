@@ -77,9 +77,7 @@ fn test_local_labels() {
 /// Tests linking two files that have no label dependencies.
 fn test_basic_link() {
     let mut program = Linker::with_main("tests/asm_files/local_labels.s")
-        .unwrap()
         .with_file("tests/asm_files/local_labels.s")
-        .unwrap()
         .link()
         .unwrap();
     program.dump_insts();
@@ -90,9 +88,7 @@ fn test_basic_link() {
 /// Tests linking files that require global symbols.
 fn test_global_link() {
     let mut program = Linker::with_main("tests/asm_files/global_link_0.s")
-        .unwrap()
         .with_file("tests/asm_files/global_link_1.s")
-        .unwrap()
         .link()
         .unwrap();
     program.dump_insts();

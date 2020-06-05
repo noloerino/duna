@@ -768,7 +768,7 @@ impl<'a> DirectiveParser<'a> {
             // TODO: equ, set, equiv (refactor symbol table to have enum value)
             _ => Err(ParseError::unsupported_directive(
                 &self.head_loc,
-                self.head_directive.to_string(),
+                self.head_directive,
             )),
         }
     }
@@ -995,7 +995,7 @@ impl<'a, T: MachineDataWidth> LineParser<'a, T> {
                         } else {
                             Err(ParseError::unsupported_directive(
                                 &head_tok.location,
-                                format!(
+                                &format!(
                                     "instructions can only be in the .text section (current section is {})",
                                     self.state.curr_section
                                 ),

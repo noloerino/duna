@@ -1,4 +1,5 @@
-use super::parse_error::ParseErrorReport;
+use super::lexer::Location;
+use super::parse_error::{ParseError, ParseErrorReport, ParseErrorReporter};
 use super::parser::{Label, ParseResult, RiscVParser};
 use super::partial_inst::{PartialInst, PartialInstType};
 use crate::program_state::{MachineDataWidth, RiscVProgram, Width32b};
@@ -23,10 +24,12 @@ impl Assembler {
             insts,
             sections,
             declared_globals,
-            report,
+            mut report,
         } = parse_result;
+        let (program, additional_report) = UnlinkedProgram::new(insts, sections, declared_globals);
+        report.merge(additional_report);
         if report.is_empty() {
-            Ok(UnlinkedProgram::new(insts, sections, declared_globals))
+            Ok(program)
         } else {
             Err(report)
         }
@@ -123,11 +126,14 @@ impl UnlinkedProgram<Width32b> {
     /// Constructs an instance of an UnlinkedProgram from an instruction stream.
     /// Also attempts to match needed labels to locally defined labels, and populates the needed
     /// and global symbol tables.
+    /// A ParseErrorReport is also returned to allow the linker to proceed with partial information
+    /// in the event of a non-fatal error in this program.
     pub(super) fn new(
         mut insts: Vec<PartialInst<Width32b>>,
         sections: SectionStore,
         declared_globals: HashSet<String>,
-    ) -> UnlinkedProgram<Width32b> {
+    ) -> (UnlinkedProgram<Width32b>, ParseErrorReport) {
+        let mut reporter = ParseErrorReporter::new("TODO".to_string());
         let local_labels: HashMap<Label, usize> = insts
             .iter()
             .enumerate()
@@ -166,15 +172,44 @@ impl UnlinkedProgram<Width32b> {
             } else if declared_globals.contains(&label) {
                 needed_labels.insert(inst_index, label);
             } else {
-                // TODO error handling
-                panic!("{} is neither a local nor global label", label);
+                // let location = insts[inst_index].location;
+                let location = &Location {
+                    file_name: "TODO".to_string(),
+                    lineno: 0,
+                    offs: 0,
+                };
+                reporter.add_error(ParseError::undeclared_label(location, &label));
             }
         }
-        UnlinkedProgram {
-            insts,
-            needed_labels,
-            defined_global_labels,
-            sections,
+        (
+            UnlinkedProgram {
+                insts,
+                needed_labels,
+                defined_global_labels,
+                sections,
+            },
+            reporter.into_report(),
+        )
+    }
+
+    pub fn into_program(self) -> Result<RiscVProgram<Width32b>, ParseErrorReport> {
+        let mut reporter = ParseErrorReporter::new("TODO".to_string());
+        let insts = self
+            .insts
+            .into_iter()
+            .filter_map(|partial_inst| match partial_inst.into_concrete_inst() {
+                Ok(concrete_inst) => Some(concrete_inst),
+                Err(err) => {
+                    reporter.add_error(err);
+                    None
+                }
+            })
+            .collect();
+        let report = reporter.into_report();
+        if report.is_empty() {
+            Ok(RiscVProgram::new(insts, self.sections))
+        } else {
+            Err(report)
         }
     }
 

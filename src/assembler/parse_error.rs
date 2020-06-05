@@ -5,6 +5,7 @@ use std::fmt;
 
 pub struct ParseErrorReport {
     /// Maps a line number to the raw contents of the corresponding line.
+    // TODO key on (file, lineno) instead, or have errors contain lines themselves
     lines: HashMap<LineNo, String>,
     /// Assume the errors are sorted by location
     pub errs: Vec<ParseError>,
@@ -18,6 +19,11 @@ impl ParseErrorReport {
 
     pub fn is_empty(&self) -> bool {
         self.errs.is_empty()
+    }
+
+    /// Consumes the provided report.
+    pub fn merge(&mut self, mut other: ParseErrorReport) {
+        self.errs.append(&mut other.errs);
     }
 
     #[cfg(test)]
@@ -155,6 +161,13 @@ enum ParseErrorType {
     UnclosedParen(TokenType),
     /// An unsupported directive was found.
     UnsupportedDirective(String),
+    /// A label was referenced without declaration in its file, meaning label has no local definition
+    /// and no .global declaration.
+    UndeclaredLabel(String),
+    /// A label was defined in multiple locations.
+    RedefinedLabel(String),
+    /// A referenced label was not defined by any file.
+    UndefinedLabel(String),
 }
 
 impl fmt::Display for ParseErrorType {
@@ -222,6 +235,15 @@ impl fmt::Display for ParseErrorType {
             UnexpectedType { exp_name, got } => write!(f, "expected {}, got {}", exp_name, got),
             UnclosedParen(got) => write!(f, "expected closing parentheses, got {}", got),
             UnsupportedDirective(got) => write!(f, "unsupported assembler directive {}", got),
+            // TODO hint at .globl
+            UndeclaredLabel(label) => write!(
+                f,
+                "label {} was neither defined locally nor declared global",
+                label
+            ),
+            // TODO hint at previous definition
+            RedefinedLabel(label) => write!(f, "multiple definitions found for label {}", label),
+            UndefinedLabel(label) => write!(f, "label {} was declared but never defined", label),
         }
     }
 }
@@ -341,8 +363,26 @@ impl ParseError {
         ParseError::new(location, ParseErrorType::UnclosedParen(got))
     }
 
-    pub fn unsupported_directive(location: &Location, got: String) -> Self {
-        ParseError::new(location, ParseErrorType::UnsupportedDirective(got))
+    pub fn unsupported_directive(location: &Location, got: &str) -> Self {
+        ParseError::new(
+            location,
+            ParseErrorType::UnsupportedDirective(got.to_string()),
+        )
+    }
+}
+
+// functions for errors encountered by assembler/linker
+impl ParseError {
+    pub fn undeclared_label(location: &Location, label: &str) -> Self {
+        ParseError::new(location, ParseErrorType::UndeclaredLabel(label.to_string()))
+    }
+
+    pub fn redefined_label(location: &Location, label: &str) -> Self {
+        ParseError::new(location, ParseErrorType::RedefinedLabel(label.to_string()))
+    }
+
+    pub fn undefined_label(location: &Location, label: &str) -> Self {
+        ParseError::new(location, ParseErrorType::UndefinedLabel(label.to_string()))
     }
 }
 

@@ -1,3 +1,5 @@
+use super::lexer::Location;
+use super::parse_error::ParseError;
 use super::parser::Label;
 use crate::instruction::ConcreteInst;
 use crate::program_state::{IRegister, MachineDataWidth};
@@ -115,6 +117,23 @@ impl<T: MachineDataWidth> PartialInst<T> {
         match &self.tpe {
             PartialInstType::NeedsLabel(NeedsLabel { needed_label, .. }) => Some(&needed_label),
             PartialInstType::Complete(..) => None,
+        }
+    }
+
+    pub fn into_concrete_inst(self) -> Result<ConcreteInst<T>, ParseError> {
+        match self.tpe {
+            PartialInstType::Complete(concrete_inst) => Ok(concrete_inst),
+            PartialInstType::NeedsLabel(NeedsLabel { needed_label, .. }) => Err(
+                // TODO make location available on label
+                ParseError::undefined_label(
+                    &Location {
+                        file_name: "TODO".to_string(),
+                        lineno: 0,
+                        offs: 0,
+                    },
+                    &needed_label,
+                ),
+            ),
         }
     }
 
