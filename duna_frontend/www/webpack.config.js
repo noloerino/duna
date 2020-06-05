@@ -1,5 +1,12 @@
+const webpack = require("webpack");
 const CopyWebpackPlugin = require("copy-webpack-plugin");
-const path = require('path');
+const path = require("path");
+const execSync = require("child_process").execSync;
+
+// obtain commit and date
+const version = execSync("git rev-parse --short HEAD").toString().trim()
++
+  " (" + execSync("git show -s --format=\"%cd\" --date=short").toString().trim() + ")";
 
 module.exports = {
   entry: "./bootstrap.js",
@@ -22,6 +29,9 @@ module.exports = {
   },
   mode: "development",
   plugins: [
-    new CopyWebpackPlugin(['index.html'])
+    new CopyWebpackPlugin(['index.html']),
+    new webpack.DefinePlugin({
+      BUILD_VERSION: JSON.stringify(version)
+    })
   ],
 };

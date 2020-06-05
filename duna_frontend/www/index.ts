@@ -3,6 +3,8 @@ import { memory } from "duna_frontend/duna_frontend_bg";
 
 init();
 
+console.log("You're running the duna emulator, version", BUILD_VERSION);
+
 const codeArea = <HTMLTextAreaElement>document.getElementById("code");
 const stdout = <HTMLTextAreaElement>document.getElementById("stdout");
 const exitCode = <HTMLSpanElement>document.getElementById("exit-code");
