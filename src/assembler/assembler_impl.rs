@@ -9,12 +9,11 @@ use std::fmt;
 pub struct Assembler;
 
 impl Assembler {
-    pub fn assemble_file(path: &str) -> Result<UnlinkedProgram<Width32b>, ParseErrorReport> {
-        Assembler::assemble(RiscVParser::parse_file(path))
-    }
-
-    pub fn assemble_str(contents: &str) -> Result<UnlinkedProgram<Width32b>, ParseErrorReport> {
-        Assembler::assemble(RiscVParser::parse_str(contents))
+    pub fn assemble_str<'a>(
+        file_name: &'a str,
+        contents: &'a str,
+    ) -> Result<UnlinkedProgram<'a, Width32b>, ParseErrorReport> {
+        Assembler::assemble(RiscVParser::parse_str(file_name, contents))
     }
 
     fn assemble(
@@ -28,10 +27,7 @@ impl Assembler {
             mut report,
         } = parse_result;
         let (program, additional_report) = UnlinkedProgram::new(
-            insts
-                .into_iter()
-                .map(|inst| (file_name.clone(), inst))
-                .collect(),
+            insts.into_iter().map(|inst| (file_name, inst)).collect(),
             sections,
             declared_globals,
         );
@@ -116,10 +112,10 @@ impl Default for SectionStore {
 
 /// The parser must perform two passes in order to locate/process labels.
 /// This struct encodes data for a program that still needs to be passed to the assembler.
-pub struct UnlinkedProgram<T: MachineDataWidth> {
+pub struct UnlinkedProgram<'a, T: MachineDataWidth> {
     /// A list of (source file, instruction), which will be placed in the text segment in the order
     /// in which they appear.
-    pub(super) insts: Vec<(String, PartialInst<T>)>,
+    pub(super) insts: Vec<(&'a str, PartialInst<T>)>,
     // a potential optimization is to store generated labels and needed labels in independent vecs
     // instead of a hashmap, another vec can be used to lookup the corresponding PartialInst
     // TODO put labels in sections
@@ -130,17 +126,17 @@ pub struct UnlinkedProgram<T: MachineDataWidth> {
     pub(super) sections: SectionStore,
 }
 
-impl UnlinkedProgram<Width32b> {
+impl<'a> UnlinkedProgram<'a, Width32b> {
     /// Constructs an instance of an UnlinkedProgram from a stream of (file name, instruction).
     /// Also attempts to match needed labels to locally defined labels, and populates the needed
     /// and global symbol tables.
     /// A ParseErrorReport is also returned to allow the linker to proceed with partial information
     /// in the event of a non-fatal error in this program.
     pub(super) fn new(
-        mut insts: Vec<(String, PartialInst<Width32b>)>,
+        mut insts: Vec<(&'a str, PartialInst<Width32b>)>,
         sections: SectionStore,
         declared_globals: HashSet<String>,
-    ) -> (UnlinkedProgram<Width32b>, ParseErrorReport) {
+    ) -> (UnlinkedProgram<'a, Width32b>, ParseErrorReport) {
         let mut reporter = ParseErrorReporter::new();
         let local_labels: HashMap<Label, usize> = insts
             .iter()
@@ -176,7 +172,7 @@ impl UnlinkedProgram<Width32b> {
                 let (file_name, old_inst) = &insts[inst_index];
                 if let PartialInstType::NeedsLabel(inst) = &old_inst.tpe {
                     insts[inst_index] = (
-                        file_name.to_string(),
+                        file_name,
                         PartialInst::new_complete(inst.fulfill_label(byte_distance.into())),
                     )
                 } else {
@@ -221,7 +217,7 @@ impl UnlinkedProgram<Width32b> {
                             // TODO
                             ErrLocation::new(
                                 &Location {
-                                    file_name: file_name.clone(),
+                                    file_name: file_name.to_string(),
                                     lineno: 0,
                                     offs: 0,
                                 },
@@ -263,6 +259,10 @@ mod tests {
     use crate::program_state::DataWord;
     use crate::program_state::IRegister::ZERO;
 
+    fn assemble(program: &str) -> UnlinkedProgram<Width32b> {
+        Assembler::assemble_str("test", program).expect("Assembler errored out")
+    }
+
     #[test]
     fn test_basic_data() {
         let program = &format!(
@@ -276,7 +276,7 @@ mod tests {
             ",
             data_start = RiscVProgram::DATA_START
         );
-        let unlinked = Assembler::assemble_str(program).expect("Assembler errored out");
+        let unlinked = assemble(program);
         let mut concrete = unlinked.try_into_program();
         assert_eq!(concrete.run(), 0xBEEF_DEADu32 as i32);
     }
@@ -295,7 +295,7 @@ mod tests {
             data_start = RiscVProgram::DATA_START
         );
 
-        let unlinked = Assembler::assemble_str(program).expect("Assembler errored out");
+        let unlinked = assemble(program);
         let mut concrete = unlinked.try_into_program();
         assert_eq!(concrete.run(), 0xFF00_0000u32 as i32);
     }
@@ -320,7 +320,7 @@ mod tests {
             data_start = RiscVProgram::DATA_START
         );
 
-        let unlinked = Assembler::assemble_str(program).expect("Assembler errored out");
+        let unlinked = assemble(program);
         let mut concrete = unlinked.try_into_program();
         assert_eq!(concrete.run(), 97i32); // ascii for 'a'
         assert_eq!(
@@ -332,7 +332,7 @@ mod tests {
     #[test]
     fn test_forward_local_label() {
         let program = "beq x0, x0, l1\nnop\nnop\nl1:nop";
-        let unlinked = Assembler::assemble_str(program).expect("Assembler errored out");
+        let unlinked = assemble(program);
         // should automatically attempt to link
         let concrete = unlinked.try_into_program();
         println!("{:?}", concrete.insts);
@@ -342,7 +342,7 @@ mod tests {
     #[test]
     fn test_backward_local_label() {
         let program = "\nl1:nop\nnop\nnop\nbeq x0, x0, l1";
-        let unlinked = Assembler::assemble_str(program).expect("Assembler errored out");
+        let unlinked = assemble(program);
         // should automatically attempt to link
         let concrete = unlinked.try_into_program();
         println!("{:?}", concrete.insts);

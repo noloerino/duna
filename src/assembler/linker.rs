@@ -2,11 +2,17 @@ use super::assembler_impl::{Assembler, UnlinkedProgram};
 use super::lexer::{LineContents, Location};
 use super::parse_error::{ErrLocation, ParseError, ParseErrorReport, ParseErrorReporter};
 use crate::program_state::{RiscVProgram, Width32b};
+use std::fs;
 
+/// Links programs together.
+///
+/// When the link method is called, this struct is responsble for owning the file name string as well
+/// as the strings of the contents of all files. All other stages (assembler, parser, lexer) should
+/// be taking references to these strings.
+/// TODO add ability to just add in raw strings and generate file names accordingly
 pub struct Linker {
     main_path: String,
-    other_paths: Vec<String>, // main: UnlinkedProgram<Width32b>,
-                              // programs: Vec<UnlinkedProgram<Width32b>>
+    other_paths: Vec<String>,
 }
 
 impl Linker {
@@ -22,24 +28,32 @@ impl Linker {
         self
     }
 
+    fn read_file(path: &str) -> String {
+        fs::read_to_string(path).expect("Failed to open file")
+    }
+
     /// Attempts to link the provided programs together into a single executable.
     pub fn link(self) -> Result<RiscVProgram<Width32b>, ParseErrorReport> {
         // Link main local labels
+        let main_content = Linker::read_file(&self.main_path);
         let main_result: Result<UnlinkedProgram<Width32b>, ParseErrorReport> =
-            Assembler::assemble_file(&self.main_path);
+            Assembler::assemble_str(&self.main_path, &main_content);
         let mut report = ParseErrorReporter::new().into_report();
         // Link other programs' local labels
-        let programs: Vec<UnlinkedProgram<Width32b>> = self
+        let mut programs: Vec<UnlinkedProgram<Width32b>> = Vec::new();
+        let other_files: Vec<(&str, String)> = self
             .other_paths
-            .into_iter()
-            .filter_map(|path| match Assembler::assemble_file(&path) {
-                Ok(prog) => Some(prog),
+            .iter()
+            .map(|path| (path.as_str(), Linker::read_file(path)))
+            .collect();
+        for (path, content) in &other_files {
+            match Assembler::assemble_str(&path, &content) {
+                Ok(prog) => programs.push(prog),
                 Err(new_report) => {
                     report.merge(new_report);
-                    None
                 }
-            })
-            .collect();
+            }
+        }
         let main = match main_result {
             Ok(prog) => prog,
             Err(mut main_report) => {

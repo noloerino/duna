@@ -3,12 +3,13 @@ use duna::program_state::{RiscVProgram, Width32b};
 use std::path::Path;
 
 fn program_from_file(filename: &str) -> RiscVProgram<Width32b> {
-    let program = RiscVProgram::from_file(
+    let program = Linker::with_main(
         Path::new("tests/asm_files")
             .join(filename)
             .to_str()
             .unwrap(),
     )
+    .link()
     .unwrap();
     // stdout is suppressed unless a test fails
     program.dump_insts();

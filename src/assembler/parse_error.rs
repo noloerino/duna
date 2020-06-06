@@ -386,7 +386,7 @@ mod tests {
     /// Tests that an error produced by the lexer makes it so the affected line is not passed
     /// to the parser.
     fn test_lex_short_circuit() {
-        let report = RiscVParser::parse_str("addi x1 0xggg1, x2").report;
+        let report = RiscVParser::parse_str("test", "addi x1 0xggg1, x2").report;
         assert_eq!(report.errs.len(), 1);
     }
 }

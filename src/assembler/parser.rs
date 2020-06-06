@@ -6,7 +6,6 @@ use crate::instruction::*;
 use crate::isa;
 use crate::program_state::*;
 use crate::pseudo_inst::*;
-use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::iter::Peekable;
 use std::vec::IntoIter;
@@ -15,8 +14,8 @@ pub type Label = String;
 
 type ParsedInstStream<T> = Vec<PartialInst<T>>;
 type LineParseResult<T> = Result<ParsedInstStream<T>, ParseError>;
-pub struct ParseResult<T: MachineDataWidth> {
-    pub file_name: String,
+pub struct ParseResult<'a, T: MachineDataWidth> {
+    pub file_name: &'a str,
     pub insts: ParsedInstStream<T>,
     pub sections: SectionStore,
     pub declared_globals: HashSet<String>,
@@ -77,9 +76,9 @@ struct ParserData<'a, T: MachineDataWidth> {
 
 pub struct RiscVParser<'a, T: MachineDataWidth> {
     parser_data: ParserData<'a, T>,
-    file_name: String,
+    file_name: &'a str,
     lines: LineTokenStream,
-    contents: Cow<'a, str>,
+    contents: &'a str,
     reporter: ParseErrorReporter,
     state: ParseState,
 }
@@ -156,13 +155,9 @@ lazy_static! {
     };
 }
 
-impl RiscVParser<'_, Width32b> {
-    pub fn parse_file(path: &str) -> ParseResult<Width32b> {
-        RiscVParser::parse_lex_result(Lexer::lex_file(path))
-    }
-
-    pub fn parse_str(contents: &str) -> ParseResult<Width32b> {
-        RiscVParser::parse_lex_result(Lexer::lex_str(contents))
+impl<'a> RiscVParser<'a, Width32b> {
+    pub fn parse_str(file_name: &'a str, contents: &'a str) -> ParseResult<'a, Width32b> {
+        RiscVParser::parse_lex_result(Lexer::lex_str(file_name, contents))
     }
 
     pub fn parse_lex_result(lex_result: LexResult) -> ParseResult<Width32b> {
@@ -180,7 +175,7 @@ impl RiscVParser<'_, Width32b> {
         .parse()
     }
 
-    fn parse(mut self) -> ParseResult<Width32b> {
+    fn parse(mut self) -> ParseResult<'a, Width32b> {
         let mut insts = Vec::<PartialInst<Width32b>>::new();
         let mut last_label: Option<Label> = None;
         let parser_data = &self.parser_data;
@@ -1114,7 +1109,7 @@ mod tests {
 
     /// Lexes a program. Asserts that the lex has no errors.
     fn lex(prog: &str) -> LexResult {
-        let result = Lexer::lex_str(prog);
+        let result = Lexer::lex_str("test", prog);
         assert_eq!(result.reporter.get_errs(), &[]);
         result
     }
@@ -1144,7 +1139,7 @@ mod tests {
             sections,
             insts,
             ..
-        } = RiscVParser::parse_str(prog);
+        } = RiscVParser::parse_str("test", prog);
         assert!(report.is_empty(), insts.is_empty());
         assert_eq!(sections.data, vec![0x12, 0xef, 0xbe, 0xad, 0xde]);
     }
@@ -1156,7 +1151,7 @@ mod tests {
             ".section .data\n.byte 0x123", // immediate too large
         ];
         for prog in &programs {
-            let ParseResult { report, .. } = RiscVParser::parse_str(prog);
+            let ParseResult { report, .. } = RiscVParser::parse_str("test", prog);
             assert!(!report.is_empty());
         }
     }
@@ -1202,7 +1197,7 @@ mod tests {
             "add x1,,x2, x3",
         ];
         for inst in bad_insts {
-            let ParseResult { report, .. } = RiscVParser::parse_str(inst);
+            let ParseResult { report, .. } = RiscVParser::parse_str("test", inst);
             assert!(!report.is_empty());
         }
     }
@@ -1232,7 +1227,7 @@ mod tests {
     #[test]
     fn test_imm_too_big() {
         // immediates for instructions like addi can only be 12 bits long
-        let ParseResult { insts, report, .. } = RiscVParser::parse_str("addi sp sp 0xF000");
+        let ParseResult { insts, report, .. } = RiscVParser::parse_str("test", "addi sp sp 0xF000");
         assert!(!report.is_empty());
         assert!(insts.is_empty());
     }

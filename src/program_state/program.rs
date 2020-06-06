@@ -63,10 +63,6 @@ impl RiscVProgram<Width32b> {
         }
     }
 
-    pub fn from_file(path: &str) -> Result<RiscVProgram<Width32b>, ParseErrorReport> {
-        Ok(Assembler::assemble_file(path)?.try_into_program())
-    }
-
     /// Runs the program to completion, returning the value in register a0.
     pub fn run(&mut self) -> i32 {
         // for now, just use the instruction vec to determine the next instruction
@@ -87,7 +83,7 @@ impl str::FromStr for RiscVProgram<Width32b> {
     type Err = ParseErrorReport;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Assembler::assemble_str(s)?.try_into_program())
+        Ok(Assembler::assemble_str("main", s)?.try_into_program())
     }
 }
 

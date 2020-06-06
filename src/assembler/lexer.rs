@@ -1,7 +1,5 @@
 use super::parse_error::{ErrLocation, ParseError, ParseErrorReporter};
-use std::borrow::Cow;
 use std::fmt;
-use std::fs;
 use std::iter::Enumerate;
 use std::iter::Peekable;
 use std::str::Chars;
@@ -23,9 +21,9 @@ impl LineContents {
 }
 
 pub struct LexResult<'a> {
+    pub file_name: &'a str,
     pub lines: LineTokenStream,
-    pub file_name: String,
-    pub contents: Cow<'a, str>,
+    pub contents: &'a str,
     pub reporter: ParseErrorReporter,
 }
 
@@ -470,24 +468,15 @@ impl<'a> LineLexer<'a> {
 }
 
 pub struct Lexer<'a> {
-    file_name: String,
-    contents: Cow<'a, str>,
+    file_name: &'a str,
+    contents: &'a str,
 }
 
 impl<'a> Lexer<'a> {
-    pub fn lex_file(path: &str) -> LexResult<'a> {
-        let contents = fs::read_to_string(path).expect("Failed to open file");
+    pub fn lex_str(file_name: &'a str, contents: &'a str) -> LexResult<'a> {
         Lexer {
-            file_name: path.to_string(),
-            contents: Cow::Owned(contents),
-        }
-        .lex()
-    }
-
-    pub fn lex_str(contents: &'a str) -> LexResult<'a> {
-        Lexer {
-            file_name: "<no file name>".to_string(),
-            contents: Cow::Borrowed(contents),
+            file_name: file_name,
+            contents: contents,
         }
         .lex()
     }
@@ -554,7 +543,7 @@ mod tests {
     fn test_simple_lex() {
         let LexResult {
             lines, reporter, ..
-        } = Lexer::lex_str("addi x0, x1, x2");
+        } = Lexer::lex_str("test", "addi x0, x1, x2");
         assert!(reporter.is_empty());
         let toks = &lines[0];
         // check actual data
@@ -632,7 +621,7 @@ mod tests {
         let line = ".string \"howdy world\\n\"";
         let LexResult {
             lines, reporter, ..
-        } = Lexer::lex_str(line);
+        } = Lexer::lex_str("test", line);
         assert!(reporter.is_empty());
         assert_eq!(lines.len(), 1);
         let toks = &lines[0];
