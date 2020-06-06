@@ -1,6 +1,6 @@
 use super::assembler_impl::{ProgramSection, SectionStore};
 use super::lexer::*;
-use super::parse_error::{ErrMetadata, ParseError, ParseErrorReport, ParseErrorReporter};
+use super::parse_error::{ErrMetadata, ParseError, ParseErrorReporter};
 use super::partial_inst::PartialInst;
 use crate::instruction::*;
 use crate::isa;
@@ -19,7 +19,7 @@ pub struct ParseResult<'a, T: MachineDataWidth> {
     pub insts: ParsedInstStream<T>,
     pub sections: SectionStore,
     pub declared_globals: HashSet<String>,
-    pub report: ParseErrorReport,
+    pub reporter: ParseErrorReporter,
 }
 
 /// State about the program being parsed.
@@ -213,7 +213,7 @@ impl<'a> RiscVParser<'a, Width32b> {
             insts,
             sections: self.state.sections,
             declared_globals: self.state.declared_globals,
-            report: self.reporter.into_report(),
+            reporter: self.reporter,
         }
     }
 }
@@ -1117,8 +1117,10 @@ mod tests {
     /// Parses and lexes the provided string, assuming that there are no errors in either phase.
     /// Assumes that there were no lex errors.
     fn parse_and_lex(prog: &str) -> Vec<PartialInst<Width32b>> {
-        let ParseResult { insts, report, .. } = RiscVParser::parse_lex_result(lex(prog));
-        assert!(report.is_empty(), format!("{:?}", report.report()));
+        let ParseResult {
+            insts, reporter, ..
+        } = RiscVParser::parse_lex_result(lex(prog));
+        assert!(reporter.is_empty(), format!("{:?}", reporter));
         insts
     }
 
@@ -1135,12 +1137,12 @@ mod tests {
     fn test_data_directives() {
         let prog = ".section .data\n.byte 0x12\n.word 0xdeadbeef";
         let ParseResult {
-            report,
+            reporter,
             sections,
             insts,
             ..
         } = RiscVParser::parse_str("test", prog);
-        assert!(report.is_empty(), insts.is_empty());
+        assert!(reporter.is_empty(), insts.is_empty());
         assert_eq!(sections.data, vec![0x12, 0xef, 0xbe, 0xad, 0xde]);
     }
 
@@ -1151,8 +1153,8 @@ mod tests {
             ".section .data\n.byte 0x123", // immediate too large
         ];
         for prog in &programs {
-            let ParseResult { report, .. } = RiscVParser::parse_str("test", prog);
-            assert!(!report.is_empty());
+            let ParseResult { reporter, .. } = RiscVParser::parse_str("test", prog);
+            assert!(!reporter.is_empty());
         }
     }
 
@@ -1197,8 +1199,8 @@ mod tests {
             "add x1,,x2, x3",
         ];
         for inst in bad_insts {
-            let ParseResult { report, .. } = RiscVParser::parse_str("test", inst);
-            assert!(!report.is_empty());
+            let ParseResult { reporter, .. } = RiscVParser::parse_str("test", inst);
+            assert!(!reporter.is_empty());
         }
     }
 
@@ -1227,8 +1229,10 @@ mod tests {
     #[test]
     fn test_imm_too_big() {
         // immediates for instructions like addi can only be 12 bits long
-        let ParseResult { insts, report, .. } = RiscVParser::parse_str("test", "addi sp sp 0xF000");
-        assert!(!report.is_empty());
+        let ParseResult {
+            insts, reporter, ..
+        } = RiscVParser::parse_str("test", "addi sp sp 0xF000");
+        assert!(!reporter.is_empty());
         assert!(insts.is_empty());
     }
 

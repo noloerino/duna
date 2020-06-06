@@ -12,30 +12,30 @@ impl Assembler {
     pub fn assemble_str<'a>(
         file_name: &'a str,
         contents: &'a str,
-    ) -> Result<UnlinkedProgram<'a, Width32b>, ParseErrorReport> {
+    ) -> Result<UnlinkedProgram<'a, Width32b>, ParseErrorReporter> {
         Assembler::assemble(RiscVParser::parse_str(file_name, contents))
     }
 
     fn assemble(
         parse_result: ParseResult<Width32b>,
-    ) -> Result<UnlinkedProgram<Width32b>, ParseErrorReport> {
+    ) -> Result<UnlinkedProgram<Width32b>, ParseErrorReporter> {
         let ParseResult {
             file_name,
             insts,
             sections,
             declared_globals,
-            mut report,
+            mut reporter,
         } = parse_result;
-        let (program, additional_report) = UnlinkedProgram::new(
+        let (program, selflink_reporter) = UnlinkedProgram::new(
             insts.into_iter().map(|inst| (file_name, inst)).collect(),
             sections,
             declared_globals,
         );
-        report.merge(additional_report);
-        if report.is_empty() {
+        reporter.merge(selflink_reporter);
+        if reporter.is_empty() {
             Ok(program)
         } else {
-            Err(report)
+            Err(reporter)
         }
     }
 }
@@ -130,13 +130,13 @@ impl<'a> UnlinkedProgram<'a, Width32b> {
     /// Constructs an instance of an UnlinkedProgram from a stream of (file name, instruction).
     /// Also attempts to match needed labels to locally defined labels, and populates the needed
     /// and global symbol tables.
-    /// A ParseErrorReport is also returned to allow the linker to proceed with partial information
+    /// A ParseErrorReporter is also returned to allow the linker to proceed with partial information
     /// in the event of a non-fatal error in this program.
     pub(super) fn new(
         mut insts: Vec<(&'a str, PartialInst<Width32b>)>,
         sections: SectionStore,
         declared_globals: HashSet<String>,
-    ) -> (UnlinkedProgram<'a, Width32b>, ParseErrorReport) {
+    ) -> (UnlinkedProgram<'a, Width32b>, ParseErrorReporter) {
         let mut reporter = ParseErrorReporter::new();
         let local_labels: HashMap<Label, usize> = insts
             .iter()
@@ -200,11 +200,11 @@ impl<'a> UnlinkedProgram<'a, Width32b> {
                 defined_global_labels,
                 sections,
             },
-            reporter.into_report(),
+            reporter,
         )
     }
 
-    pub fn into_program(self) -> Result<RiscVProgram<Width32b>, ParseErrorReport> {
+    pub fn into_program(self) -> Result<RiscVProgram<Width32b>, ParseErrorReporter> {
         let mut reporter = ParseErrorReporter::new();
         let insts = self
             .insts
@@ -230,11 +230,10 @@ impl<'a> UnlinkedProgram<'a, Width32b> {
                 },
             )
             .collect();
-        let report = reporter.into_report();
-        if report.is_empty() {
+        if reporter.is_empty() {
             Ok(RiscVProgram::new(insts, self.sections))
         } else {
-            Err(report)
+            Err(reporter)
         }
     }
 

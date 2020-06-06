@@ -16,11 +16,6 @@ impl ParseErrorReport {
         self.errs.is_empty()
     }
 
-    /// Consumes the provided report.
-    pub fn merge(&mut self, mut other: ParseErrorReport) {
-        self.errs.append(&mut other.errs);
-    }
-
     pub fn get_errs(&self) -> &[ParseError] {
         self.errs.as_slice()
     }
@@ -60,6 +55,7 @@ impl fmt::Debug for ParseErrorReport {
 }
 
 /// Reports parse-time errors
+#[derive(Debug)]
 pub struct ParseErrorReporter {
     pub errs: Vec<ParseError>,
 }
@@ -80,6 +76,11 @@ impl ParseErrorReporter {
     #[cfg(test)]
     pub fn get_errs(&self) -> &[ParseError] {
         self.errs.as_slice()
+    }
+
+    /// Consumes the other reporter.
+    pub fn merge(&mut self, mut other: ParseErrorReporter) {
+        self.errs.append(&mut other.errs);
     }
 
     pub fn into_report(self) -> ParseErrorReport {
@@ -386,7 +387,7 @@ mod tests {
     /// Tests that an error produced by the lexer makes it so the affected line is not passed
     /// to the parser.
     fn test_lex_short_circuit() {
-        let report = RiscVParser::parse_str("test", "addi x1 0xggg1, x2").report;
-        assert_eq!(report.errs.len(), 1);
+        let reporter = RiscVParser::parse_str("test", "addi x1 0xggg1, x2").reporter;
+        assert_eq!(reporter.errs.len(), 1);
     }
 }

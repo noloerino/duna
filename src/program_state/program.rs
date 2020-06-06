@@ -1,7 +1,7 @@
 use super::datatypes::*;
 use super::memory::Memory;
 use super::registers::{IRegister, RegFile};
-use crate::assembler::{Assembler, ParseErrorReport, SectionStore};
+use crate::assembler::{Linker, ParseErrorReport, SectionStore};
 use crate::instruction::ConcreteInst;
 use std::collections::HashMap;
 use std::str;
@@ -83,7 +83,7 @@ impl str::FromStr for RiscVProgram<Width32b> {
     type Err = ParseErrorReport;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Assembler::assemble_str("main", s)?.try_into_program())
+        Linker::with_main_str(s).link()
     }
 }
 

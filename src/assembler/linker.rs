@@ -32,6 +32,12 @@ impl Linker {
         }
     }
 
+    pub fn with_main_str(contents: &str) -> Linker {
+        Linker {
+            file_map: vec![("<main>".to_string(), contents.to_string())],
+        }
+    }
+
     pub fn with_file(mut self, path: &str) -> Linker {
         self.file_map
             .push((path.to_string(), Linker::read_file(path)));
@@ -45,21 +51,18 @@ impl Linker {
     /// Attempts to link the provided programs together into a single executable.
     pub fn link(self) -> Result<RiscVProgram<Width32b>, ParseErrorReport> {
         assert!(self.file_map.len() > 0, "Linker is missing a main program");
-        let mut report = ParseErrorReporter::new().into_report();
+        let mut reporter = ParseErrorReporter::new();
         // Link other programs' local labels
         let mut programs: Vec<UnlinkedProgram<Width32b>> = Vec::new();
         for (path, content) in &self.file_map {
             match Assembler::assemble_str(&path, &content) {
                 Ok(prog) => programs.push(prog),
-                Err(new_report) => {
-                    report.merge(new_report);
+                Err(new_reporter) => {
+                    reporter.merge(new_reporter);
                 }
             }
         }
-        if !report.is_empty() {
-            return Err(report);
-        }
-        let mut reporter = ParseErrorReporter::new();
+        // Even if errors have so far been reported, we can proceed to try to link anyway
 
         // We essentially produce a single giant unlinked program from all constituent programs.
         // First, resolve all local labels, then combine all the programs together and consider
@@ -109,9 +112,13 @@ impl Linker {
             let (linked, errs) =
                 UnlinkedProgram::new(all_insts, combined_sections, Default::default());
             if errs.is_empty() {
-                Ok(linked.into_program()?)
+                // handles errantly undefined labels, although they should've already been caught
+                linked
+                    .into_program()
+                    .map_err(ParseErrorReporter::into_report)
             } else {
-                Err(errs)
+                // handles undeclared labels
+                Err(errs.into_report())
             }
         } else {
             Err(reporter.into_report())
