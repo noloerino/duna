@@ -72,7 +72,10 @@ impl Linker {
 
     /// Attempts to link the provided programs together into a single executable.
     pub fn link(self) -> Result<RiscVProgram<Width32b>, ParseErrorReport> {
-        assert!(self.file_map.len() > 0, "Linker is missing a main program");
+        assert!(
+            !self.file_map.is_empty(),
+            "Linker is missing a main program"
+        );
         let mut reporter = ParseErrorReporter::new();
         // Link other programs' local labels
         let mut programs: Vec<UnlinkedProgram<Width32b>> = Vec::new();

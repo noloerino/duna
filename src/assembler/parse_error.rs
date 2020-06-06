@@ -102,6 +102,12 @@ impl ParseErrorReporter {
     }
 }
 
+impl Default for ParseErrorReporter {
+    fn default() -> ParseErrorReporter {
+        ParseErrorReporter::new()
+    }
+}
+
 #[derive(Eq, PartialEq, Debug)]
 /// Encodes different kinds of parsing and lexing errors.
 enum ParseErrorType {
@@ -242,7 +248,7 @@ pub struct ErrMetadata {
 impl ErrMetadata {
     pub fn new(location: &Location) -> ErrMetadata {
         ErrMetadata {
-            location: location.clone(),
+            location: *location,
         }
     }
 }

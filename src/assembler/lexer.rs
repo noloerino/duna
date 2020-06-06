@@ -225,7 +225,7 @@ impl<'a> LineLexer<'a> {
                         return Err(ParseError::generic(
                             ErrMetadata::new(&Location {
                                 offs,
-                                ..state.location.clone()
+                                ..state.location
                             }),
                             &format!(
                                 "cannot parse number literal {}",
@@ -451,11 +451,7 @@ pub struct Lexer<'a> {
 
 impl<'a> Lexer<'a> {
     pub fn lex_str(file_id: FileId, contents: &'a str) -> LexResult<'a> {
-        Lexer {
-            file_id,
-            contents: contents,
-        }
-        .lex()
+        Lexer { file_id, contents }.lex()
     }
 
     /// Consume the lexer's iterator to produce a stream of tokens and any possible errors.

@@ -79,7 +79,6 @@ pub struct RiscVParser<'a, T: MachineDataWidth> {
     parser_data: ParserData<'a, T>,
     file_id: FileId,
     lines: LineTokenStream,
-    contents: &'a str,
     reporter: ParseErrorReporter,
     state: ParseState,
 }
@@ -171,7 +170,6 @@ impl<'a> RiscVParser<'a, Width32b> {
             lines: lex_result.lines,
             reporter: lex_result.reporter,
             state: ParseState::new(),
-            contents: lex_result.contents,
         }
         .parse()
     }
@@ -180,17 +178,11 @@ impl<'a> RiscVParser<'a, Width32b> {
         let mut insts = Vec::<PartialInst<Width32b>>::new();
         let mut last_label: Option<Label> = None;
         let parser_data = &self.parser_data;
-        for (line, contents) in self.lines.into_iter().zip(self.contents.lines()) {
+        for line in self.lines {
             // line is an iterator over tokens
             // contents is the raw string
-            let (found_label, parse_result) = LineParser::new(
-                parser_data,
-                line,
-                &last_label,
-                &mut self.state,
-                self.file_id,
-            )
-            .parse();
+            let (found_label, parse_result) =
+                LineParser::new(parser_data, line, &last_label, &mut self.state).parse();
             match parse_result {
                 Ok(mut new_insts) => {
                     // if insts is not empty, then that means the label was already used
@@ -251,7 +243,7 @@ fn ok_wrap_expanded<T: MachineDataWidth>(inst: Vec<ConcreteInst<T>>) -> LinePars
 /// Parses an immediate that is required to be at most n bits.
 /// If the provided immediate is a negative, then the upper (64 - n + 1) bits must all be 1.
 /// An i64 is returned, which should then be converted into a RegData type by a parser.
-fn try_parse_imm(file_id: FileId, n: u8, token: Token) -> Result<i64, ParseError> {
+fn try_parse_imm(n: u8, token: Token) -> Result<i64, ParseError> {
     match token.data {
         // Check lower n bits
         // We give a pass to negative numbers with high bits set
@@ -290,12 +282,7 @@ fn try_parse_imm(file_id: FileId, n: u8, token: Token) -> Result<i64, ParseError
 /// for a possible comment.
 /// This is used for situations where a fixed number of arguments is expected, as we're
 /// free to consume the iterator since more tokens would be an error regardless.
-fn check_no_more_args(
-    iter: &mut TokenIter,
-    file_id: FileId,
-    name: &str,
-    needed: u8,
-) -> Result<(), ParseError> {
+fn check_no_more_args(iter: &mut TokenIter, name: &str, needed: u8) -> Result<(), ParseError> {
     let next = iter.next();
     if let Some(tok) = next {
         if let TokenType::Comment(_) = tok.data {
@@ -315,7 +302,6 @@ fn check_no_more_args(
 /// Attempts to advance the next token of the iterator, returning a ParseError if there are none.
 fn try_next_tok(
     iter: &mut TokenIter,
-    file_id: FileId,
     head_loc: &Location,
     name: &str,
     needed_args: u8,
@@ -336,10 +322,7 @@ fn try_next_tok(
 /// The first and last tokens cannot be commas. If repeated commas appear anywhere,
 /// an error is returned.
 /// This consumes until a comment token or the end of the iterator is reached.
-fn consume_unbounded_commasep_args(
-    iter: &mut TokenIter,
-    file_id: FileId,
-) -> Result<Vec<Token>, ParseError> {
+fn consume_unbounded_commasep_args(iter: &mut TokenIter) -> Result<Vec<Token>, ParseError> {
     use TokenType::*;
     let mut toks = Vec::new();
     // track if we just visited a comma
@@ -378,7 +361,6 @@ struct InstParser<'a, T: MachineDataWidth> {
     iter: TokenIter,
     head_loc: &'a Location,
     inst_name: &'a str,
-    file_id: FileId,
 }
 
 impl<'a, T: MachineDataWidth> InstParser<'a, T> {
@@ -387,14 +369,12 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
         iter: TokenIter,
         head_loc: &'a Location,
         inst_name: &'a str,
-        file_id: FileId,
     ) -> InstParser<'a, T> {
         InstParser {
             data,
             iter,
             head_loc,
             inst_name,
-            file_id,
         }
     }
 
@@ -403,7 +383,7 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
     /// This is used for situations where a fixed number of arguments is expected, as we're
     /// free to consume the iterator since more tokens would be an error regardless.
     fn check_no_more_args(&mut self, needed: u8) -> Result<(), ParseError> {
-        check_no_more_args(&mut self.iter, self.file_id, self.inst_name, needed)
+        check_no_more_args(&mut self.iter, self.inst_name, needed)
     }
 
     /// Attempts to consume exactly N arguments from the iterator, possibly comma-separated.
@@ -453,7 +433,7 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
     /// an error is returned.
     /// This consumes until a comment token or the end of the iterator is reached.
     fn consume_unbounded_commasep_args(&mut self) -> Result<Vec<Token>, ParseError> {
-        consume_unbounded_commasep_args(&mut self.iter, self.file_id)
+        consume_unbounded_commasep_args(&mut self.iter)
     }
 
     /// Consumes tokens for arguments for a memory operation.
@@ -504,7 +484,6 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
     fn try_next_tok(&mut self, needed_args: u8, found_so_far: u8) -> Result<Token, ParseError> {
         try_next_tok(
             &mut self.iter,
-            self.file_id,
             self.head_loc,
             self.inst_name,
             needed_args,
@@ -552,7 +531,7 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
     /// Parses an immediate that is required to be at most n bits.
     /// If the provided immediate is a negative, then the upper (64 - n + 1) bits must all be 1.
     fn try_parse_imm(&self, n: u8, token: Token) -> Result<T::RegData, ParseError> {
-        try_parse_imm(self.file_id, n, token).map(|res_i64| res_i64.into())
+        try_parse_imm(n, token).map(|res_i64| res_i64.into())
     }
 
     /// Attempts to expand a token into a label reference or an immediate of at most max_imm_len.
@@ -755,7 +734,6 @@ struct DirectiveParser<'a> {
     state: &'a mut ParseState,
     head_loc: &'a Location,
     head_directive: &'a str,
-    file_id: FileId,
 }
 
 type DirectiveParseResult = Result<(), ParseError>;
@@ -766,14 +744,12 @@ impl<'a> DirectiveParser<'a> {
         state: &'a mut ParseState,
         head_loc: &'a Location,
         head_directive: &'a str,
-        file_id: FileId,
     ) -> DirectiveParser<'a> {
         DirectiveParser {
             iter,
             state,
             head_loc,
             head_directive,
-            file_id,
         }
     }
 
@@ -962,7 +938,6 @@ impl<'a> DirectiveParser<'a> {
     fn try_next_tok(&mut self, needed_args: u8, found_so_far: u8) -> Result<Token, ParseError> {
         try_next_tok(
             &mut self.iter,
-            self.file_id,
             self.head_loc,
             self.head_directive,
             needed_args,
@@ -971,23 +946,18 @@ impl<'a> DirectiveParser<'a> {
     }
 
     fn try_parse_imm(&self, n: u8, token: Token) -> Result<i64, ParseError> {
-        try_parse_imm(self.file_id, n, token)
+        try_parse_imm(n, token)
     }
 
     fn consume_unbounded_commasep_args(&mut self) -> Result<Vec<Token>, ParseError> {
-        consume_unbounded_commasep_args(&mut self.iter, self.file_id)
+        consume_unbounded_commasep_args(&mut self.iter)
     }
 
     /// Checks that the iterator has run out of tokens; returns ok if so.
     /// needed_argc is the number of arguments that were needed in total, not the number that
     /// still need to be consumed (which is always 0, since we're checking if we ran out of args).
     fn ok(mut self, needed_argc: u8) -> DirectiveParseResult {
-        check_no_more_args(
-            &mut self.iter,
-            self.file_id,
-            self.head_directive,
-            needed_argc,
-        )?;
+        check_no_more_args(&mut self.iter, self.head_directive, needed_argc)?;
         Ok(())
     }
 }
@@ -998,7 +968,6 @@ struct LineParser<'a, T: MachineDataWidth> {
     iter: TokenIter,
     label: Option<Label>,
     state: &'a mut ParseState,
-    file_id: FileId,
 }
 
 impl<'a, T: MachineDataWidth> LineParser<'a, T> {
@@ -1008,7 +977,6 @@ impl<'a, T: MachineDataWidth> LineParser<'a, T> {
         tokens: TokenStream,
         maybe_label: &'a Option<Label>,
         state: &'a mut ParseState,
-        file_id: FileId,
     ) -> LineParser<'a, T> {
         let mut iter = tokens.into_iter().peekable();
         let label_passed_in = maybe_label.is_some();
@@ -1037,7 +1005,6 @@ impl<'a, T: MachineDataWidth> LineParser<'a, T> {
             iter,
             label: this_label,
             state,
-            file_id,
         }
     }
 
@@ -1050,14 +1017,8 @@ impl<'a, T: MachineDataWidth> LineParser<'a, T> {
                 match head_tok.data {
                     Name(name) => {
                         if self.state.curr_section == ProgramSection::Text {
-                            InstParser::new(
-                                self.data,
-                                self.iter,
-                                &head_tok.location,
-                                &name,
-                                self.file_id,
-                            )
-                            .try_expand_inst()
+                            InstParser::new(self.data, self.iter, &head_tok.location, &name)
+                                .try_expand_inst()
                         } else {
                             Err(ParseError::unsupported_directive(
                                 errloc,
@@ -1082,7 +1043,6 @@ impl<'a, T: MachineDataWidth> LineParser<'a, T> {
                         &mut self.state,
                         &head_tok.location,
                         &section_name,
-                        self.file_id,
                     )
                     .parse()
                     .and(Ok(Vec::new())),
