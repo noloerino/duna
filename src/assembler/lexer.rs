@@ -476,6 +476,7 @@ impl<'a> Lexer<'a> {
 
 #[cfg(test)]
 mod tests {
+    use super::super::linker::FileData;
     use super::*;
 
     fn get_test_reporter() -> ParseErrorReporter {
@@ -558,7 +559,7 @@ mod tests {
         let mut reporter = get_test_reporter();
         let (lexer, _state) = get_line_lexer(&mut reporter, line);
         let tokens = lexer.lex();
-        let report = reporter.into_report();
+        let report = reporter.into_report_with_file_map(vec![FileData::from_test_program(line)]);
         assert!(!report.is_empty());
         // TODO make this into 0xggg1 to ensure it gets the whole thing
         assert!(format!("{:?}", report).contains("ggg1"));
@@ -574,7 +575,7 @@ mod tests {
         let mut reporter = get_test_reporter();
         let (lexer, _state) = get_line_lexer(&mut reporter, line);
         let _tokens = lexer.lex();
-        let report = reporter.into_report();
+        let report = reporter.into_report_with_file_map(vec![FileData::from_test_program(line)]);
         assert_eq!(report.get_errs().len(), 2);
     }
 

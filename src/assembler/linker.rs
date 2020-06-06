@@ -6,11 +6,25 @@ use crate::program_state::{RiscVProgram, Width32b};
 use std::collections::HashMap;
 use std::fs;
 
-/// Tuple of (file name, file contents).
-pub type FileData = (String, String);
+pub struct FileData {
+    pub file_name: String,
+    pub content: String,
+}
+
+impl FileData {
+    #[cfg(test)]
+    pub fn from_test_program(content: &str) -> FileData {
+        FileData {
+            file_name: "test".to_string(),
+            content: content.to_string(),
+        }
+    }
+}
+
 /// Used to make error reporting easier without having to worry about lifetimes with string
 /// references. Should map to a FileData somehow.
 pub type FileId = usize;
+pub type FileMap = Vec<FileData>;
 
 /// Links programs together.
 ///
@@ -22,25 +36,33 @@ pub struct Linker {
     /// Maps a FileId to FileData. Must be nonempty.
     ///
     /// The "main" file is assumed to exist at index 0.
-    file_map: Vec<FileData>,
+    file_map: FileMap,
 }
 
 impl Linker {
     pub fn with_main(path: &str) -> Linker {
         Linker {
-            file_map: vec![(path.to_string(), Linker::read_file(path))],
+            file_map: vec![FileData {
+                file_name: path.to_string(),
+                content: Linker::read_file(path),
+            }],
         }
     }
 
     pub fn with_main_str(contents: &str) -> Linker {
         Linker {
-            file_map: vec![("<main>".to_string(), contents.to_string())],
+            file_map: vec![FileData {
+                file_name: "<main>".to_string(),
+                content: contents.to_string(),
+            }],
         }
     }
 
     pub fn with_file(mut self, path: &str) -> Linker {
-        self.file_map
-            .push((path.to_string(), Linker::read_file(path)));
+        self.file_map.push(FileData {
+            file_name: path.to_string(),
+            content: Linker::read_file(path),
+        });
         self
     }
 
@@ -54,7 +76,7 @@ impl Linker {
         let mut reporter = ParseErrorReporter::new();
         // Link other programs' local labels
         let mut programs: Vec<UnlinkedProgram<Width32b>> = Vec::new();
-        for (i, (_, content)) in self.file_map.iter().enumerate() {
+        for (i, FileData { content, .. }) in self.file_map.iter().enumerate() {
             match Assembler::assemble_str(i, &content) {
                 Ok(prog) => programs.push(prog),
                 Err(new_reporter) => {
@@ -112,13 +134,13 @@ impl Linker {
                 // handles errantly undefined labels, although they should've already been caught
                 linked
                     .into_program()
-                    .map_err(ParseErrorReporter::into_report)
+                    .map_err(|r| r.into_report_with_file_map(self.file_map))
             } else {
                 // handles undeclared labels
-                Err(errs.into_report())
+                Err(errs.into_report_with_file_map(self.file_map))
             }
         } else {
-            Err(reporter.into_report())
+            Err(reporter.into_report_with_file_map(self.file_map))
         }
     }
 }

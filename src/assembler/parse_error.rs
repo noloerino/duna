@@ -1,7 +1,10 @@
 use super::lexer::{ImmRenderType, Location, TokenType};
+use super::linker::{FileData, FileMap};
 use std::fmt;
 
 pub struct ParseErrorReport {
+    /// Maps file id to a tuple of (file name, list of lines in the file).
+    line_map: Vec<(String, Vec<String>)>,
     /// Assume the errors are sorted by location
     pub errs: Vec<ParseError>,
 }
@@ -29,15 +32,16 @@ impl fmt::Debug for ParseErrorReport {
                 file_id,
                 lineno,
                 offs,
-            } = &err.errloc.location;
+            } = err.errloc.location;
+            let (file_name, line_map) = &self.line_map[file_id];
             // TODO fix spacing if lineno is more than one digit
-            writeln!(f, " --> {}:{}", "TODO", "TODO")?;
+            writeln!(f, " --> {}:{}:{}", file_name, lineno, offs)?;
             writeln!(f, "  |")?;
-            writeln!(f, "{} | {}", lineno, "TODO")?;
+            writeln!(f, "{} | {}", lineno, line_map[lineno])?;
             write!(f, "  |")?;
             // throw informational caret in
             // +1 because there's one space between the pipe and the string in the line above
-            for _ in 0..=(*offs) {
+            for _ in 0..=offs {
                 write!(f, " ")?;
             }
             writeln!(f, "^\n")?;
@@ -83,8 +87,18 @@ impl ParseErrorReporter {
         self.errs.append(&mut other.errs);
     }
 
-    pub fn into_report(self) -> ParseErrorReport {
-        ParseErrorReport { errs: self.errs }
+    /// Generates a report with the provided map of file id to file contents.
+    pub fn into_report_with_file_map(self, file_map: FileMap) -> ParseErrorReport {
+        let line_map = file_map
+            .into_iter()
+            .map(|FileData { file_name, content }| {
+                (file_name, content.lines().map(|s| s.to_string()).collect())
+            })
+            .collect();
+        ParseErrorReport {
+            line_map,
+            errs: self.errs,
+        }
     }
 }
 
