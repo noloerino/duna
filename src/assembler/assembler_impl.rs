@@ -1,3 +1,4 @@
+use super::lexer::Location;
 use super::linker::FileId;
 use super::parse_error::{ParseError, ParseErrorReporter};
 use super::parser::LabelRef;
@@ -122,8 +123,8 @@ pub struct UnlinkedProgram<T: MachineDataWidth> {
     // TODO put labels in sections
     /// Maps index of an instruction to the label it needs.
     pub(super) needed_labels: HashMap<usize, LabelRef>,
-    /// Maps global labels to the index of the insts that define them
-    pub(super) defined_global_labels: HashMap<Label, usize>,
+    /// Maps global labels to its location, as well as the index of the insts that define them
+    pub(super) defined_global_labels: HashMap<Label, (Location, usize)>,
     pub(super) sections: SectionStore,
 }
 
@@ -139,13 +140,18 @@ impl UnlinkedProgram<Width32b> {
         declared_globals: HashSet<String>,
     ) -> (UnlinkedProgram<Width32b>, ParseErrorReporter) {
         let mut reporter = ParseErrorReporter::new();
-        let local_labels: HashMap<Label, usize> = insts
-            .iter()
-            .enumerate()
-            .filter_map(|(i, (_, partial_inst))| {
-                partial_inst.label.as_ref().map(|label| (label.clone(), i))
-            })
-            .collect();
+        let mut local_labels: HashMap<Label, (Location, usize)> = Default::default();
+        for (i, (_, partial_inst)) in insts.iter().enumerate() {
+            if let Some(label_def) = &partial_inst.label {
+                let key = label_def.name.clone();
+                if local_labels.contains_key(&key) {
+                    // If already defined, don't touch the original def
+                    reporter.add_error(ParseError::redefined_label(label_def));
+                } else {
+                    local_labels.insert(label_def.name.clone(), (label_def.location, i));
+                }
+            }
+        }
         let all_needed_labels: HashMap<usize, LabelRef> = insts
             .iter()
             .enumerate()
@@ -153,7 +159,7 @@ impl UnlinkedProgram<Width32b> {
                 Some((i, partial_inst.get_needed_label()?.clone()))
             })
             .collect();
-        let defined_global_labels: HashMap<Label, usize> = local_labels
+        let defined_global_labels: HashMap<Label, (Location, usize)> = local_labels
             .iter()
             .filter_map(|(label, index)| {
                 if declared_globals.contains(label) {
@@ -166,7 +172,7 @@ impl UnlinkedProgram<Width32b> {
         // map of labels after resolving local ones
         let mut needed_labels = HashMap::new();
         for (inst_index, label) in all_needed_labels.into_iter() {
-            if let Some(&tgt_index) = local_labels.get(&label.target) {
+            if let Some(&(_, tgt_index)) = local_labels.get(&label.target) {
                 // Figure out how many instructions we need to jump
                 let inst_distance = (tgt_index as isize) - (inst_index as isize);
                 let byte_distance = (inst_distance * 4) as i64;

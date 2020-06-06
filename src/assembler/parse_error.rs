@@ -1,6 +1,6 @@
 use super::lexer::{ImmRenderType, Location, TokenType};
 use super::linker::{FileData, FileMap};
-use super::parser::LabelRef;
+use super::parser::{LabelDef, LabelRef};
 use std::fmt;
 
 pub struct ParseErrorReport {
@@ -231,12 +231,16 @@ impl fmt::Display for ParseErrorType {
             // TODO hint at .globl
             UndeclaredLabelRef(label) => write!(
                 f,
-                "label {} was neither defined locally nor declared global",
+                "label '{}' was neither defined locally nor declared global",
                 label
             ),
             // TODO hint at previous definition
-            RedefinedLabelRef(label) => write!(f, "multiple definitions found for label {}", label),
-            UndefinedLabelRef(label) => write!(f, "label {} was declared but never defined", label),
+            RedefinedLabelRef(label) => {
+                write!(f, "multiple definitions found for label '{}'", label)
+            }
+            UndefinedLabelRef(label) => {
+                write!(f, "label '{}' was declared but never defined", label)
+            }
         }
     }
 }
@@ -386,10 +390,10 @@ impl ParseError {
         }
     }
 
-    pub fn redefined_label(label: &LabelRef) -> Self {
+    pub fn redefined_label(label: &LabelDef) -> Self {
         ParseError {
             errloc: ErrMetadata::new(&label.location),
-            tpe: ParseErrorType::RedefinedLabelRef(label.target.clone()),
+            tpe: ParseErrorType::RedefinedLabelRef(label.name.clone()),
         }
     }
 

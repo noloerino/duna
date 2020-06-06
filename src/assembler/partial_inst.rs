@@ -1,4 +1,4 @@
-use super::parser::{Label, LabelRef};
+use super::parser::{LabelDef, LabelRef};
 use crate::instruction::ConcreteInst;
 use crate::program_state::{IRegister, MachineDataWidth};
 
@@ -46,7 +46,7 @@ pub(crate) enum PartialInstType<T: MachineDataWidth> {
 pub struct PartialInst<T: MachineDataWidth> {
     pub(crate) tpe: PartialInstType<T>,
     /// A label pointing to this instructions.
-    pub label: Option<Label>,
+    pub label: Option<LabelDef>,
 }
 
 impl<T: MachineDataWidth> PartialInst<T> {
@@ -102,7 +102,7 @@ impl<T: MachineDataWidth> PartialInst<T> {
     }
 
     /// Attaches a label to this instruction. Panics if there's already a label.
-    pub fn with_label(self, label: Label) -> PartialInst<T> {
+    pub fn with_label(self, label: LabelDef) -> PartialInst<T> {
         match self.label {
             None => PartialInst {
                 tpe: self.tpe,

@@ -1,19 +1,35 @@
-use duna::assembler::Linker;
+use duna::assembler::{Linker, ParseErrorReport};
 use duna::program_state::{RiscVProgram, Width32b};
 use std::path::Path;
 
+fn get_full_test_path(relative_path: &str) -> String {
+    Path::new("tests/asm_files")
+        .join(relative_path)
+        .to_str()
+        .unwrap()
+        .to_string()
+}
+
 fn program_from_file(filename: &str) -> RiscVProgram<Width32b> {
-    let program = Linker::with_main(
-        Path::new("tests/asm_files")
-            .join(filename)
-            .to_str()
-            .unwrap(),
-    )
-    .link()
-    .unwrap();
+    let program = Linker::with_main(&get_full_test_path(filename))
+        .link()
+        .unwrap();
     // stdout is suppressed unless a test fails
     program.dump_insts();
     program
+}
+
+fn err_report_from_files(main_filename: &str, others: Vec<&str>) -> ParseErrorReport {
+    let mut linker = Linker::with_main(&get_full_test_path(main_filename));
+    for file in others {
+        linker = linker.with_file(&get_full_test_path(file));
+    }
+    let report = linker
+        .link()
+        .err() // needed because RiscVProgram is not Debug
+        .expect("linker did not error when it should have");
+    report.report();
+    report
 }
 
 /// Runs a test that checks the value left in register a0 after running the program.
@@ -99,20 +115,29 @@ fn test_global_link() {
 #[test]
 /// Tests reporting errors in multiple linked files.
 fn test_link_multi_err() {
-    let report = Linker::with_main("tests/asm_files/parse_err_1.s")
-        .with_file("tests/asm_files/parse_err_2.s")
-        .link()
-        .err() // needed because RiscVProgram is not Debug
-        .expect("linker did not error when it should have");
+    let report = err_report_from_files("parse_err_0.s", vec!["parse_err_1.s"]);
     let errs = report.get_errs();
-    report.report();
     assert_eq!(errs.len(), 2);
     let report_string = format!("{:?}", report);
-    assert!(report_string.contains("parse_err_1.s"));
+    assert!(report_string.contains("parse_err_0.s"));
     // check contents of errant line of first file
     assert!(report_string.contains("addi"));
-    assert!(report_string.contains("parse_err_2.s"));
+    assert!(report_string.contains("parse_err_1.s"));
     // check contents of errant line of first file
     assert!(report_string.contains("jal unknown"));
-    report.report();
+}
+
+#[test]
+/// Tests that a redefined label gets reported.
+fn test_redefined_label() {
+    let report = err_report_from_files("redefined_label_0.s", vec!["redefined_label_1.s"]);
+    let errs = report.get_errs();
+    assert_eq!(errs.len(), 2);
+    let report_string = format!("{:?}", report);
+    // ensure that the error occurred on the second definition of the local label
+    assert!(report_string.contains("redefined_label_0.s:3:0"));
+    assert!(report_string.contains("bad_label"));
+    // ensure that the error occurred on the second definition
+    assert!(report_string.contains("redefined_label_1.s:3:0"));
+    assert!(report_string.contains("end"));
 }

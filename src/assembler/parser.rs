@@ -27,6 +27,20 @@ impl LabelRef {
     }
 }
 
+/// Represents a definition of a label in a program.
+#[derive(Eq, PartialEq, Clone, Debug)]
+pub struct LabelDef {
+    pub name: Label,
+    /// The location at which the definition is made occurs.
+    pub location: Location,
+}
+
+impl LabelDef {
+    fn new(name: Label, location: Location) -> LabelDef {
+        LabelDef { name, location }
+    }
+}
+
 type ParsedInstStream<T> = Vec<PartialInst<T>>;
 type LineParseResult<T> = Result<ParsedInstStream<T>, ParseError>;
 pub struct ParseResult<T: MachineDataWidth> {
@@ -190,7 +204,7 @@ impl<'a> RiscVParser<'a, Width32b> {
 
     fn parse(mut self) -> ParseResult<Width32b> {
         let mut insts = Vec::<PartialInst<Width32b>>::new();
-        let mut last_label: Option<Label> = None;
+        let mut last_label: Option<LabelDef> = None;
         let parser_data = &self.parser_data;
         for line in self.lines {
             // line is an iterator over tokens
@@ -983,7 +997,7 @@ impl<'a> DirectiveParser<'a> {
 struct LineParser<'a, T: MachineDataWidth> {
     data: &'a ParserData<'a, T>,
     iter: TokenIter,
-    label: Option<Label>,
+    label: Option<LabelDef>,
     state: &'a mut ParseState,
 }
 
@@ -992,7 +1006,7 @@ impl<'a, T: MachineDataWidth> LineParser<'a, T> {
     fn new(
         data: &'a ParserData<T>,
         tokens: TokenStream,
-        maybe_label: &'a Option<Label>,
+        maybe_label: &'a Option<LabelDef>,
         state: &'a mut ParseState,
     ) -> LineParser<'a, T> {
         let mut iter = tokens.into_iter().peekable();
@@ -1003,7 +1017,7 @@ impl<'a, T: MachineDataWidth> LineParser<'a, T> {
             None => {
                 if let Some(first_tok) = iter.peek() {
                     if let TokenType::LabelDef(label_name) = &first_tok.data {
-                        Some(label_name.to_string())
+                        Some(LabelDef::new(label_name.to_string(), first_tok.location))
                     } else {
                         None
                     }
@@ -1025,7 +1039,7 @@ impl<'a, T: MachineDataWidth> LineParser<'a, T> {
         }
     }
 
-    fn parse(mut self) -> (Option<Label>, LineParseResult<T>) {
+    fn parse(mut self) -> (Option<LabelDef>, LineParseResult<T>) {
         (
             self.label,
             if let Some(head_tok) = self.iter.next() {
@@ -1147,7 +1161,17 @@ mod tests {
         ];
         assert_eq!(insts.len(), 3);
         assert_eq!(insts[0].label, None);
-        assert_eq!(insts[1].label, Some("l1".to_string()));
+        assert_eq!(
+            insts[1].label,
+            Some(LabelDef::new(
+                "l1".to_string(),
+                Location {
+                    file_id: 0,
+                    lineno: 1,
+                    offs: 0
+                }
+            ))
+        );
         assert_eq!(insts[2].label, None);
         // TODO handle label at end
         // assert_eq!(insts[3].label, Some("l2".to_string()));

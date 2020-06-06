@@ -1,7 +1,6 @@
 use super::assembler_impl::{Assembler, SectionStore, UnlinkedProgram};
-use super::lexer::Location;
 use super::parse_error::{ParseError, ParseErrorReport, ParseErrorReporter};
-use super::parser::{Label, LabelRef};
+use super::parser::{Label, LabelDef};
 use crate::program_state::{RiscVProgram, Width32b};
 use std::collections::HashMap;
 use std::fs;
@@ -126,18 +125,12 @@ impl Linker {
             for (idx, label) in new_needed_labels.into_iter() {
                 needed_labels.insert(idx + prev_inst_size, label.target);
             }
-            for (label, idx) in new_global_labels {
+            for (label, (new_label_loc, idx)) in new_global_labels {
                 // Check for previous definition
-                if let Some(_prev_idx) = defined_global_labels.get(&label) {
-                    // let (decl_file_id, _) = &all_insts[*prev_idx];
-                    // TODO get location of this label
-                    reporter.add_error(ParseError::redefined_label(&LabelRef {
-                        target: label.clone(),
-                        location: Location {
-                            file_id: 0,
-                            lineno: 0,
-                            offs: 0,
-                        },
+                if defined_global_labels.contains_key(&label) {
+                    reporter.add_error(ParseError::redefined_label(&LabelDef {
+                        name: label.clone(),
+                        location: new_label_loc,
                     }))
                 }
                 defined_global_labels.insert(label.clone(), idx + prev_inst_size);
