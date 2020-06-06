@@ -1,4 +1,4 @@
-use super::lexer::Location;
+use super::lexer::{LineContents, Location};
 use super::parse_error::{ErrLocation, ParseError, ParseErrorReport, ParseErrorReporter};
 use super::parser::{Label, ParseResult, RiscVParser};
 use super::partial_inst::{PartialInst, PartialInstType};
@@ -21,12 +21,20 @@ impl Assembler {
         parse_result: ParseResult<Width32b>,
     ) -> Result<UnlinkedProgram<Width32b>, ParseErrorReport> {
         let ParseResult {
+            file_name,
             insts,
             sections,
             declared_globals,
             mut report,
         } = parse_result;
-        let (program, additional_report) = UnlinkedProgram::new(insts, sections, declared_globals);
+        let (program, additional_report) = UnlinkedProgram::new(
+            insts
+                .into_iter()
+                .map(|inst| (file_name.clone(), inst))
+                .collect(),
+            sections,
+            declared_globals,
+        );
         report.merge(additional_report);
         if report.is_empty() {
             Ok(program)
@@ -109,9 +117,9 @@ impl Default for SectionStore {
 /// The parser must perform two passes in order to locate/process labels.
 /// This struct encodes data for a program that still needs to be passed to the assembler.
 pub struct UnlinkedProgram<T: MachineDataWidth> {
-    /// The list of instructions, which will be placed in the text segment in the order in which
-    /// they appear.
-    pub(super) insts: Vec<PartialInst<T>>,
+    /// A list of (source file, instruction), which will be placed in the text segment in the order
+    /// in which they appear.
+    pub(super) insts: Vec<(String, PartialInst<T>)>,
     // a potential optimization is to store generated labels and needed labels in independent vecs
     // instead of a hashmap, another vec can be used to lookup the corresponding PartialInst
     // TODO put labels in sections
@@ -123,13 +131,13 @@ pub struct UnlinkedProgram<T: MachineDataWidth> {
 }
 
 impl UnlinkedProgram<Width32b> {
-    /// Constructs an instance of an UnlinkedProgram from an instruction stream.
+    /// Constructs an instance of an UnlinkedProgram from a stream of (file name, instruction).
     /// Also attempts to match needed labels to locally defined labels, and populates the needed
     /// and global symbol tables.
     /// A ParseErrorReport is also returned to allow the linker to proceed with partial information
     /// in the event of a non-fatal error in this program.
     pub(super) fn new(
-        mut insts: Vec<PartialInst<Width32b>>,
+        mut insts: Vec<(String, PartialInst<Width32b>)>,
         sections: SectionStore,
         declared_globals: HashSet<String>,
     ) -> (UnlinkedProgram<Width32b>, ParseErrorReport) {
@@ -137,14 +145,16 @@ impl UnlinkedProgram<Width32b> {
         let local_labels: HashMap<Label, usize> = insts
             .iter()
             .enumerate()
-            .filter_map(|(i, partial_inst)| {
+            .filter_map(|(i, (_, partial_inst))| {
                 partial_inst.label.as_ref().map(|label| (label.clone(), i))
             })
             .collect();
         let all_needed_labels: HashMap<usize, Label> = insts
             .iter()
             .enumerate()
-            .filter_map(|(i, partial_inst)| (Some((i, partial_inst.get_needed_label()?.clone()))))
+            .filter_map(|(i, (_, partial_inst))| {
+                Some((i, partial_inst.get_needed_label()?.clone()))
+            })
             .collect();
         let defined_global_labels: HashMap<Label, usize> = local_labels
             .iter()
@@ -163,23 +173,26 @@ impl UnlinkedProgram<Width32b> {
                 // Figure out how many instructions we need to jump
                 let inst_distance = (tgt_index as isize) - (inst_index as isize);
                 let byte_distance = (inst_distance * 4) as i64;
-                if let PartialInstType::NeedsLabel(inst) = &insts[inst_index].tpe {
-                    insts[inst_index] =
-                        PartialInst::new_complete(inst.fulfill_label(byte_distance.into()))
+                let (file_name, old_inst) = &insts[inst_index];
+                if let PartialInstType::NeedsLabel(inst) = &old_inst.tpe {
+                    insts[inst_index] = (
+                        file_name.to_string(),
+                        PartialInst::new_complete(inst.fulfill_label(byte_distance.into())),
+                    )
                 } else {
                     panic!("cannot fulfill label for complete instruction")
                 };
             } else if declared_globals.contains(&label) {
                 needed_labels.insert(inst_index, label);
             } else {
-                // let location = insts[inst_index].location;
+                let (file_name, _) = &insts[inst_index];
                 let location = ErrLocation::new(
                     &Location {
-                        file_name: "TODO".to_string(),
+                        file_name: file_name.to_string(),
                         lineno: 0,
                         offs: 0,
                     },
-                    "<not found>",
+                    &LineContents::new(&file_name, "<contents not found>"),
                 );
                 reporter.add_error(ParseError::undeclared_label(location, &label));
             }
@@ -200,13 +213,26 @@ impl UnlinkedProgram<Width32b> {
         let insts = self
             .insts
             .into_iter()
-            .filter_map(|partial_inst| match partial_inst.into_concrete_inst() {
-                Ok(concrete_inst) => Some(concrete_inst),
-                Err(err) => {
-                    reporter.add_error(err);
-                    None
-                }
-            })
+            .filter_map(
+                |(file_name, partial_inst)| match partial_inst.into_concrete_inst() {
+                    Ok(concrete_inst) => Some(concrete_inst),
+                    Err(needed_label) => {
+                        reporter.add_error(ParseError::undefined_label(
+                            // TODO
+                            ErrLocation::new(
+                                &Location {
+                                    file_name: file_name.clone(),
+                                    lineno: 0,
+                                    offs: 0,
+                                },
+                                &LineContents::new(&file_name, "TODO"),
+                            ),
+                            &needed_label,
+                        ));
+                        None
+                    }
+                },
+            )
             .collect();
         let report = reporter.into_report();
         if report.is_empty() {
@@ -222,7 +248,7 @@ impl UnlinkedProgram<Width32b> {
         RiscVProgram::new(
             self.insts
                 .into_iter()
-                .map(|partial_inst| partial_inst.try_into_concrete_inst())
+                .map(|(_, partial_inst)| partial_inst.try_into_concrete_inst())
                 .collect(),
             self.sections,
         )

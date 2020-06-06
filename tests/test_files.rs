@@ -106,8 +106,8 @@ fn test_link_multi_err() {
     let errs = report.get_errs();
     report.report();
     assert_eq!(errs.len(), 2);
-    // checks ordering
-    assert!(format!("{}", errs[0]).contains("parse_err_1.s"));
-    assert!(format!("{}", errs[1]).contains("parse_err_2.s"));
+    let report_string = format!("{:?}", report);
+    assert!(report_string.contains("parse_err_1.s"));
+    assert!(report_string.contains("parse_err_2.s"));
     report.report();
 }

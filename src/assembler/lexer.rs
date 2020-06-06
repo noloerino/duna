@@ -6,8 +6,25 @@ use std::iter::Enumerate;
 use std::iter::Peekable;
 use std::str::Chars;
 
+/// Represents the contents of a line in a file. Contains the line and the file name.
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+pub struct LineContents {
+    pub file_name: String,
+    pub content: String,
+}
+
+impl LineContents {
+    pub fn new(source_file_name: &str, content: &str) -> LineContents {
+        LineContents {
+            file_name: source_file_name.to_string(),
+            content: content.to_string(),
+        }
+    }
+}
+
 pub struct LexResult<'a> {
     pub lines: LineTokenStream,
+    pub file_name: String,
     pub contents: Cow<'a, str>,
     pub reporter: ParseErrorReporter,
 }
@@ -17,7 +34,7 @@ pub type LineNo = usize;
 // The offset of a token within a line.
 pub type LineOffs = usize;
 
-#[derive(Clone, Eq, PartialEq, PartialOrd, Debug)]
+#[derive(Clone, Eq, PartialEq, PartialOrd, Hash, Debug)]
 pub struct Location {
     // line_contents: &'a str,
     pub file_name: String,
@@ -132,10 +149,9 @@ fn is_imm_start(c: char) -> bool {
 }
 
 struct LineLexer<'a> {
-    file_name: &'a str,
+    line_contents: LineContents,
     lineno: LineNo,
     iter: LineIter<'a>,
-    line_contents: String,
     reporter: &'a mut ParseErrorReporter,
 }
 
@@ -376,18 +392,16 @@ impl<'a> LineLexer<'a> {
     }
 
     fn new(
-        file_name: &'a str,
+        line_contents: LineContents,
+        content: &'a str,
         lineno: LineNo,
-        line: &'a str,
         reporter: &'a mut ParseErrorReporter,
-        line_contents: String,
     ) -> LineLexer<'a> {
         LineLexer {
-            file_name,
+            line_contents: line_contents,
             lineno,
-            iter: line.chars().enumerate().peekable(),
+            iter: content.chars().enumerate().peekable(),
             reporter,
-            line_contents,
         }
     }
 
@@ -399,7 +413,7 @@ impl<'a> LineLexer<'a> {
             let state = LexState {
                 head: c,
                 location: Location {
-                    file_name: self.file_name.to_string(),
+                    file_name: self.line_contents.file_name.to_string(),
                     lineno,
                     offs: start_offs,
                 },
@@ -426,7 +440,7 @@ impl<'a> LineLexer<'a> {
             match maybe_tok {
                 Ok(tok) => toks.push(Token {
                     location: Location {
-                        file_name: self.file_name.to_string(),
+                        file_name: self.line_contents.file_name.to_string(),
                         lineno,
                         offs: start_offs,
                     },
@@ -485,16 +499,16 @@ impl<'a> Lexer<'a> {
         for (lineno, line) in self.contents.lines().enumerate() {
             toks.push(
                 LineLexer::new(
-                    &self.file_name,
-                    lineno,
+                    LineContents::new(&self.file_name, line),
                     line,
+                    lineno,
                     &mut reporter,
-                    line.to_string(),
                 )
                 .lex(),
             );
         }
         LexResult {
+            file_name: self.file_name,
             lines: toks,
             contents: self.contents,
             reporter,
@@ -517,11 +531,10 @@ mod tests {
     ) -> (LineLexer<'a>, LexState) {
         let head = line.chars().next().unwrap();
         let lexer = LineLexer::new(
-            "test file",
-            0,
+            LineContents::new("test file", line),
             line.get(1..).unwrap(),
+            0,
             reporter,
-            "".to_string(),
         );
         (
             lexer,

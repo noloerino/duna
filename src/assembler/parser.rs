@@ -16,6 +16,7 @@ pub type Label = String;
 type ParsedInstStream<T> = Vec<PartialInst<T>>;
 type LineParseResult<T> = Result<ParsedInstStream<T>, ParseError>;
 pub struct ParseResult<T: MachineDataWidth> {
+    pub file_name: String,
     pub insts: ParsedInstStream<T>,
     pub sections: SectionStore,
     pub declared_globals: HashSet<String>,
@@ -76,6 +77,7 @@ struct ParserData<'a, T: MachineDataWidth> {
 
 pub struct RiscVParser<'a, T: MachineDataWidth> {
     parser_data: ParserData<'a, T>,
+    file_name: String,
     lines: LineTokenStream,
     contents: Cow<'a, str>,
     reporter: ParseErrorReporter,
@@ -169,6 +171,7 @@ impl RiscVParser<'_, Width32b> {
                 inst_expansion_table: &RV32_INST_EXPANSION_TABLE,
                 reg_expansion_table: &REG_EXPANSION_TABLE,
             },
+            file_name: lex_result.file_name,
             lines: lex_result.lines,
             reporter: lex_result.reporter,
             state: ParseState::new(),
@@ -182,12 +185,14 @@ impl RiscVParser<'_, Width32b> {
         let mut last_label: Option<Label> = None;
         let parser_data = &self.parser_data;
         for (line, contents) in self.lines.into_iter().zip(self.contents.lines()) {
+            // line is an iterator over tokens
+            // contents is the raw string
             let (found_label, parse_result) = LineParser::new(
                 parser_data,
                 line,
                 &last_label,
                 &mut self.state,
-                contents.to_string(),
+                LineContents::new(&self.file_name, contents),
             )
             .parse();
             match parse_result {
@@ -209,6 +214,7 @@ impl RiscVParser<'_, Width32b> {
             }
         }
         ParseResult {
+            file_name: self.file_name,
             insts,
             sections: self.state.sections,
             declared_globals: self.state.declared_globals,
@@ -249,7 +255,7 @@ fn ok_wrap_expanded<T: MachineDataWidth>(inst: Vec<ConcreteInst<T>>) -> LinePars
 /// Parses an immediate that is required to be at most n bits.
 /// If the provided immediate is a negative, then the upper (64 - n + 1) bits must all be 1.
 /// An i64 is returned, which should then be converted into a RegData type by a parser.
-fn try_parse_imm(line_contents: &str, n: u8, token: Token) -> Result<i64, ParseError> {
+fn try_parse_imm(line_contents: &LineContents, n: u8, token: Token) -> Result<i64, ParseError> {
     match token.data {
         // Check lower n bits
         // We give a pass to negative numbers with high bits set
@@ -290,7 +296,7 @@ fn try_parse_imm(line_contents: &str, n: u8, token: Token) -> Result<i64, ParseE
 /// free to consume the iterator since more tokens would be an error regardless.
 fn check_no_more_args(
     iter: &mut TokenIter,
-    line_contents: &str,
+    line_contents: &LineContents,
     name: &str,
     needed: u8,
 ) -> Result<(), ParseError> {
@@ -313,7 +319,7 @@ fn check_no_more_args(
 /// Attempts to advance the next token of the iterator, returning a ParseError if there are none.
 fn try_next_tok(
     iter: &mut TokenIter,
-    line_contents: &str,
+    line_contents: &LineContents,
     head_loc: &Location,
     name: &str,
     needed_args: u8,
@@ -336,7 +342,7 @@ fn try_next_tok(
 /// This consumes until a comment token or the end of the iterator is reached.
 fn consume_unbounded_commasep_args(
     iter: &mut TokenIter,
-    line_contents: &str,
+    line_contents: &LineContents,
 ) -> Result<Vec<Token>, ParseError> {
     use TokenType::*;
     let mut toks = Vec::new();
@@ -376,7 +382,7 @@ struct InstParser<'a, T: MachineDataWidth> {
     iter: TokenIter,
     head_loc: &'a Location,
     inst_name: &'a str,
-    line_contents: String,
+    line_contents: LineContents,
 }
 
 impl<'a, T: MachineDataWidth> InstParser<'a, T> {
@@ -385,7 +391,7 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
         iter: TokenIter,
         head_loc: &'a Location,
         inst_name: &'a str,
-        line_contents: String,
+        line_contents: LineContents,
     ) -> InstParser<'a, T> {
         InstParser {
             data,
@@ -753,7 +759,7 @@ struct DirectiveParser<'a> {
     state: &'a mut ParseState,
     head_loc: &'a Location,
     head_directive: &'a str,
-    line_contents: String,
+    line_contents: LineContents,
 }
 
 type DirectiveParseResult = Result<(), ParseError>;
@@ -764,7 +770,7 @@ impl<'a> DirectiveParser<'a> {
         state: &'a mut ParseState,
         head_loc: &'a Location,
         head_directive: &'a str,
-        line_contents: String,
+        line_contents: LineContents,
     ) -> DirectiveParser<'a> {
         DirectiveParser {
             iter,
@@ -996,7 +1002,7 @@ struct LineParser<'a, T: MachineDataWidth> {
     iter: TokenIter,
     label: Option<Label>,
     state: &'a mut ParseState,
-    line_contents: String,
+    line_contents: LineContents,
 }
 
 impl<'a, T: MachineDataWidth> LineParser<'a, T> {
@@ -1006,7 +1012,7 @@ impl<'a, T: MachineDataWidth> LineParser<'a, T> {
         tokens: TokenStream,
         maybe_label: &'a Option<Label>,
         state: &'a mut ParseState,
-        line_contents: String,
+        line_contents: LineContents,
     ) -> LineParser<'a, T> {
         let mut iter = tokens.into_iter().peekable();
         let label_passed_in = maybe_label.is_some();

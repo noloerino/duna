@@ -120,23 +120,11 @@ impl<T: MachineDataWidth> PartialInst<T> {
         }
     }
 
-    pub fn into_concrete_inst(self) -> Result<ConcreteInst<T>, ParseError> {
+    /// Creates a concrete inst, or returns the needed label on error.
+    pub fn into_concrete_inst(self) -> Result<ConcreteInst<T>, String> {
         match self.tpe {
             PartialInstType::Complete(concrete_inst) => Ok(concrete_inst),
-            PartialInstType::NeedsLabel(NeedsLabel { needed_label, .. }) => Err(
-                // TODO make location available on label
-                ParseError::undefined_label(
-                    ErrLocation::new(
-                        &Location {
-                            file_name: "TODO".to_string(),
-                            lineno: 0,
-                            offs: 0,
-                        },
-                        "<not found>",
-                    ),
-                    &needed_label,
-                ),
-            ),
+            PartialInstType::NeedsLabel(NeedsLabel { needed_label, .. }) => Err(needed_label),
         }
     }
 

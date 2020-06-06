@@ -1,4 +1,4 @@
-use super::lexer::{ImmRenderType, Location, TokenType};
+use super::lexer::{ImmRenderType, LineContents, Location, TokenType};
 use std::fmt;
 
 pub struct ParseErrorReport {
@@ -38,7 +38,7 @@ impl fmt::Debug for ParseErrorReport {
             // TODO fix spacing if lineno is more than one digit
             writeln!(f, " --> {}:{}", file_name, err.errloc.location)?;
             writeln!(f, "  |")?;
-            writeln!(f, "{} | {}", lineno, err.errloc.line_contents)?;
+            writeln!(f, "{} | {}", lineno, err.errloc.line_contents.content)?;
             write!(f, "  |")?;
             // throw informational caret in
             // +1 because there's one space between the pipe and the string in the line above
@@ -219,22 +219,22 @@ impl fmt::Display for ParseErrorType {
     }
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(Eq, PartialEq, Hash, Debug)]
 pub struct ErrLocation {
     location: Location,
-    line_contents: String,
+    line_contents: LineContents,
 }
 
 impl ErrLocation {
-    pub fn new(location: &Location, line_contents: &str) -> ErrLocation {
+    pub fn new(location: &Location, line_contents: &LineContents) -> ErrLocation {
         ErrLocation {
             location: location.clone(),
-            line_contents: line_contents.to_string(),
+            line_contents: line_contents.clone(),
         }
     }
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(Eq, PartialEq, Debug)]
 pub struct ParseError {
     errloc: ErrLocation,
     tpe: ParseErrorType,

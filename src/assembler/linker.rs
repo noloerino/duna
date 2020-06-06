@@ -1,5 +1,5 @@
 use super::assembler_impl::{Assembler, UnlinkedProgram};
-use super::lexer::Location;
+use super::lexer::{LineContents, Location};
 use super::parse_error::{ErrLocation, ParseError, ParseErrorReport, ParseErrorReporter};
 use crate::program_state::{RiscVProgram, Width32b};
 
@@ -77,15 +77,17 @@ impl Linker {
                 needed_labels.insert(idx + prev_inst_size, label);
             }
             for (label, idx) in new_global_labels {
-                if defined_global_labels.contains_key(&label) {
+                // Check for previous definition
+                if let Some(prev_idx) = defined_global_labels.get(&label) {
+                    let (decl_file_name, _) = &all_insts[*prev_idx];
                     reporter.add_error(ParseError::redefined_label(
                         ErrLocation::new(
                             &Location {
-                                file_name: "TODO".to_string(),
+                                file_name: decl_file_name.to_string(),
                                 lineno: 0,
                                 offs: 0,
                             },
-                            "<not found>",
+                            &LineContents::new(&decl_file_name, "<not found>"),
                         ),
                         &label,
                     ))
