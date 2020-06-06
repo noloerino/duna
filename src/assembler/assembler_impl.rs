@@ -1,6 +1,6 @@
-use super::lexer::Location;
 use super::linker::FileId;
-use super::parse_error::{ErrMetadata, ParseError, ParseErrorReporter};
+use super::parse_error::{ParseError, ParseErrorReporter};
+use super::parser::LabelRef;
 use super::parser::{Label, ParseResult, RiscVParser};
 use super::partial_inst::{PartialInst, PartialInstType};
 use crate::program_state::{MachineDataWidth, RiscVProgram, Width32b};
@@ -120,8 +120,8 @@ pub struct UnlinkedProgram<T: MachineDataWidth> {
     // a potential optimization is to store generated labels and needed labels in independent vecs
     // instead of a hashmap, another vec can be used to lookup the corresponding PartialInst
     // TODO put labels in sections
-    /// Maps index of the insts that needs a label to the label it needs
-    pub(super) needed_labels: HashMap<usize, Label>,
+    /// Maps index of an instruction to the label it needs.
+    pub(super) needed_labels: HashMap<usize, LabelRef>,
     /// Maps global labels to the index of the insts that define them
     pub(super) defined_global_labels: HashMap<Label, usize>,
     pub(super) sections: SectionStore,
@@ -146,7 +146,7 @@ impl UnlinkedProgram<Width32b> {
                 partial_inst.label.as_ref().map(|label| (label.clone(), i))
             })
             .collect();
-        let all_needed_labels: HashMap<usize, Label> = insts
+        let all_needed_labels: HashMap<usize, LabelRef> = insts
             .iter()
             .enumerate()
             .filter_map(|(i, (_, partial_inst))| {
@@ -166,12 +166,12 @@ impl UnlinkedProgram<Width32b> {
         // map of labels after resolving local ones
         let mut needed_labels = HashMap::new();
         for (inst_index, label) in all_needed_labels.into_iter() {
-            if let Some(&tgt_index) = local_labels.get(&label) {
+            if let Some(&tgt_index) = local_labels.get(&label.target) {
                 // Figure out how many instructions we need to jump
                 let inst_distance = (tgt_index as isize) - (inst_index as isize);
                 let byte_distance = (inst_distance * 4) as i64;
                 let (file_id, old_inst) = &insts[inst_index];
-                if let PartialInstType::NeedsLabel(inst) = &old_inst.tpe {
+                if let PartialInstType::NeedsLabelRef(inst) = &old_inst.tpe {
                     insts[inst_index] = (
                         *file_id,
                         PartialInst::new_complete(inst.fulfill_label(byte_distance.into())),
@@ -179,17 +179,10 @@ impl UnlinkedProgram<Width32b> {
                 } else {
                     panic!("cannot fulfill label for complete instruction")
                 };
-            } else if declared_globals.contains(&label) {
+            } else if declared_globals.contains(&label.target) {
                 needed_labels.insert(inst_index, label);
             } else {
-                let (file_id, _) = &insts[inst_index];
-                // TODO get location of this label
-                let location = ErrMetadata::new(&Location {
-                    file_id: *file_id,
-                    lineno: 0,
-                    offs: 0,
-                });
-                reporter.add_error(ParseError::undeclared_label(location, &label));
+                reporter.add_error(ParseError::undeclared_label(&label));
             }
         }
         (
@@ -209,18 +202,10 @@ impl UnlinkedProgram<Width32b> {
             .insts
             .into_iter()
             .filter_map(
-                |(file_id, partial_inst)| match partial_inst.into_concrete_inst() {
+                |(_, partial_inst)| match partial_inst.into_concrete_inst() {
                     Ok(concrete_inst) => Some(concrete_inst),
                     Err(needed_label) => {
-                        reporter.add_error(ParseError::undefined_label(
-                            // TODO get location of this label
-                            ErrMetadata::new(&Location {
-                                file_id,
-                                lineno: 0,
-                                offs: 0,
-                            }),
-                            &needed_label,
-                        ));
+                        reporter.add_error(ParseError::undefined_label(&needed_label));
                         None
                     }
                 },

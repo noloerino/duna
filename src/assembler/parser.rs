@@ -14,17 +14,18 @@ use std::vec::IntoIter;
 pub type Label = String;
 
 /// Represents a reference to a label in a program, e.g. as the target of a jump.
+#[derive(Clone)]
 pub struct LabelRef {
     pub target: Label,
     /// The location at which the reference occurs.
     pub location: Location,
 }
 
-// impl Label {
-//     fn new(name: String, location: Location) -> Label {
-//         Label { name, location }
-//     }
-// }
+impl LabelRef {
+    fn new(target: Label, location: Location) -> LabelRef {
+        LabelRef { target, location }
+    }
+}
 
 type ParsedInstStream<T> = Vec<PartialInst<T>>;
 type LineParseResult<T> = Result<ParsedInstStream<T>, ParseError>;
@@ -233,9 +234,9 @@ struct MemArgs<T: RegSize> {
     imm: T,
 }
 
-enum ImmOrLabel<T: RegSize> {
+enum ImmOrLabelRef<T: RegSize> {
     Imm(T),
-    Label(Label),
+    LabelRef(LabelRef),
 }
 
 /// Convenience method to stuff a PartialInst into a Vec<PartialInst>
@@ -552,13 +553,16 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
         &self,
         max_imm_len: u8,
         token: Token,
-    ) -> Result<ImmOrLabel<T::RegData>, ParseError> {
+    ) -> Result<ImmOrLabelRef<T::RegData>, ParseError> {
         if let TokenType::Name(name) = &token.data {
             // label case
-            Ok(ImmOrLabel::Label(name.clone()))
+            Ok(ImmOrLabelRef::LabelRef(LabelRef::new(
+                name.clone(),
+                token.location,
+            )))
         } else {
             // imm case
-            Ok(ImmOrLabel::Imm(self.try_parse_imm(max_imm_len, token)?))
+            Ok(ImmOrLabelRef::Imm(self.try_parse_imm(max_imm_len, token)?))
         }
     }
 
@@ -609,7 +613,7 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
                 // Becuse branches actually chop off the LSB, we can take up to 13b
                 let last_arg = self.try_parse_imm_or_label_ref(13, args.remove(0))?;
                 match last_arg {
-                    ImmOrLabel::Imm(imm) => {
+                    ImmOrLabelRef::Imm(imm) => {
                         if u8::from(imm.get_byte(0)) & 1 > 0 {
                             Err(ParseError::generic(
                                 ErrMetadata::new(&self.head_loc),
@@ -623,9 +627,9 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
                             ok_wrap_concr(inst_new(rs1, rs2, imm))
                         }
                     }
-                    ImmOrLabel::Label(tgt_label) => ok_vec(PartialInst::new_two_reg_needs_label(
-                        *inst_new, rs1, rs2, tgt_label,
-                    )),
+                    ImmOrLabelRef::LabelRef(tgt_label) => ok_vec(
+                        PartialInst::new_two_reg_needs_label(*inst_new, rs1, rs2, tgt_label),
+                    ),
                 }
             }
             Jal => {
@@ -636,8 +640,8 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
                         // "jal label"
                         let last_arg = self.try_parse_imm_or_label_ref(20, args.remove(0))?;
                         match last_arg {
-                            ImmOrLabel::Imm(imm) => ok_wrap_concr(JalPseudo::expand(imm)),
-                            ImmOrLabel::Label(tgt_label) => ok_vec(
+                            ImmOrLabelRef::Imm(imm) => ok_wrap_concr(JalPseudo::expand(imm)),
+                            ImmOrLabelRef::LabelRef(tgt_label) => ok_vec(
                                 PartialInst::new_no_reg_needs_label(JalPseudo::expand, tgt_label),
                             ),
                         }
@@ -648,8 +652,8 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
                         // J-type has 20-bit immediate
                         let last_arg = self.try_parse_imm_or_label_ref(20, args.remove(0))?;
                         match last_arg {
-                            ImmOrLabel::Imm(imm) => ok_wrap_concr(isa::Jal::new(rd, imm)),
-                            ImmOrLabel::Label(tgt_label) => ok_vec(
+                            ImmOrLabelRef::Imm(imm) => ok_wrap_concr(isa::Jal::new(rd, imm)),
+                            ImmOrLabelRef::LabelRef(tgt_label) => ok_vec(
                                 PartialInst::new_one_reg_needs_label(isa::Jal::new, rd, tgt_label),
                             ),
                         }
@@ -715,8 +719,8 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
                 // j expands to J-type, so 20-bit immediate
                 let last_arg = self.try_parse_imm_or_label_ref(20, args.remove(0))?;
                 match last_arg {
-                    ImmOrLabel::Imm(imm) => ok_wrap_concr(inst_expand(imm)),
-                    ImmOrLabel::Label(tgt_label) => {
+                    ImmOrLabelRef::Imm(imm) => ok_wrap_concr(inst_expand(imm)),
+                    ImmOrLabelRef::LabelRef(tgt_label) => {
                         ok_vec(PartialInst::new_no_reg_needs_label(*inst_expand, tgt_label))
                     }
                 }
@@ -1160,8 +1164,14 @@ mod tests {
     fn test_needed_labels() {
         let insts = parse_and_lex("bne x0, x0, l1\nl1: jal ra, end\nend: nop");
         assert_eq!(insts.len(), 3);
-        assert_eq!(insts[0].get_needed_label(), Some(&"l1".to_string()));
-        assert_eq!(insts[1].get_needed_label(), Some(&"end".to_string()));
+        assert_eq!(
+            insts[0].get_needed_label().unwrap().target,
+            "l1".to_string()
+        );
+        assert_eq!(
+            insts[1].get_needed_label().unwrap().target,
+            "end".to_string()
+        );
     }
 
     #[test]

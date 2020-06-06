@@ -40,7 +40,7 @@ impl<T: MachineDataWidth> NeedsLabel<T> {
 
 pub(crate) enum PartialInstType<T: MachineDataWidth> {
     Complete(ConcreteInst<T>),
-    NeedsLabel(NeedsLabel<T>),
+    NeedsLabelRef(NeedsLabel<T>),
 }
 
 pub struct PartialInst<T: MachineDataWidth> {
@@ -59,7 +59,7 @@ impl<T: MachineDataWidth> PartialInst<T> {
 
     fn new_needs_label(data: NeedsLabel<T>) -> PartialInst<T> {
         PartialInst {
-            tpe: PartialInstType::NeedsLabel(data),
+            tpe: PartialInstType::NeedsLabelRef(data),
             label: None,
         }
     }
@@ -114,18 +114,16 @@ impl<T: MachineDataWidth> PartialInst<T> {
 
     pub fn get_needed_label(&self) -> Option<&LabelRef> {
         match &self.tpe {
-            PartialInstType::NeedsLabel(NeedsLabel { needed_label, .. }) => Some(&needed_label),
+            PartialInstType::NeedsLabelRef(NeedsLabel { needed_label, .. }) => Some(&needed_label),
             PartialInstType::Complete(..) => None,
         }
     }
 
     /// Creates a concrete inst, or returns the needed label on error.
-    pub fn into_concrete_inst(self) -> Result<ConcreteInst<T>, String> {
+    pub fn into_concrete_inst(self) -> Result<ConcreteInst<T>, LabelRef> {
         match self.tpe {
             PartialInstType::Complete(concrete_inst) => Ok(concrete_inst),
-            PartialInstType::NeedsLabel(NeedsLabel { needed_label, .. }) => {
-                Err(needed_label.target)
-            }
+            PartialInstType::NeedsLabelRef(NeedsLabel { needed_label, .. }) => Err(needed_label),
         }
     }
 
@@ -133,7 +131,7 @@ impl<T: MachineDataWidth> PartialInst<T> {
     pub fn try_into_concrete_inst(self) -> ConcreteInst<T> {
         match self.tpe {
             PartialInstType::Complete(concrete_inst) => concrete_inst,
-            PartialInstType::NeedsLabel(NeedsLabel { needed_label, .. }) => panic!(
+            PartialInstType::NeedsLabelRef(NeedsLabel { needed_label, .. }) => panic!(
                 "Failed to coerce into concrete instruction (missing label {})",
                 needed_label.target
             ),

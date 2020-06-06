@@ -109,6 +109,10 @@ fn test_link_multi_err() {
     assert_eq!(errs.len(), 2);
     let report_string = format!("{:?}", report);
     assert!(report_string.contains("parse_err_1.s"));
+    // check contents of errant line of first file
+    assert!(report_string.contains("addi"));
     assert!(report_string.contains("parse_err_2.s"));
+    // check contents of errant line of first file
+    assert!(report_string.contains("jal unknown"));
     report.report();
 }

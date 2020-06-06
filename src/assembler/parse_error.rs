@@ -1,5 +1,6 @@
 use super::lexer::{ImmRenderType, Location, TokenType};
 use super::linker::{FileData, FileMap};
+use super::parser::LabelRef;
 use std::fmt;
 
 pub struct ParseErrorReport {
@@ -155,11 +156,11 @@ enum ParseErrorType {
     UnsupportedDirective(String),
     /// A label was referenced without declaration in its file, meaning label has no local definition
     /// and no .global declaration.
-    UndeclaredLabel(String),
+    UndeclaredLabelRef(String),
     /// A label was defined in multiple locations.
-    RedefinedLabel(String),
+    RedefinedLabelRef(String),
     /// A referenced label was not defined by any file.
-    UndefinedLabel(String),
+    UndefinedLabelRef(String),
 }
 
 impl fmt::Display for ParseErrorType {
@@ -228,14 +229,14 @@ impl fmt::Display for ParseErrorType {
             UnclosedParen(got) => write!(f, "expected closing parentheses, got {}", got),
             UnsupportedDirective(got) => write!(f, "unsupported assembler directive {}", got),
             // TODO hint at .globl
-            UndeclaredLabel(label) => write!(
+            UndeclaredLabelRef(label) => write!(
                 f,
                 "label {} was neither defined locally nor declared global",
                 label
             ),
             // TODO hint at previous definition
-            RedefinedLabel(label) => write!(f, "multiple definitions found for label {}", label),
-            UndefinedLabel(label) => write!(f, "label {} was declared but never defined", label),
+            RedefinedLabelRef(label) => write!(f, "multiple definitions found for label {}", label),
+            UndefinedLabelRef(label) => write!(f, "label {} was declared but never defined", label),
         }
     }
 }
@@ -378,16 +379,25 @@ impl ParseError {
 
 // functions for errors encountered by assembler/linker
 impl ParseError {
-    pub fn undeclared_label(location: ErrMetadata, label: &str) -> Self {
-        ParseError::new(location, ParseErrorType::UndeclaredLabel(label.to_string()))
+    pub fn undeclared_label(label: &LabelRef) -> Self {
+        ParseError {
+            errloc: ErrMetadata::new(&label.location),
+            tpe: ParseErrorType::UndeclaredLabelRef(label.target.clone()),
+        }
     }
 
-    pub fn redefined_label(location: ErrMetadata, label: &str) -> Self {
-        ParseError::new(location, ParseErrorType::RedefinedLabel(label.to_string()))
+    pub fn redefined_label(label: &LabelRef) -> Self {
+        ParseError {
+            errloc: ErrMetadata::new(&label.location),
+            tpe: ParseErrorType::RedefinedLabelRef(label.target.clone()),
+        }
     }
 
-    pub fn undefined_label(location: ErrMetadata, label: &str) -> Self {
-        ParseError::new(location, ParseErrorType::UndefinedLabel(label.to_string()))
+    pub fn undefined_label(label: &LabelRef) -> Self {
+        ParseError {
+            errloc: ErrMetadata::new(&label.location),
+            tpe: ParseErrorType::UndefinedLabelRef(label.target.clone()),
+        }
     }
 }
 
