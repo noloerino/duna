@@ -1,4 +1,4 @@
-use super::parser::Label;
+use super::parser::{Label, LabelRef};
 use crate::instruction::ConcreteInst;
 use crate::program_state::{IRegister, MachineDataWidth};
 
@@ -19,7 +19,7 @@ pub(crate) enum NeededRegs<T: MachineDataWidth> {
 
 pub(crate) struct NeedsLabel<T: MachineDataWidth> {
     tpe: NeededRegs<T>,
-    needed_label: Label,
+    needed_label: LabelRef,
 }
 
 impl<T: MachineDataWidth> NeedsLabel<T> {
@@ -45,6 +45,7 @@ pub(crate) enum PartialInstType<T: MachineDataWidth> {
 
 pub struct PartialInst<T: MachineDataWidth> {
     pub(crate) tpe: PartialInstType<T>,
+    /// A label pointing to this instructions.
     pub label: Option<Label>,
 }
 
@@ -67,7 +68,7 @@ impl<T: MachineDataWidth> PartialInst<T> {
         assemble: fn(IRegister, IRegister, T::RegData) -> ConcreteInst<T>,
         reg1: IRegister,
         reg2: IRegister,
-        needed: Label,
+        needed: LabelRef,
     ) -> PartialInst<T> {
         PartialInst::new_needs_label(NeedsLabel {
             tpe: NeededRegs::Two {
@@ -82,7 +83,7 @@ impl<T: MachineDataWidth> PartialInst<T> {
     pub fn new_one_reg_needs_label(
         assemble: fn(IRegister, T::RegData) -> ConcreteInst<T>,
         reg: IRegister,
-        needed: Label,
+        needed: LabelRef,
     ) -> PartialInst<T> {
         PartialInst::new_needs_label(NeedsLabel {
             tpe: NeededRegs::One { assemble, reg },
@@ -92,7 +93,7 @@ impl<T: MachineDataWidth> PartialInst<T> {
 
     pub fn new_no_reg_needs_label(
         assemble: fn(T::RegData) -> ConcreteInst<T>,
-        needed: Label,
+        needed: LabelRef,
     ) -> PartialInst<T> {
         PartialInst::new_needs_label(NeedsLabel {
             tpe: NeededRegs::Zero { assemble },
@@ -111,7 +112,7 @@ impl<T: MachineDataWidth> PartialInst<T> {
         }
     }
 
-    pub fn get_needed_label(&self) -> Option<&Label> {
+    pub fn get_needed_label(&self) -> Option<&LabelRef> {
         match &self.tpe {
             PartialInstType::NeedsLabel(NeedsLabel { needed_label, .. }) => Some(&needed_label),
             PartialInstType::Complete(..) => None,
@@ -122,20 +123,20 @@ impl<T: MachineDataWidth> PartialInst<T> {
     pub fn into_concrete_inst(self) -> Result<ConcreteInst<T>, String> {
         match self.tpe {
             PartialInstType::Complete(concrete_inst) => Ok(concrete_inst),
-            PartialInstType::NeedsLabel(NeedsLabel { needed_label, .. }) => Err(needed_label),
+            PartialInstType::NeedsLabel(NeedsLabel { needed_label, .. }) => {
+                Err(needed_label.target)
+            }
         }
     }
 
     /// Attempts to coerce this partially-completed instruction into a ConcreteInst.
     pub fn try_into_concrete_inst(self) -> ConcreteInst<T> {
-        use PartialInstType::*;
-        if let Complete(concrete_inst) = self.tpe {
-            concrete_inst
-        } else {
-            panic!(
-                "Failed to coerce into concrete instruction (missing label {:?})",
-                self.get_needed_label()
-            )
+        match self.tpe {
+            PartialInstType::Complete(concrete_inst) => concrete_inst,
+            PartialInstType::NeedsLabel(NeedsLabel { needed_label, .. }) => panic!(
+                "Failed to coerce into concrete instruction (missing label {})",
+                needed_label.target
+            ),
         }
     }
 }

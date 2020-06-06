@@ -31,12 +31,13 @@ pub type FileMap = Vec<FileData>;
 /// When the link method is called, this struct is responsble for owning the file name string as well
 /// as the strings of the contents of all files. All other stages (assembler, parser, lexer) should
 /// be taking references to these strings.
-/// TODO add ability to just add in raw strings and generate file names accordingly
 pub struct Linker {
     /// Maps a FileId to FileData. Must be nonempty.
     ///
     /// The "main" file is assumed to exist at index 0.
     file_map: FileMap,
+    /// Keeps track of how many unnamed files have been added.
+    unnamed_count: usize,
 }
 
 impl Linker {
@@ -46,6 +47,7 @@ impl Linker {
                 file_name: path.to_string(),
                 content: Linker::read_file(path),
             }],
+            unnamed_count: 0,
         }
     }
 
@@ -55,6 +57,7 @@ impl Linker {
                 file_name: "<main>".to_string(),
                 content: contents.to_string(),
             }],
+            unnamed_count: 1,
         }
     }
 
@@ -63,6 +66,15 @@ impl Linker {
             file_name: path.to_string(),
             content: Linker::read_file(path),
         });
+        self
+    }
+
+    pub fn with_str(mut self, contents: &str) -> Linker {
+        self.file_map.push(FileData {
+            file_name: format!("<unnamed file {}>", self.unnamed_count),
+            content: contents.to_string(),
+        });
+        self.unnamed_count += 1;
         self
     }
 
@@ -118,6 +130,7 @@ impl Linker {
                 // Check for previous definition
                 if let Some(_prev_idx) = defined_global_labels.get(&label) {
                     // let (decl_file_id, _) = &all_insts[*prev_idx];
+                    // TODO get location of this label
                     reporter.add_error(ParseError::redefined_label(
                         ErrMetadata::new(&Location {
                             file_id,

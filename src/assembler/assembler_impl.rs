@@ -183,6 +183,7 @@ impl UnlinkedProgram<Width32b> {
                 needed_labels.insert(inst_index, label);
             } else {
                 let (file_id, _) = &insts[inst_index];
+                // TODO get location of this label
                 let location = ErrMetadata::new(&Location {
                     file_id: *file_id,
                     lineno: 0,
@@ -212,7 +213,7 @@ impl UnlinkedProgram<Width32b> {
                     Ok(concrete_inst) => Some(concrete_inst),
                     Err(needed_label) => {
                         reporter.add_error(ParseError::undefined_label(
-                            // TODO
+                            // TODO get location of this label
                             ErrMetadata::new(&Location {
                                 file_id,
                                 lineno: 0,

@@ -13,6 +13,19 @@ use std::vec::IntoIter;
 
 pub type Label = String;
 
+/// Represents a reference to a label in a program, e.g. as the target of a jump.
+pub struct LabelRef {
+    pub target: Label,
+    /// The location at which the reference occurs.
+    pub location: Location,
+}
+
+// impl Label {
+//     fn new(name: String, location: Location) -> Label {
+//         Label { name, location }
+//     }
+// }
+
 type ParsedInstStream<T> = Vec<PartialInst<T>>;
 type LineParseResult<T> = Result<ParsedInstStream<T>, ParseError>;
 pub struct ParseResult<T: MachineDataWidth> {
@@ -191,7 +204,7 @@ impl<'a> RiscVParser<'a, Width32b> {
                     } else {
                         // stick label onto first inst
                         if let Some(new_label) = found_label {
-                            let head_inst = new_insts.remove(0).with_label(new_label.to_string());
+                            let head_inst = new_insts.remove(0).with_label(new_label);
                             new_insts.insert(0, head_inst);
                         }
                         None
