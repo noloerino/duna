@@ -14,8 +14,6 @@ pub struct LexResult<'a> {
 
 // The line number of a token.
 pub type LineNo = usize;
-// 1-indexed
-pub const FIRST_LINENO: usize = 1;
 // The offset of a token within a line.
 pub type LineOffs = usize;
 
@@ -461,10 +459,7 @@ impl<'a> Lexer<'a> {
         let mut toks = Vec::<TokenStream>::new();
         let mut reporter = ParseErrorReporter::new();
         for (lineno, line) in self.contents.lines().enumerate() {
-            // Since most editors 1-index line numbers, we do too
-            toks.push(
-                LineLexer::new(self.file_id, line, lineno + FIRST_LINENO, &mut reporter).lex(),
-            );
+            toks.push(LineLexer::new(self.file_id, line, lineno, &mut reporter).lex());
         }
         LexResult {
             file_id: self.file_id,
@@ -490,14 +485,14 @@ mod tests {
         line: &'a str,
     ) -> (LineLexer<'a>, LexState) {
         let head = line.chars().next().unwrap();
-        let lexer = LineLexer::new(0, line.get(1..).unwrap(), FIRST_LINENO, reporter);
+        let lexer = LineLexer::new(0, line.get(1..).unwrap(), 0, reporter);
         (
             lexer,
             LexState {
                 head,
                 location: Location {
                     file_id: 0,
-                    lineno: FIRST_LINENO,
+                    lineno: 0,
                     offs: 0,
                 },
             },
@@ -520,7 +515,7 @@ mod tests {
         assert_eq!(toks[5].data, TokenType::Name("x2".to_string()));
         // check line offsets
         for tok in toks {
-            assert_eq!(tok.location.lineno, FIRST_LINENO);
+            assert_eq!(tok.location.lineno, 0);
         }
         assert_eq!(toks[0].location.offs, 0);
         assert_eq!(toks[1].location.offs, 5);

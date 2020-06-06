@@ -1,4 +1,4 @@
-use super::lexer::{ImmRenderType, Location, TokenType, FIRST_LINENO};
+use super::lexer::{ImmRenderType, Location, TokenType};
 use super::linker::{FileData, FileMap};
 use super::parser::{LabelDef, LabelRef};
 use std::fmt;
@@ -25,9 +25,13 @@ impl ParseErrorReport {
     }
 }
 
+/// Line numbers are 1-indexed, as is convention for most editors.
+const FIRST_LINENO: usize = 1;
+
 impl fmt::Debug for ParseErrorReport {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for err in &self.errs {
+            // === LINE 0 (error description) ===
             writeln!(f, "{}", err)?;
             let Location {
                 file_id,
@@ -35,14 +39,25 @@ impl fmt::Debug for ParseErrorReport {
                 offs,
             } = err.errloc.location;
             let (file_name, line_map) = &self.line_map[file_id];
-            // TODO fix spacing if lineno is more than one digit
-            writeln!(f, " --> {}:{}:{}", file_name, lineno, offs)?;
-            writeln!(f, "  |")?;
-            // line numbers are 1-indexed
-            writeln!(f, "{} | {}", lineno, line_map[lineno - FIRST_LINENO])?;
-            write!(f, "  |")?;
-            // throw informational caret in
-            // +1 because there's one space between the pipe and the string in the line above
+            let lineno_string = (lineno + FIRST_LINENO).to_string();
+            let space_count = lineno_string.len();
+            // === LINE 1 (error location) ===
+            writeln!(f, " --> {}:{}:{}", file_name, lineno_string, offs)?;
+            // === LINE 2 (spacing pipe) ===
+            // Fixes spacing if lineno is more than one digit
+            for _ in 0..space_count {
+                write!(f, " ")?;
+            }
+            writeln!(f, " |")?;
+            // === LINE 3 (line number and line content) ===
+            writeln!(f, "{} | {}", lineno_string, line_map[lineno])?;
+            // === LINE 4 (spacing pipe and pointing carets) ===
+            // Fixes spacing if lineno is more than one digit
+            for _ in 0..space_count {
+                write!(f, " ")?;
+            }
+            write!(f, " |")?;
+            // inclusive because there's one space between the pipe and the string in the line above
             for _ in 0..=offs {
                 write!(f, " ")?;
             }

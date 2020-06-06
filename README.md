@@ -11,7 +11,6 @@ figuring out the proper abstractions)
 - Run by CLI with `cargo run <INPUT_FILE>`
 
 ## Roadmap - RISCV
-- [ ] Fix linker error reporting
 - [ ] Refactor 32/64-bit into own modules
 - [ ] Add hints/warnings
 - [ ] Run [compliance tests](https://github.com/riscv/riscv-compliance)

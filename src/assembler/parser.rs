@@ -1167,7 +1167,7 @@ mod tests {
                 "l1".to_string(),
                 Location {
                     file_id: 0,
-                    lineno: 2, // 1-indexed
+                    lineno: 1,
                     offs: 0
                 }
             ))
