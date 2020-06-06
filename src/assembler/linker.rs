@@ -1,8 +1,16 @@
-use super::assembler_impl::{Assembler, UnlinkedProgram};
+use super::assembler_impl::{Assembler, SectionStore, UnlinkedProgram};
 use super::lexer::{LineContents, Location};
 use super::parse_error::{ErrMetadata, ParseError, ParseErrorReport, ParseErrorReporter};
+use super::parser::Label;
 use crate::program_state::{RiscVProgram, Width32b};
+use std::collections::HashMap;
 use std::fs;
+
+/// Tuple of (file name, file contents).
+pub type FileData = (String, String);
+/// Used to make error reporting easier without having to worry about lifetimes with string
+/// references. Should map to a FileData somehow.
+pub type FileId = usize;
 
 /// Links programs together.
 ///
@@ -11,20 +19,22 @@ use std::fs;
 /// be taking references to these strings.
 /// TODO add ability to just add in raw strings and generate file names accordingly
 pub struct Linker {
-    main_path: String,
-    other_paths: Vec<String>,
+    /// Maps a FileId to FileData. Must be nonempty.
+    ///
+    /// The "main" file is assumed to exist at index 0.
+    file_map: Vec<FileData>,
 }
 
 impl Linker {
     pub fn with_main(path: &str) -> Linker {
         Linker {
-            main_path: path.to_string(),
-            other_paths: Vec::new(),
+            file_map: vec![(path.to_string(), Linker::read_file(path))],
         }
     }
 
     pub fn with_file(mut self, path: &str) -> Linker {
-        self.other_paths.push(path.to_string());
+        self.file_map
+            .push((path.to_string(), Linker::read_file(path)));
         self
     }
 
@@ -34,19 +44,11 @@ impl Linker {
 
     /// Attempts to link the provided programs together into a single executable.
     pub fn link(self) -> Result<RiscVProgram<Width32b>, ParseErrorReport> {
-        // Link main local labels
-        let main_content = Linker::read_file(&self.main_path);
-        let main_result: Result<UnlinkedProgram<Width32b>, ParseErrorReport> =
-            Assembler::assemble_str(&self.main_path, &main_content);
+        assert!(self.file_map.len() > 0, "Linker is missing a main program");
         let mut report = ParseErrorReporter::new().into_report();
         // Link other programs' local labels
         let mut programs: Vec<UnlinkedProgram<Width32b>> = Vec::new();
-        let other_files: Vec<(&str, String)> = self
-            .other_paths
-            .iter()
-            .map(|path| (path.as_str(), Linker::read_file(path)))
-            .collect();
-        for (path, content) in &other_files {
+        for (path, content) in &self.file_map {
             match Assembler::assemble_str(&path, &content) {
                 Ok(prog) => programs.push(prog),
                 Err(new_report) => {
@@ -54,13 +56,6 @@ impl Linker {
                 }
             }
         }
-        let main = match main_result {
-            Ok(prog) => prog,
-            Err(mut main_report) => {
-                main_report.merge(report);
-                return Err(main_report);
-            }
-        };
         if !report.is_empty() {
             return Err(report);
         }
@@ -69,22 +64,23 @@ impl Linker {
         // We essentially produce a single giant unlinked program from all constituent programs.
         // First, resolve all local labels, then combine all the programs together and consider
         // the union of all the global symbol tables as the new "local" symbol table.
-        let UnlinkedProgram {
-            insts: mut all_insts,
-            sections,
-            mut needed_labels,
-            mut defined_global_labels,
-            ..
-        } = main;
-        for program in programs {
+        let mut all_insts = Vec::new();
+        let mut needed_labels: HashMap<usize, Label> = Default::default();
+        let mut defined_global_labels: HashMap<Label, usize> = Default::default();
+        let mut combined_sections = SectionStore::new();
+
+        for (i, program) in programs.into_iter().enumerate() {
             let UnlinkedProgram {
                 insts: mut new_insts,
                 needed_labels: new_needed_labels,
                 defined_global_labels: new_global_labels,
-                // TODO combine sections
-                // sections,
+                sections,
                 ..
             } = program;
+            // TODO combine sections (currently just takes first)
+            if i == 1 {
+                combined_sections = sections;
+            }
             let prev_inst_size = all_insts.len();
             all_insts.append(&mut new_insts);
             for (idx, label) in new_needed_labels.into_iter() {
@@ -110,7 +106,8 @@ impl Linker {
             }
         }
         if reporter.is_empty() {
-            let (linked, errs) = UnlinkedProgram::new(all_insts, sections, Default::default());
+            let (linked, errs) =
+                UnlinkedProgram::new(all_insts, combined_sections, Default::default());
             if errs.is_empty() {
                 Ok(linked.into_program()?)
             } else {
