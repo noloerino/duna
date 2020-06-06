@@ -1,4 +1,4 @@
-use super::lexer::{ImmRenderType, LineContents, Location, TokenType};
+use super::lexer::{ImmRenderType, Location, TokenType};
 use std::fmt;
 
 pub struct ParseErrorReport {
@@ -26,14 +26,14 @@ impl fmt::Debug for ParseErrorReport {
         for err in &self.errs {
             writeln!(f, "{}", err)?;
             let Location {
-                file_name,
+                file_id,
                 lineno,
                 offs,
             } = &err.errloc.location;
             // TODO fix spacing if lineno is more than one digit
-            writeln!(f, " --> {}:{}", file_name, err.errloc.location)?;
+            writeln!(f, " --> {}:{}", "TODO", "TODO")?;
             writeln!(f, "  |")?;
-            writeln!(f, "{} | {}", lineno, err.errloc.line_contents.content)?;
+            writeln!(f, "{} | {}", lineno, "TODO")?;
             write!(f, "  |")?;
             // throw informational caret in
             // +1 because there's one space between the pipe and the string in the line above
@@ -220,17 +220,15 @@ impl fmt::Display for ParseErrorType {
     }
 }
 
-#[derive(Eq, PartialEq, Hash, Debug)]
+#[derive(Eq, PartialEq, Debug)]
 pub struct ErrMetadata {
     location: Location,
-    line_contents: LineContents,
 }
 
 impl ErrMetadata {
-    pub fn new(location: &Location, line_contents: &LineContents) -> ErrMetadata {
+    pub fn new(location: &Location) -> ErrMetadata {
         ErrMetadata {
             location: location.clone(),
-            line_contents: line_contents.clone(),
         }
     }
 }
@@ -387,7 +385,7 @@ mod tests {
     /// Tests that an error produced by the lexer makes it so the affected line is not passed
     /// to the parser.
     fn test_lex_short_circuit() {
-        let reporter = RiscVParser::parse_str("test", "addi x1 0xggg1, x2").reporter;
+        let reporter = RiscVParser::parse_str(0, "addi x1 0xggg1, x2").reporter;
         assert_eq!(reporter.errs.len(), 1);
     }
 }

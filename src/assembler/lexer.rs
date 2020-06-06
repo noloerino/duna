@@ -1,27 +1,12 @@
+use super::linker::FileId;
 use super::parse_error::{ErrMetadata, ParseError, ParseErrorReporter};
 use std::fmt;
 use std::iter::Enumerate;
 use std::iter::Peekable;
 use std::str::Chars;
 
-/// Represents the contents of a line in a file. Contains the line and the file name.
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
-pub struct LineContents {
-    pub file_name: String,
-    pub content: String,
-}
-
-impl LineContents {
-    pub fn new(source_file_name: &str, content: &str) -> LineContents {
-        LineContents {
-            file_name: source_file_name.to_string(),
-            content: content.to_string(),
-        }
-    }
-}
-
 pub struct LexResult<'a> {
-    pub file_name: &'a str,
+    pub file_id: FileId,
     pub lines: LineTokenStream,
     pub contents: &'a str,
     pub reporter: ParseErrorReporter,
@@ -32,10 +17,10 @@ pub type LineNo = usize;
 // The offset of a token within a line.
 pub type LineOffs = usize;
 
-#[derive(Clone, Eq, PartialEq, PartialOrd, Hash, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, PartialOrd, Hash, Debug)]
 pub struct Location {
-    // line_contents: &'a str,
-    pub file_name: String,
+    /// Holds a reference to the file from which this came.
+    pub file_id: FileId,
     /// Holds a reference to the line from which this came (used for error messages)
     pub lineno: LineNo,
     pub offs: LineOffs,
@@ -147,7 +132,7 @@ fn is_imm_start(c: char) -> bool {
 }
 
 struct LineLexer<'a> {
-    line_contents: LineContents,
+    file_id: FileId,
     lineno: LineNo,
     iter: LineIter<'a>,
     reporter: &'a mut ParseErrorReporter,
@@ -238,13 +223,10 @@ impl<'a> LineLexer<'a> {
                     } else {
                         self.max_munch_on_error();
                         return Err(ParseError::generic(
-                            ErrMetadata::new(
-                                &Location {
-                                    offs,
-                                    ..state.location.clone()
-                                },
-                                &self.line_contents,
-                            ),
+                            ErrMetadata::new(&Location {
+                                offs,
+                                ..state.location.clone()
+                            }),
                             &format!(
                                 "cannot parse number literal {}",
                                 string_from_utf8(vec![head as u8, c as u8])
@@ -255,7 +237,7 @@ impl<'a> LineLexer<'a> {
                 None => {
                     self.max_munch_on_error();
                     return Err(ParseError::generic(
-                        ErrMetadata::new(&state.location, &self.line_contents),
+                        ErrMetadata::new(&state.location),
                         &format!(
                             "ran out of characters while parsing number literal {}",
                             head.to_string()
@@ -286,7 +268,7 @@ impl<'a> LineLexer<'a> {
                         if !c.is_ascii_digit() {
                             self.max_munch_on_error();
                             return Err(ParseError::generic(
-                                ErrMetadata::new(&state.location, &self.line_contents),
+                                ErrMetadata::new(&state.location),
                                 &format!(
                                     "unexpected character when parsing base 10 integer literal {}",
                                     string_from_chars(digits)
@@ -319,7 +301,7 @@ impl<'a> LineLexer<'a> {
                         digits.extend(self.max_munch_on_error());
                         // TODO separators and format specifier are ignored
                         return Err(ParseError::bad_int_literal(
-                            ErrMetadata::new(&state.location, &self.line_contents),
+                            ErrMetadata::new(&state.location),
                             fmt,
                             string_from_chars(digits),
                         ));
@@ -334,7 +316,7 @@ impl<'a> LineLexer<'a> {
             Ok(TokenType::Immediate(if negate { -val } else { val }, fmt))
         } else {
             Err(ParseError::bad_int_literal(
-                ErrMetadata::new(&state.location, &self.line_contents),
+                ErrMetadata::new(&state.location),
                 fmt,
                 digit_str,
             ))
@@ -360,13 +342,10 @@ impl<'a> LineLexer<'a> {
                             '\\' => '\\',
                             _ => {
                                 return Err(ParseError::bad_escape(
-                                    ErrMetadata::new(
-                                        &Location {
-                                            offs: offs2,
-                                            ..state.location.clone()
-                                        },
-                                        &self.line_contents,
-                                    ),
+                                    ErrMetadata::new(&Location {
+                                        offs: offs2,
+                                        ..state.location
+                                    }),
                                     c2,
                                 ))
                             }
@@ -374,7 +353,6 @@ impl<'a> LineLexer<'a> {
                         None => {
                             return Err(ParseError::unclosed_string_literal(ErrMetadata::new(
                                 &state.location,
-                                &self.line_contents,
                             )))
                         }
                     }
@@ -385,18 +363,17 @@ impl<'a> LineLexer<'a> {
         // iterator ran out - return error
         Err(ParseError::unclosed_string_literal(ErrMetadata::new(
             &state.location,
-            &self.line_contents,
         )))
     }
 
     fn new(
-        line_contents: LineContents,
+        file_id: FileId,
         content: &'a str,
         lineno: LineNo,
         reporter: &'a mut ParseErrorReporter,
     ) -> LineLexer<'a> {
         LineLexer {
-            line_contents: line_contents,
+            file_id,
             lineno,
             iter: content.chars().enumerate().peekable(),
             reporter,
@@ -411,7 +388,7 @@ impl<'a> LineLexer<'a> {
             let state = LexState {
                 head: c,
                 location: Location {
-                    file_name: self.line_contents.file_name.to_string(),
+                    file_id: self.file_id,
                     lineno,
                     offs: start_offs,
                 },
@@ -430,7 +407,7 @@ impl<'a> LineLexer<'a> {
                     '\"' => self.build_string_literal(&state),
                     ' ' | '\t' => continue,
                     _ => Err(ParseError::generic(
-                        ErrMetadata::new(&state.location, &self.line_contents),
+                        ErrMetadata::new(&state.location),
                         &format!("unexpected token {}", c),
                     )),
                 }
@@ -438,7 +415,7 @@ impl<'a> LineLexer<'a> {
             match maybe_tok {
                 Ok(tok) => toks.push(Token {
                     location: Location {
-                        file_name: self.line_contents.file_name.to_string(),
+                        file_id: self.file_id,
                         lineno,
                         offs: start_offs,
                     },
@@ -468,14 +445,14 @@ impl<'a> LineLexer<'a> {
 }
 
 pub struct Lexer<'a> {
-    file_name: &'a str,
+    file_id: FileId,
     contents: &'a str,
 }
 
 impl<'a> Lexer<'a> {
-    pub fn lex_str(file_name: &'a str, contents: &'a str) -> LexResult<'a> {
+    pub fn lex_str(file_id: FileId, contents: &'a str) -> LexResult<'a> {
         Lexer {
-            file_name: file_name,
+            file_id,
             contents: contents,
         }
         .lex()
@@ -486,18 +463,10 @@ impl<'a> Lexer<'a> {
         let mut toks = Vec::<TokenStream>::new();
         let mut reporter = ParseErrorReporter::new();
         for (lineno, line) in self.contents.lines().enumerate() {
-            toks.push(
-                LineLexer::new(
-                    LineContents::new(&self.file_name, line),
-                    line,
-                    lineno,
-                    &mut reporter,
-                )
-                .lex(),
-            );
+            toks.push(LineLexer::new(self.file_id, line, lineno, &mut reporter).lex());
         }
         LexResult {
-            file_name: self.file_name,
+            file_id: self.file_id,
             lines: toks,
             contents: self.contents,
             reporter,
@@ -519,19 +488,13 @@ mod tests {
         line: &'a str,
     ) -> (LineLexer<'a>, LexState) {
         let head = line.chars().next().unwrap();
-        let lexer = LineLexer::new(
-            LineContents::new("test file", line),
-            line.get(1..).unwrap(),
-            0,
-            reporter,
-        );
+        let lexer = LineLexer::new(0, line.get(1..).unwrap(), 0, reporter);
         (
             lexer,
             LexState {
                 head,
                 location: Location {
-                    // line_contents: line,
-                    file_name: "test_file".to_string(),
+                    file_id: 0,
                     lineno: 0,
                     offs: 0,
                 },
@@ -543,7 +506,7 @@ mod tests {
     fn test_simple_lex() {
         let LexResult {
             lines, reporter, ..
-        } = Lexer::lex_str("test", "addi x0, x1, x2");
+        } = Lexer::lex_str(0, "addi x0, x1, x2");
         assert!(reporter.is_empty());
         let toks = &lines[0];
         // check actual data
@@ -621,7 +584,7 @@ mod tests {
         let line = ".string \"howdy world\\n\"";
         let LexResult {
             lines, reporter, ..
-        } = Lexer::lex_str("test", line);
+        } = Lexer::lex_str(0, line);
         assert!(reporter.is_empty());
         assert_eq!(lines.len(), 1);
         let toks = &lines[0];

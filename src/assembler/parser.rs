@@ -1,5 +1,6 @@
 use super::assembler_impl::{ProgramSection, SectionStore};
 use super::lexer::*;
+use super::linker::FileId;
 use super::parse_error::{ErrMetadata, ParseError, ParseErrorReporter};
 use super::partial_inst::PartialInst;
 use crate::instruction::*;
@@ -14,8 +15,8 @@ pub type Label = String;
 
 type ParsedInstStream<T> = Vec<PartialInst<T>>;
 type LineParseResult<T> = Result<ParsedInstStream<T>, ParseError>;
-pub struct ParseResult<'a, T: MachineDataWidth> {
-    pub file_name: &'a str,
+pub struct ParseResult<T: MachineDataWidth> {
+    pub file_id: FileId,
     pub insts: ParsedInstStream<T>,
     pub sections: SectionStore,
     pub declared_globals: HashSet<String>,
@@ -76,7 +77,7 @@ struct ParserData<'a, T: MachineDataWidth> {
 
 pub struct RiscVParser<'a, T: MachineDataWidth> {
     parser_data: ParserData<'a, T>,
-    file_name: &'a str,
+    file_id: FileId,
     lines: LineTokenStream,
     contents: &'a str,
     reporter: ParseErrorReporter,
@@ -156,8 +157,8 @@ lazy_static! {
 }
 
 impl<'a> RiscVParser<'a, Width32b> {
-    pub fn parse_str(file_name: &'a str, contents: &'a str) -> ParseResult<'a, Width32b> {
-        RiscVParser::parse_lex_result(Lexer::lex_str(file_name, contents))
+    pub fn parse_str(file_id: FileId, contents: &'a str) -> ParseResult<Width32b> {
+        RiscVParser::parse_lex_result(Lexer::lex_str(file_id, contents))
     }
 
     pub fn parse_lex_result(lex_result: LexResult) -> ParseResult<Width32b> {
@@ -166,7 +167,7 @@ impl<'a> RiscVParser<'a, Width32b> {
                 inst_expansion_table: &RV32_INST_EXPANSION_TABLE,
                 reg_expansion_table: &REG_EXPANSION_TABLE,
             },
-            file_name: lex_result.file_name,
+            file_id: lex_result.file_id,
             lines: lex_result.lines,
             reporter: lex_result.reporter,
             state: ParseState::new(),
@@ -175,7 +176,7 @@ impl<'a> RiscVParser<'a, Width32b> {
         .parse()
     }
 
-    fn parse(mut self) -> ParseResult<'a, Width32b> {
+    fn parse(mut self) -> ParseResult<Width32b> {
         let mut insts = Vec::<PartialInst<Width32b>>::new();
         let mut last_label: Option<Label> = None;
         let parser_data = &self.parser_data;
@@ -187,7 +188,7 @@ impl<'a> RiscVParser<'a, Width32b> {
                 line,
                 &last_label,
                 &mut self.state,
-                LineContents::new(&self.file_name, contents),
+                self.file_id,
             )
             .parse();
             match parse_result {
@@ -209,7 +210,7 @@ impl<'a> RiscVParser<'a, Width32b> {
             }
         }
         ParseResult {
-            file_name: self.file_name,
+            file_id: self.file_id,
             insts,
             sections: self.state.sections,
             declared_globals: self.state.declared_globals,
@@ -250,7 +251,7 @@ fn ok_wrap_expanded<T: MachineDataWidth>(inst: Vec<ConcreteInst<T>>) -> LinePars
 /// Parses an immediate that is required to be at most n bits.
 /// If the provided immediate is a negative, then the upper (64 - n + 1) bits must all be 1.
 /// An i64 is returned, which should then be converted into a RegData type by a parser.
-fn try_parse_imm(line_contents: &LineContents, n: u8, token: Token) -> Result<i64, ParseError> {
+fn try_parse_imm(file_id: FileId, n: u8, token: Token) -> Result<i64, ParseError> {
     match token.data {
         // Check lower n bits
         // We give a pass to negative numbers with high bits set
@@ -269,7 +270,7 @@ fn try_parse_imm(line_contents: &LineContents, n: u8, token: Token) -> Result<i6
             let mask_result = val & mask;
             if mask_result != 0 && mask_result != mask {
                 Err(ParseError::imm_too_big(
-                    ErrMetadata::new(&token.location, line_contents),
+                    ErrMetadata::new(&token.location),
                     n,
                     &radix.format(val),
                 ))
@@ -278,7 +279,7 @@ fn try_parse_imm(line_contents: &LineContents, n: u8, token: Token) -> Result<i6
             }
         }
         _ => Err(ParseError::unexpected_type(
-            ErrMetadata::new(&token.location, line_contents),
+            ErrMetadata::new(&token.location),
             "immediate",
             token.data,
         )),
@@ -291,7 +292,7 @@ fn try_parse_imm(line_contents: &LineContents, n: u8, token: Token) -> Result<i6
 /// free to consume the iterator since more tokens would be an error regardless.
 fn check_no_more_args(
     iter: &mut TokenIter,
-    line_contents: &LineContents,
+    file_id: FileId,
     name: &str,
     needed: u8,
 ) -> Result<(), ParseError> {
@@ -301,7 +302,7 @@ fn check_no_more_args(
             Ok(())
         } else {
             Err(ParseError::too_many_args(
-                ErrMetadata::new(&tok.location, line_contents),
+                ErrMetadata::new(&tok.location),
                 name,
                 needed,
             ))
@@ -314,7 +315,7 @@ fn check_no_more_args(
 /// Attempts to advance the next token of the iterator, returning a ParseError if there are none.
 fn try_next_tok(
     iter: &mut TokenIter,
-    line_contents: &LineContents,
+    file_id: FileId,
     head_loc: &Location,
     name: &str,
     needed_args: u8,
@@ -324,7 +325,7 @@ fn try_next_tok(
         Ok(tok)
     } else {
         Err(ParseError::wrong_argc(
-            ErrMetadata::new(head_loc, line_contents),
+            ErrMetadata::new(head_loc),
             name,
             needed_args,
             found_so_far,
@@ -337,7 +338,7 @@ fn try_next_tok(
 /// This consumes until a comment token or the end of the iterator is reached.
 fn consume_unbounded_commasep_args(
     iter: &mut TokenIter,
-    line_contents: &LineContents,
+    file_id: FileId,
 ) -> Result<Vec<Token>, ParseError> {
     use TokenType::*;
     let mut toks = Vec::new();
@@ -353,7 +354,7 @@ fn consume_unbounded_commasep_args(
             Comma => {
                 if was_comma {
                     return Err(ParseError::bad_arg(
-                        ErrMetadata::new(&tok.location, &line_contents),
+                        ErrMetadata::new(&tok.location),
                         &format!("{:?}", tok.data),
                     ));
                 }
@@ -362,7 +363,7 @@ fn consume_unbounded_commasep_args(
             Comment(..) => return Ok(toks),
             _ => {
                 return Err(ParseError::bad_arg(
-                    ErrMetadata::new(&tok.location, &line_contents),
+                    ErrMetadata::new(&tok.location),
                     &format!("{:?}", tok.data),
                 ));
             }
@@ -377,7 +378,7 @@ struct InstParser<'a, T: MachineDataWidth> {
     iter: TokenIter,
     head_loc: &'a Location,
     inst_name: &'a str,
-    line_contents: LineContents,
+    file_id: FileId,
 }
 
 impl<'a, T: MachineDataWidth> InstParser<'a, T> {
@@ -386,14 +387,14 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
         iter: TokenIter,
         head_loc: &'a Location,
         inst_name: &'a str,
-        line_contents: LineContents,
+        file_id: FileId,
     ) -> InstParser<'a, T> {
         InstParser {
             data,
             iter,
             head_loc,
             inst_name,
-            line_contents,
+            file_id,
         }
     }
 
@@ -402,7 +403,7 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
     /// This is used for situations where a fixed number of arguments is expected, as we're
     /// free to consume the iterator since more tokens would be an error regardless.
     fn check_no_more_args(&mut self, needed: u8) -> Result<(), ParseError> {
-        check_no_more_args(&mut self.iter, &self.line_contents, self.inst_name, needed)
+        check_no_more_args(&mut self.iter, self.file_id, self.inst_name, needed)
     }
 
     /// Attempts to consume exactly N arguments from the iterator, possibly comma-separated.
@@ -428,14 +429,14 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
                     }
                     _ => {
                         return Err(ParseError::bad_arg(
-                            ErrMetadata::new(&tok.location, &self.line_contents),
+                            ErrMetadata::new(&tok.location),
                             &format!("{:?}", tok.data),
                         ))
                     }
                 },
                 None => {
                     return Err(ParseError::wrong_argc(
-                        ErrMetadata::new(&self.head_loc, &self.line_contents),
+                        ErrMetadata::new(&self.head_loc),
                         self.inst_name,
                         n,
                         found.len() as u8,
@@ -452,7 +453,7 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
     /// an error is returned.
     /// This consumes until a comment token or the end of the iterator is reached.
     fn consume_unbounded_commasep_args(&mut self) -> Result<Vec<Token>, ParseError> {
-        consume_unbounded_commasep_args(&mut self.iter, &self.line_contents)
+        consume_unbounded_commasep_args(&mut self.iter, self.file_id)
     }
 
     /// Consumes tokens for arguments for a memory operation.
@@ -486,7 +487,7 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
             if let TokenType::RParen = maybe_rparen.data {
             } else {
                 return Err(ParseError::unclosed_paren(
-                    ErrMetadata::new(&maybe_rparen.location, &self.line_contents),
+                    ErrMetadata::new(&maybe_rparen.location),
                     maybe_rparen.data,
                 ));
             }
@@ -503,7 +504,7 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
     fn try_next_tok(&mut self, needed_args: u8, found_so_far: u8) -> Result<Token, ParseError> {
         try_next_tok(
             &mut self.iter,
-            &self.line_contents,
+            self.file_id,
             self.head_loc,
             self.inst_name,
             needed_args,
@@ -517,7 +518,7 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
             Ok(tok)
         } else {
             Err(ParseError::wrong_argc(
-                ErrMetadata::new(&self.head_loc, &self.line_contents),
+                ErrMetadata::new(&self.head_loc),
                 self.inst_name,
                 needed_args,
                 found_so_far,
@@ -534,14 +535,14 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
                     .cloned()
                     .ok_or_else(|| {
                         ParseError::unexpected_type(
-                            ErrMetadata::new(&token.location, &self.line_contents),
+                            ErrMetadata::new(&token.location),
                             "register name",
                             token.data,
                         )
                     })
             }
             _ => Err(ParseError::unexpected_type(
-                ErrMetadata::new(&token.location, &self.line_contents),
+                ErrMetadata::new(&token.location),
                 "register name",
                 token.data,
             )),
@@ -551,7 +552,7 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
     /// Parses an immediate that is required to be at most n bits.
     /// If the provided immediate is a negative, then the upper (64 - n + 1) bits must all be 1.
     fn try_parse_imm(&self, n: u8, token: Token) -> Result<T::RegData, ParseError> {
-        try_parse_imm(&self.line_contents, n, token).map(|res_i64| res_i64.into())
+        try_parse_imm(self.file_id, n, token).map(|res_i64| res_i64.into())
     }
 
     /// Attempts to expand a token into a label reference or an immediate of at most max_imm_len.
@@ -619,7 +620,7 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
                     ImmOrLabel::Imm(imm) => {
                         if u8::from(imm.get_byte(0)) & 1 > 0 {
                             Err(ParseError::generic(
-                                ErrMetadata::new(&self.head_loc, &self.line_contents),
+                                ErrMetadata::new(&self.head_loc),
                                 &format!(
                                     "branch immediates must be multiples of two, got {}",
                                     imm.to_string()
@@ -662,7 +663,7 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
                         }
                     }
                     _ => Err(ParseError::wrong_diff_argc(
-                        ErrMetadata::new(&self.head_loc, &self.line_contents),
+                        ErrMetadata::new(&self.head_loc),
                         self.inst_name,
                         1,
                         2,
@@ -687,7 +688,7 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
                         ok_wrap_concr(isa::Jalr::new(rd, rs1, imm))
                     }
                     _ => Err(ParseError::wrong_diff_argc(
-                        ErrMetadata::new(&self.head_loc, &self.line_contents),
+                        ErrMetadata::new(&self.head_loc),
                         self.inst_name,
                         1,
                         3,
@@ -741,7 +742,7 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
             self.try_expand_found_inst(parse_type)
         } else {
             Err(ParseError::bad_inst_name(
-                ErrMetadata::new(&self.head_loc, &self.line_contents),
+                ErrMetadata::new(&self.head_loc),
                 self.inst_name,
             ))
         }
@@ -754,7 +755,7 @@ struct DirectiveParser<'a> {
     state: &'a mut ParseState,
     head_loc: &'a Location,
     head_directive: &'a str,
-    line_contents: LineContents,
+    file_id: FileId,
 }
 
 type DirectiveParseResult = Result<(), ParseError>;
@@ -765,14 +766,14 @@ impl<'a> DirectiveParser<'a> {
         state: &'a mut ParseState,
         head_loc: &'a Location,
         head_directive: &'a str,
-        line_contents: LineContents,
+        file_id: FileId,
     ) -> DirectiveParser<'a> {
         DirectiveParser {
             iter,
             state,
             head_loc,
             head_directive,
-            line_contents,
+            file_id,
         }
     }
 
@@ -804,7 +805,7 @@ impl<'a> DirectiveParser<'a> {
             "global" | "globl" => self.parse_global_label(),
             // TODO: equ, set, equiv (refactor symbol table to have enum value)
             _ => Err(ParseError::unsupported_directive(
-                ErrMetadata::new(&self.head_loc, &self.line_contents),
+                ErrMetadata::new(&self.head_loc),
                 self.head_directive,
             )),
         }
@@ -815,7 +816,7 @@ impl<'a> DirectiveParser<'a> {
         use ProgramSection::*;
         match self.state.curr_section {
             Text => Err(ParseError::unimplemented(
-                ErrMetadata::new(&self.head_loc, &self.line_contents),
+                ErrMetadata::new(&self.head_loc),
                 "cannot insert literals in .text section (only instructions allowed)",
             )),
             section => {
@@ -865,7 +866,7 @@ impl<'a> DirectiveParser<'a> {
                 }
                 "bss" => {
                     return Err(ParseError::unimplemented(
-                        ErrMetadata::new(&next_tok.location, &self.line_contents),
+                        ErrMetadata::new(&next_tok.location),
                         "bss section",
                     ))
                 }
@@ -873,7 +874,7 @@ impl<'a> DirectiveParser<'a> {
             }
         }
         Err(ParseError::unexpected_type(
-            ErrMetadata::new(&next_tok.location, &self.line_contents),
+            ErrMetadata::new(&next_tok.location),
             "one of [.text, .bss, .data, .rodata]",
             next_tok.data,
         ))
@@ -885,7 +886,7 @@ impl<'a> DirectiveParser<'a> {
     fn parse_string(mut self, null_terminated: bool) -> DirectiveParseResult {
         if let ProgramSection::Text = self.state.curr_section {
             return Err(ParseError::unimplemented(
-                ErrMetadata::new(&self.head_loc, &self.line_contents),
+                ErrMetadata::new(&self.head_loc),
                 "cannot insert literals in .text section (only instructions allowed)",
             ));
         }
@@ -902,7 +903,7 @@ impl<'a> DirectiveParser<'a> {
                 }
             } else {
                 return Err(ParseError::unexpected_type(
-                    ErrMetadata::new(&tok.location, &self.line_contents),
+                    ErrMetadata::new(&tok.location),
                     "string literal",
                     tok.data,
                 ));
@@ -914,7 +915,7 @@ impl<'a> DirectiveParser<'a> {
     fn parse_zero(mut self) -> DirectiveParseResult {
         if let ProgramSection::Text = self.state.curr_section {
             return Err(ParseError::unimplemented(
-                ErrMetadata::new(&self.head_loc, &self.line_contents),
+                ErrMetadata::new(&self.head_loc),
                 "cannot insert literals in .text section (only instructions allowed)",
             ));
         }
@@ -923,7 +924,7 @@ impl<'a> DirectiveParser<'a> {
             // insert n bytes of zeroes
             if n < 0 {
                 Err(ParseError::unexpected_type(
-                    ErrMetadata::new(&next_tok.location, &self.line_contents),
+                    ErrMetadata::new(&next_tok.location),
                     "positive integer literal",
                     next_tok.data,
                 ))
@@ -935,7 +936,7 @@ impl<'a> DirectiveParser<'a> {
             }
         } else {
             Err(ParseError::unexpected_type(
-                ErrMetadata::new(&next_tok.location, &self.line_contents),
+                ErrMetadata::new(&next_tok.location),
                 "integer literal",
                 next_tok.data,
             ))
@@ -951,7 +952,7 @@ impl<'a> DirectiveParser<'a> {
             self.ok(1)
         } else {
             Err(ParseError::unexpected_type(
-                ErrMetadata::new(&next_tok.location, &self.line_contents),
+                ErrMetadata::new(&next_tok.location),
                 "integer literal",
                 next_tok.data,
             ))
@@ -961,7 +962,7 @@ impl<'a> DirectiveParser<'a> {
     fn try_next_tok(&mut self, needed_args: u8, found_so_far: u8) -> Result<Token, ParseError> {
         try_next_tok(
             &mut self.iter,
-            &self.line_contents,
+            self.file_id,
             self.head_loc,
             self.head_directive,
             needed_args,
@@ -970,11 +971,11 @@ impl<'a> DirectiveParser<'a> {
     }
 
     fn try_parse_imm(&self, n: u8, token: Token) -> Result<i64, ParseError> {
-        try_parse_imm(&self.line_contents, n, token)
+        try_parse_imm(self.file_id, n, token)
     }
 
     fn consume_unbounded_commasep_args(&mut self) -> Result<Vec<Token>, ParseError> {
-        consume_unbounded_commasep_args(&mut self.iter, &self.line_contents)
+        consume_unbounded_commasep_args(&mut self.iter, self.file_id)
     }
 
     /// Checks that the iterator has run out of tokens; returns ok if so.
@@ -983,7 +984,7 @@ impl<'a> DirectiveParser<'a> {
     fn ok(mut self, needed_argc: u8) -> DirectiveParseResult {
         check_no_more_args(
             &mut self.iter,
-            &self.line_contents,
+            self.file_id,
             self.head_directive,
             needed_argc,
         )?;
@@ -997,7 +998,7 @@ struct LineParser<'a, T: MachineDataWidth> {
     iter: TokenIter,
     label: Option<Label>,
     state: &'a mut ParseState,
-    line_contents: LineContents,
+    file_id: FileId,
 }
 
 impl<'a, T: MachineDataWidth> LineParser<'a, T> {
@@ -1007,7 +1008,7 @@ impl<'a, T: MachineDataWidth> LineParser<'a, T> {
         tokens: TokenStream,
         maybe_label: &'a Option<Label>,
         state: &'a mut ParseState,
-        line_contents: LineContents,
+        file_id: FileId,
     ) -> LineParser<'a, T> {
         let mut iter = tokens.into_iter().peekable();
         let label_passed_in = maybe_label.is_some();
@@ -1036,7 +1037,7 @@ impl<'a, T: MachineDataWidth> LineParser<'a, T> {
             iter,
             label: this_label,
             state,
-            line_contents,
+            file_id,
         }
     }
 
@@ -1044,7 +1045,7 @@ impl<'a, T: MachineDataWidth> LineParser<'a, T> {
         (
             self.label,
             if let Some(head_tok) = self.iter.next() {
-                let errloc = ErrMetadata::new(&head_tok.location, &self.line_contents);
+                let errloc = ErrMetadata::new(&head_tok.location);
                 use TokenType::*;
                 match head_tok.data {
                     Name(name) => {
@@ -1054,7 +1055,7 @@ impl<'a, T: MachineDataWidth> LineParser<'a, T> {
                                 self.iter,
                                 &head_tok.location,
                                 &name,
-                                self.line_contents,
+                                self.file_id,
                             )
                             .try_expand_inst()
                         } else {
@@ -1081,7 +1082,7 @@ impl<'a, T: MachineDataWidth> LineParser<'a, T> {
                         &mut self.state,
                         &head_tok.location,
                         &section_name,
-                        self.line_contents,
+                        self.file_id,
                     )
                     .parse()
                     .and(Ok(Vec::new())),
@@ -1109,7 +1110,7 @@ mod tests {
 
     /// Lexes a program. Asserts that the lex has no errors.
     fn lex(prog: &str) -> LexResult {
-        let result = Lexer::lex_str("test", prog);
+        let result = Lexer::lex_str(0, prog);
         assert_eq!(result.reporter.get_errs(), &[]);
         result
     }
@@ -1141,7 +1142,7 @@ mod tests {
             sections,
             insts,
             ..
-        } = RiscVParser::parse_str("test", prog);
+        } = RiscVParser::parse_str(0, prog);
         assert!(reporter.is_empty(), insts.is_empty());
         assert_eq!(sections.data, vec![0x12, 0xef, 0xbe, 0xad, 0xde]);
     }
@@ -1153,7 +1154,7 @@ mod tests {
             ".section .data\n.byte 0x123", // immediate too large
         ];
         for prog in &programs {
-            let ParseResult { reporter, .. } = RiscVParser::parse_str("test", prog);
+            let ParseResult { reporter, .. } = RiscVParser::parse_str(0, prog);
             assert!(!reporter.is_empty());
         }
     }
@@ -1199,7 +1200,7 @@ mod tests {
             "add x1,,x2, x3",
         ];
         for inst in bad_insts {
-            let ParseResult { reporter, .. } = RiscVParser::parse_str("test", inst);
+            let ParseResult { reporter, .. } = RiscVParser::parse_str(0, inst);
             assert!(!reporter.is_empty());
         }
     }
@@ -1231,7 +1232,7 @@ mod tests {
         // immediates for instructions like addi can only be 12 bits long
         let ParseResult {
             insts, reporter, ..
-        } = RiscVParser::parse_str("test", "addi sp sp 0xF000");
+        } = RiscVParser::parse_str(0, "addi sp sp 0xF000");
         assert!(!reporter.is_empty());
         assert!(insts.is_empty());
     }

@@ -1,5 +1,5 @@
 use super::assembler_impl::{Assembler, SectionStore, UnlinkedProgram};
-use super::lexer::{LineContents, Location};
+use super::lexer::Location;
 use super::parse_error::{ErrMetadata, ParseError, ParseErrorReport, ParseErrorReporter};
 use super::parser::Label;
 use crate::program_state::{RiscVProgram, Width32b};
@@ -54,8 +54,8 @@ impl Linker {
         let mut reporter = ParseErrorReporter::new();
         // Link other programs' local labels
         let mut programs: Vec<UnlinkedProgram<Width32b>> = Vec::new();
-        for (path, content) in &self.file_map {
-            match Assembler::assemble_str(&path, &content) {
+        for (i, (_, content)) in self.file_map.iter().enumerate() {
+            match Assembler::assemble_str(i, &content) {
                 Ok(prog) => programs.push(prog),
                 Err(new_reporter) => {
                     reporter.merge(new_reporter);
@@ -72,7 +72,7 @@ impl Linker {
         let mut defined_global_labels: HashMap<Label, usize> = Default::default();
         let mut combined_sections = SectionStore::new();
 
-        for (i, program) in programs.into_iter().enumerate() {
+        for (file_id, program) in programs.into_iter().enumerate() {
             let UnlinkedProgram {
                 insts: mut new_insts,
                 needed_labels: new_needed_labels,
@@ -81,7 +81,7 @@ impl Linker {
                 ..
             } = program;
             // TODO combine sections (currently just takes first)
-            if i == 1 {
+            if file_id == 1 {
                 combined_sections = sections;
             }
             let prev_inst_size = all_insts.len();
@@ -91,17 +91,14 @@ impl Linker {
             }
             for (label, idx) in new_global_labels {
                 // Check for previous definition
-                if let Some(prev_idx) = defined_global_labels.get(&label) {
-                    let (decl_file_name, _) = &all_insts[*prev_idx];
+                if let Some(_prev_idx) = defined_global_labels.get(&label) {
+                    // let (decl_file_id, _) = &all_insts[*prev_idx];
                     reporter.add_error(ParseError::redefined_label(
-                        ErrMetadata::new(
-                            &Location {
-                                file_name: decl_file_name.to_string(),
-                                lineno: 0,
-                                offs: 0,
-                            },
-                            &LineContents::new(&decl_file_name, "<not found>"),
-                        ),
+                        ErrMetadata::new(&Location {
+                            file_id,
+                            lineno: 0,
+                            offs: 0,
+                        }),
                         &label,
                     ))
                 }

@@ -1,5 +1,6 @@
-use super::lexer::{LineContents, Location};
-use super::parse_error::{ErrMetadata, ParseError, ParseErrorReport, ParseErrorReporter};
+use super::lexer::Location;
+use super::linker::FileId;
+use super::parse_error::{ErrMetadata, ParseError, ParseErrorReporter};
 use super::parser::{Label, ParseResult, RiscVParser};
 use super::partial_inst::{PartialInst, PartialInstType};
 use crate::program_state::{MachineDataWidth, RiscVProgram, Width32b};
@@ -9,25 +10,25 @@ use std::fmt;
 pub struct Assembler;
 
 impl Assembler {
-    pub fn assemble_str<'a>(
-        file_name: &'a str,
-        contents: &'a str,
-    ) -> Result<UnlinkedProgram<'a, Width32b>, ParseErrorReporter> {
-        Assembler::assemble(RiscVParser::parse_str(file_name, contents))
+    pub fn assemble_str(
+        file_id: FileId,
+        contents: &str,
+    ) -> Result<UnlinkedProgram<Width32b>, ParseErrorReporter> {
+        Assembler::assemble(RiscVParser::parse_str(file_id, contents))
     }
 
     fn assemble(
         parse_result: ParseResult<Width32b>,
     ) -> Result<UnlinkedProgram<Width32b>, ParseErrorReporter> {
         let ParseResult {
-            file_name,
+            file_id,
             insts,
             sections,
             declared_globals,
             mut reporter,
         } = parse_result;
         let (program, selflink_reporter) = UnlinkedProgram::new(
-            insts.into_iter().map(|inst| (file_name, inst)).collect(),
+            insts.into_iter().map(|inst| (file_id, inst)).collect(),
             sections,
             declared_globals,
         );
@@ -112,10 +113,10 @@ impl Default for SectionStore {
 
 /// The parser must perform two passes in order to locate/process labels.
 /// This struct encodes data for a program that still needs to be passed to the assembler.
-pub struct UnlinkedProgram<'a, T: MachineDataWidth> {
-    /// A list of (source file, instruction), which will be placed in the text segment in the order
-    /// in which they appear.
-    pub(super) insts: Vec<(&'a str, PartialInst<T>)>,
+pub struct UnlinkedProgram<T: MachineDataWidth> {
+    /// A list of (source file id, instruction), which will be placed in the text segment in the
+    /// order in which they appear.
+    pub(super) insts: Vec<(FileId, PartialInst<T>)>,
     // a potential optimization is to store generated labels and needed labels in independent vecs
     // instead of a hashmap, another vec can be used to lookup the corresponding PartialInst
     // TODO put labels in sections
@@ -126,17 +127,17 @@ pub struct UnlinkedProgram<'a, T: MachineDataWidth> {
     pub(super) sections: SectionStore,
 }
 
-impl<'a> UnlinkedProgram<'a, Width32b> {
+impl UnlinkedProgram<Width32b> {
     /// Constructs an instance of an UnlinkedProgram from a stream of (file name, instruction).
     /// Also attempts to match needed labels to locally defined labels, and populates the needed
     /// and global symbol tables.
     /// A ParseErrorReporter is also returned to allow the linker to proceed with partial information
     /// in the event of a non-fatal error in this program.
     pub(super) fn new(
-        mut insts: Vec<(&'a str, PartialInst<Width32b>)>,
+        mut insts: Vec<(FileId, PartialInst<Width32b>)>,
         sections: SectionStore,
         declared_globals: HashSet<String>,
-    ) -> (UnlinkedProgram<'a, Width32b>, ParseErrorReporter) {
+    ) -> (UnlinkedProgram<Width32b>, ParseErrorReporter) {
         let mut reporter = ParseErrorReporter::new();
         let local_labels: HashMap<Label, usize> = insts
             .iter()
@@ -169,10 +170,10 @@ impl<'a> UnlinkedProgram<'a, Width32b> {
                 // Figure out how many instructions we need to jump
                 let inst_distance = (tgt_index as isize) - (inst_index as isize);
                 let byte_distance = (inst_distance * 4) as i64;
-                let (file_name, old_inst) = &insts[inst_index];
+                let (file_id, old_inst) = &insts[inst_index];
                 if let PartialInstType::NeedsLabel(inst) = &old_inst.tpe {
                     insts[inst_index] = (
-                        file_name,
+                        *file_id,
                         PartialInst::new_complete(inst.fulfill_label(byte_distance.into())),
                     )
                 } else {
@@ -181,15 +182,12 @@ impl<'a> UnlinkedProgram<'a, Width32b> {
             } else if declared_globals.contains(&label) {
                 needed_labels.insert(inst_index, label);
             } else {
-                let (file_name, _) = &insts[inst_index];
-                let location = ErrMetadata::new(
-                    &Location {
-                        file_name: file_name.to_string(),
-                        lineno: 0,
-                        offs: 0,
-                    },
-                    &LineContents::new(&file_name, "<contents not found>"),
-                );
+                let (file_id, _) = &insts[inst_index];
+                let location = ErrMetadata::new(&Location {
+                    file_id: *file_id,
+                    lineno: 0,
+                    offs: 0,
+                });
                 reporter.add_error(ParseError::undeclared_label(location, &label));
             }
         }
@@ -210,19 +208,16 @@ impl<'a> UnlinkedProgram<'a, Width32b> {
             .insts
             .into_iter()
             .filter_map(
-                |(file_name, partial_inst)| match partial_inst.into_concrete_inst() {
+                |(file_id, partial_inst)| match partial_inst.into_concrete_inst() {
                     Ok(concrete_inst) => Some(concrete_inst),
                     Err(needed_label) => {
                         reporter.add_error(ParseError::undefined_label(
                             // TODO
-                            ErrMetadata::new(
-                                &Location {
-                                    file_name: file_name.to_string(),
-                                    lineno: 0,
-                                    offs: 0,
-                                },
-                                &LineContents::new(&file_name, "TODO"),
-                            ),
+                            ErrMetadata::new(&Location {
+                                file_id,
+                                lineno: 0,
+                                offs: 0,
+                            }),
                             &needed_label,
                         ));
                         None
@@ -259,7 +254,7 @@ mod tests {
     use crate::program_state::IRegister::ZERO;
 
     fn assemble(program: &str) -> UnlinkedProgram<Width32b> {
-        Assembler::assemble_str("test", program).expect("Assembler errored out")
+        Assembler::assemble_str(0, program).expect("Assembler errored out")
     }
 
     #[test]
