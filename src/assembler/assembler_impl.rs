@@ -14,13 +14,13 @@ impl Assembler {
     pub fn assemble_str(
         file_id: FileId,
         contents: &str,
-    ) -> Result<UnlinkedProgram<Width32b>, ParseErrorReporter> {
+    ) -> (UnlinkedProgram<Width32b>, ParseErrorReporter) {
         Assembler::assemble(RiscVParser::parse_str(file_id, contents))
     }
 
     fn assemble(
         parse_result: ParseResult<Width32b>,
-    ) -> Result<UnlinkedProgram<Width32b>, ParseErrorReporter> {
+    ) -> (UnlinkedProgram<Width32b>, ParseErrorReporter) {
         let ParseResult {
             file_id,
             insts,
@@ -34,11 +34,7 @@ impl Assembler {
             declared_globals,
         );
         reporter.merge(selflink_reporter);
-        if reporter.is_empty() {
-            Ok(program)
-        } else {
-            Err(reporter)
-        }
+        (program, reporter)
     }
 }
 
@@ -239,6 +235,7 @@ impl UnlinkedProgram<Width32b> {
 
 #[cfg(test)]
 mod tests {
+    use super::super::linker::FileData;
     use super::*;
     use crate::instruction::BType;
     use crate::isa::Beq;
@@ -246,7 +243,15 @@ mod tests {
     use crate::program_state::IRegister::ZERO;
 
     fn assemble(program: &str) -> UnlinkedProgram<Width32b> {
-        Assembler::assemble_str(0, program).expect("Assembler errored out")
+        let (assembled, errs) = Assembler::assemble_str(0, program);
+        assert!(
+            errs.is_empty(),
+            errs.into_report_with_file_map(vec![FileData {
+                file_name: "test".to_string(),
+                content: program.to_string()
+            }])
+        );
+        assembled
     }
 
     #[test]

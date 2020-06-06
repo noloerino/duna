@@ -954,7 +954,7 @@ impl<'a> DirectiveParser<'a> {
     fn parse_global_label(mut self) -> DirectiveParseResult {
         let next_tok = self.try_next_tok(1, 0)?;
         if let TokenType::Name(name) = next_tok.data {
-            // redeclared labels are ok in this context
+            // announcing a variable as global multiple times is ok, so just insert without checking
             self.state.declared_globals.insert(name);
             self.ok(1)
         } else {
@@ -1167,7 +1167,7 @@ mod tests {
                 "l1".to_string(),
                 Location {
                     file_id: 0,
-                    lineno: 1,
+                    lineno: 2, // 1-indexed
                     offs: 0
                 }
             ))

@@ -94,7 +94,6 @@ fn test_local_labels() {
 /// Tests linking two files that have no label dependencies.
 fn test_basic_link() {
     let mut program = Linker::with_main("tests/asm_files/local_labels.s")
-        .with_file("tests/asm_files/local_labels.s")
         .link()
         .unwrap();
     program.dump_insts();

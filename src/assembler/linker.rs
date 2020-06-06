@@ -91,12 +91,9 @@ impl Linker {
         // Link other programs' local labels
         let mut programs: Vec<UnlinkedProgram<Width32b>> = Vec::new();
         for (i, FileData { content, .. }) in self.file_map.iter().enumerate() {
-            match Assembler::assemble_str(i, &content) {
-                Ok(prog) => programs.push(prog),
-                Err(new_reporter) => {
-                    reporter.merge(new_reporter);
-                }
-            }
+            let (prog, new_reporter) = Assembler::assemble_str(i, &content);
+            programs.push(prog);
+            reporter.merge(new_reporter);
         }
         // Even if errors have so far been reported, we can proceed to try to link anyway
 
@@ -126,14 +123,15 @@ impl Linker {
                 needed_labels.insert(idx + prev_inst_size, label.target);
             }
             for (label, (new_label_loc, idx)) in new_global_labels {
-                // Check for previous definition
+                // Check for previous definition and preserve original
                 if defined_global_labels.contains_key(&label) {
                     reporter.add_error(ParseError::redefined_label(&LabelDef {
                         name: label.clone(),
                         location: new_label_loc,
                     }))
+                } else {
+                    defined_global_labels.insert(label.clone(), idx + prev_inst_size);
                 }
-                defined_global_labels.insert(label.clone(), idx + prev_inst_size);
             }
         }
         if reporter.is_empty() {

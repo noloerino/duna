@@ -1,4 +1,4 @@
-use super::lexer::{ImmRenderType, Location, TokenType};
+use super::lexer::{ImmRenderType, Location, TokenType, FIRST_LINENO};
 use super::linker::{FileData, FileMap};
 use super::parser::{LabelDef, LabelRef};
 use std::fmt;
@@ -38,7 +38,8 @@ impl fmt::Debug for ParseErrorReport {
             // TODO fix spacing if lineno is more than one digit
             writeln!(f, " --> {}:{}:{}", file_name, lineno, offs)?;
             writeln!(f, "  |")?;
-            writeln!(f, "{} | {}", lineno, line_map[lineno])?;
+            // line numbers are 1-indexed
+            writeln!(f, "{} | {}", lineno, line_map[lineno - FIRST_LINENO])?;
             write!(f, "  |")?;
             // throw informational caret in
             // +1 because there's one space between the pipe and the string in the line above
