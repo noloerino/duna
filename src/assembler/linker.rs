@@ -1,6 +1,6 @@
 use super::assembler_impl::{Assembler, UnlinkedProgram};
 use super::lexer::{LineContents, Location};
-use super::parse_error::{ErrLocation, ParseError, ParseErrorReport, ParseErrorReporter};
+use super::parse_error::{ErrMetadata, ParseError, ParseErrorReport, ParseErrorReporter};
 use crate::program_state::{RiscVProgram, Width32b};
 use std::fs;
 
@@ -95,7 +95,7 @@ impl Linker {
                 if let Some(prev_idx) = defined_global_labels.get(&label) {
                     let (decl_file_name, _) = &all_insts[*prev_idx];
                     reporter.add_error(ParseError::redefined_label(
-                        ErrLocation::new(
+                        ErrMetadata::new(
                             &Location {
                                 file_name: decl_file_name.to_string(),
                                 lineno: 0,

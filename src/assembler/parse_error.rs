@@ -220,14 +220,14 @@ impl fmt::Display for ParseErrorType {
 }
 
 #[derive(Eq, PartialEq, Hash, Debug)]
-pub struct ErrLocation {
+pub struct ErrMetadata {
     location: Location,
     line_contents: LineContents,
 }
 
-impl ErrLocation {
-    pub fn new(location: &Location, line_contents: &LineContents) -> ErrLocation {
-        ErrLocation {
+impl ErrMetadata {
+    pub fn new(location: &Location, line_contents: &LineContents) -> ErrMetadata {
+        ErrMetadata {
             location: location.clone(),
             line_contents: line_contents.clone(),
         }
@@ -236,57 +236,57 @@ impl ErrLocation {
 
 #[derive(Eq, PartialEq, Debug)]
 pub struct ParseError {
-    errloc: ErrLocation,
+    errloc: ErrMetadata,
     tpe: ParseErrorType,
 }
 
 impl ParseError {
-    fn new(location: ErrLocation, tpe: ParseErrorType) -> Self {
+    fn new(location: ErrMetadata, tpe: ParseErrorType) -> Self {
         ParseError {
             errloc: location,
             tpe,
         }
     }
 
-    pub fn generic(location: ErrLocation, msg: &str) -> Self {
+    pub fn generic(location: ErrMetadata, msg: &str) -> Self {
         ParseError::new(location, ParseErrorType::Generic(msg.to_string()))
     }
 
-    pub fn unimplemented(location: ErrLocation, msg: &str) -> Self {
+    pub fn unimplemented(location: ErrMetadata, msg: &str) -> Self {
         ParseError::new(location, ParseErrorType::Unimplemented(msg.to_string()))
     }
 }
 
 // functions for errors encountered by lexer
 impl ParseError {
-    pub fn bad_int_literal(location: ErrLocation, render_type: ImmRenderType, n: String) -> Self {
+    pub fn bad_int_literal(location: ErrMetadata, render_type: ImmRenderType, n: String) -> Self {
         ParseError::new(location, ParseErrorType::BadIntLiteral(render_type, n))
     }
 
-    pub fn bad_escape(location: ErrLocation, escaped: char) -> Self {
+    pub fn bad_escape(location: ErrMetadata, escaped: char) -> Self {
         ParseError::new(location, ParseErrorType::BadEscape(escaped))
     }
 
-    pub fn unclosed_string_literal(location: ErrLocation) -> Self {
+    pub fn unclosed_string_literal(location: ErrMetadata) -> Self {
         ParseError::new(location, ParseErrorType::UnclosedStringLiteral)
     }
 }
 
 // functions for errors encountered by parser
 impl ParseError {
-    pub fn bad_head(location: ErrLocation, got: &str) -> Self {
+    pub fn bad_head(location: ErrMetadata, got: &str) -> Self {
         ParseError::new(location, ParseErrorType::BadFirstToken(got.to_string()))
     }
 
-    pub fn bad_inst_name(location: ErrLocation, got: &str) -> Self {
+    pub fn bad_inst_name(location: ErrMetadata, got: &str) -> Self {
         ParseError::new(location, ParseErrorType::ExpectedInstName(got.to_string()))
     }
 
-    pub fn bad_arg(location: ErrLocation, got: &str) -> Self {
+    pub fn bad_arg(location: ErrMetadata, got: &str) -> Self {
         ParseError::new(location, ParseErrorType::ExpectedRegOrImm(got.to_string()))
     }
 
-    pub fn wrong_argc(location: ErrLocation, inst_name: &str, needed: u8, got: u8) -> Self {
+    pub fn wrong_argc(location: ErrMetadata, inst_name: &str, needed: u8, got: u8) -> Self {
         ParseError::new(
             location,
             ParseErrorType::WrongArgc {
@@ -298,7 +298,7 @@ impl ParseError {
     }
 
     pub fn wrong_diff_argc(
-        location: ErrLocation,
+        location: ErrMetadata,
         inst_name: &str,
         allowed_1: u8,
         allowed_2: u8,
@@ -315,7 +315,7 @@ impl ParseError {
         )
     }
 
-    pub fn too_many_args(location: ErrLocation, inst_name: &str, needed: u8) -> Self {
+    pub fn too_many_args(location: ErrMetadata, inst_name: &str, needed: u8) -> Self {
         ParseError::new(
             location,
             ParseErrorType::TooManyArgs {
@@ -325,7 +325,7 @@ impl ParseError {
         )
     }
 
-    pub fn imm_too_big(location: ErrLocation, max_bit_len: u8, imm_str: &str) -> Self {
+    pub fn imm_too_big(location: ErrMetadata, max_bit_len: u8, imm_str: &str) -> Self {
         ParseError::new(
             location,
             ParseErrorType::ImmTooBig {
@@ -335,7 +335,7 @@ impl ParseError {
         )
     }
 
-    pub fn unexpected_type(location: ErrLocation, exp_name: &str, got: TokenType) -> Self {
+    pub fn unexpected_type(location: ErrMetadata, exp_name: &str, got: TokenType) -> Self {
         ParseError::new(
             location,
             ParseErrorType::UnexpectedType {
@@ -345,11 +345,11 @@ impl ParseError {
         )
     }
 
-    pub fn unclosed_paren(location: ErrLocation, got: TokenType) -> Self {
+    pub fn unclosed_paren(location: ErrMetadata, got: TokenType) -> Self {
         ParseError::new(location, ParseErrorType::UnclosedParen(got))
     }
 
-    pub fn unsupported_directive(location: ErrLocation, got: &str) -> Self {
+    pub fn unsupported_directive(location: ErrMetadata, got: &str) -> Self {
         ParseError::new(
             location,
             ParseErrorType::UnsupportedDirective(got.to_string()),
@@ -359,15 +359,15 @@ impl ParseError {
 
 // functions for errors encountered by assembler/linker
 impl ParseError {
-    pub fn undeclared_label(location: ErrLocation, label: &str) -> Self {
+    pub fn undeclared_label(location: ErrMetadata, label: &str) -> Self {
         ParseError::new(location, ParseErrorType::UndeclaredLabel(label.to_string()))
     }
 
-    pub fn redefined_label(location: ErrLocation, label: &str) -> Self {
+    pub fn redefined_label(location: ErrMetadata, label: &str) -> Self {
         ParseError::new(location, ParseErrorType::RedefinedLabel(label.to_string()))
     }
 
-    pub fn undefined_label(location: ErrLocation, label: &str) -> Self {
+    pub fn undefined_label(location: ErrMetadata, label: &str) -> Self {
         ParseError::new(location, ParseErrorType::UndefinedLabel(label.to_string()))
     }
 }

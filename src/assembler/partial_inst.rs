@@ -1,5 +1,3 @@
-use super::lexer::Location;
-use super::parse_error::{ErrLocation, ParseError};
 use super::parser::Label;
 use crate::instruction::ConcreteInst;
 use crate::program_state::{IRegister, MachineDataWidth};

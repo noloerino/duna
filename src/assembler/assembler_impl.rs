@@ -1,5 +1,5 @@
 use super::lexer::{LineContents, Location};
-use super::parse_error::{ErrLocation, ParseError, ParseErrorReport, ParseErrorReporter};
+use super::parse_error::{ErrMetadata, ParseError, ParseErrorReport, ParseErrorReporter};
 use super::parser::{Label, ParseResult, RiscVParser};
 use super::partial_inst::{PartialInst, PartialInstType};
 use crate::program_state::{MachineDataWidth, RiscVProgram, Width32b};
@@ -182,7 +182,7 @@ impl<'a> UnlinkedProgram<'a, Width32b> {
                 needed_labels.insert(inst_index, label);
             } else {
                 let (file_name, _) = &insts[inst_index];
-                let location = ErrLocation::new(
+                let location = ErrMetadata::new(
                     &Location {
                         file_name: file_name.to_string(),
                         lineno: 0,
@@ -215,7 +215,7 @@ impl<'a> UnlinkedProgram<'a, Width32b> {
                     Err(needed_label) => {
                         reporter.add_error(ParseError::undefined_label(
                             // TODO
-                            ErrLocation::new(
+                            ErrMetadata::new(
                                 &Location {
                                     file_name: file_name.to_string(),
                                     lineno: 0,

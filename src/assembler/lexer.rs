@@ -1,4 +1,4 @@
-use super::parse_error::{ErrLocation, ParseError, ParseErrorReporter};
+use super::parse_error::{ErrMetadata, ParseError, ParseErrorReporter};
 use std::fmt;
 use std::iter::Enumerate;
 use std::iter::Peekable;
@@ -238,7 +238,7 @@ impl<'a> LineLexer<'a> {
                     } else {
                         self.max_munch_on_error();
                         return Err(ParseError::generic(
-                            ErrLocation::new(
+                            ErrMetadata::new(
                                 &Location {
                                     offs,
                                     ..state.location.clone()
@@ -255,7 +255,7 @@ impl<'a> LineLexer<'a> {
                 None => {
                     self.max_munch_on_error();
                     return Err(ParseError::generic(
-                        ErrLocation::new(&state.location, &self.line_contents),
+                        ErrMetadata::new(&state.location, &self.line_contents),
                         &format!(
                             "ran out of characters while parsing number literal {}",
                             head.to_string()
@@ -286,7 +286,7 @@ impl<'a> LineLexer<'a> {
                         if !c.is_ascii_digit() {
                             self.max_munch_on_error();
                             return Err(ParseError::generic(
-                                ErrLocation::new(&state.location, &self.line_contents),
+                                ErrMetadata::new(&state.location, &self.line_contents),
                                 &format!(
                                     "unexpected character when parsing base 10 integer literal {}",
                                     string_from_chars(digits)
@@ -319,7 +319,7 @@ impl<'a> LineLexer<'a> {
                         digits.extend(self.max_munch_on_error());
                         // TODO separators and format specifier are ignored
                         return Err(ParseError::bad_int_literal(
-                            ErrLocation::new(&state.location, &self.line_contents),
+                            ErrMetadata::new(&state.location, &self.line_contents),
                             fmt,
                             string_from_chars(digits),
                         ));
@@ -334,7 +334,7 @@ impl<'a> LineLexer<'a> {
             Ok(TokenType::Immediate(if negate { -val } else { val }, fmt))
         } else {
             Err(ParseError::bad_int_literal(
-                ErrLocation::new(&state.location, &self.line_contents),
+                ErrMetadata::new(&state.location, &self.line_contents),
                 fmt,
                 digit_str,
             ))
@@ -360,7 +360,7 @@ impl<'a> LineLexer<'a> {
                             '\\' => '\\',
                             _ => {
                                 return Err(ParseError::bad_escape(
-                                    ErrLocation::new(
+                                    ErrMetadata::new(
                                         &Location {
                                             offs: offs2,
                                             ..state.location.clone()
@@ -372,7 +372,7 @@ impl<'a> LineLexer<'a> {
                             }
                         }),
                         None => {
-                            return Err(ParseError::unclosed_string_literal(ErrLocation::new(
+                            return Err(ParseError::unclosed_string_literal(ErrMetadata::new(
                                 &state.location,
                                 &self.line_contents,
                             )))
@@ -383,7 +383,7 @@ impl<'a> LineLexer<'a> {
             }
         }
         // iterator ran out - return error
-        Err(ParseError::unclosed_string_literal(ErrLocation::new(
+        Err(ParseError::unclosed_string_literal(ErrMetadata::new(
             &state.location,
             &self.line_contents,
         )))
@@ -430,7 +430,7 @@ impl<'a> LineLexer<'a> {
                     '\"' => self.build_string_literal(&state),
                     ' ' | '\t' => continue,
                     _ => Err(ParseError::generic(
-                        ErrLocation::new(&state.location, &self.line_contents),
+                        ErrMetadata::new(&state.location, &self.line_contents),
                         &format!("unexpected token {}", c),
                     )),
                 }
