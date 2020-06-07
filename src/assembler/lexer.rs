@@ -111,7 +111,7 @@ struct LexState {
 }
 
 fn string_from_utf8(cs: Vec<u8>) -> String {
-    String::from_utf8(cs).expect("Non-UTF08 token while lexing")
+    String::from_utf8(cs).expect("Non-UTF-8 token while lexing")
 }
 
 fn string_from_chars(cs: Vec<char>) -> String {
@@ -568,6 +568,20 @@ mod tests {
     /// general, the presence of multiple syntax errors is handled properly.
     fn test_multi_bad_imm_report() {
         let line = "addi x1 1ggg1, 12kjkj03";
+        let mut reporter = get_test_reporter();
+        let (lexer, _state) = get_line_lexer(&mut reporter, line);
+        let _tokens = lexer.lex();
+        let report = reporter.into_report_with_file_map(vec![FileData::from_test_program(line)]);
+        assert_eq!(report.get_errs().len(), 2);
+    }
+
+    #[test]
+    fn test_bad_string_literals() {
+        let line = "
+            .string \"there's no end quote at the end of this line -->
+            .string \"this is an invalid escape \\,\"
+            nop
+            ";
         let mut reporter = get_test_reporter();
         let (lexer, _state) = get_line_lexer(&mut reporter, line);
         let _tokens = lexer.lex();
