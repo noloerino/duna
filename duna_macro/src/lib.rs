@@ -171,7 +171,7 @@ fn impl_itype_load_derive(ast: &syn::DeriveInput) -> TokenStream {
             }
 
             fn eval(
-                state: &UserProgState<RiscVR, T>,
+                state: &UserProgState<RiscVRegister, T>,
                 rd: RiscVRegister,
                 rs1: RiscVRegister,
                 imm: BitStr32
