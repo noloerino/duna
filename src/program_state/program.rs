@@ -8,7 +8,7 @@ use std::collections::HashMap;
 
 pub trait Program<S, T>
 where
-    S: Architecture,
+    S: Architecture<T>,
     T: MachineDataWidth,
 {
     fn new(insts: Vec<S::Instruction>, sections: SectionStore) -> Self;
@@ -24,12 +24,12 @@ where
     fn get_state(self) -> ProgramState<S, T>;
 }
 
-pub struct ProgramState<S: Architecture, T: MachineDataWidth> {
+pub struct ProgramState<S: Architecture<T>, T: MachineDataWidth> {
     pub(crate) priv_state: PrivProgState,
     pub(crate) user_state: UserProgState<S::Register, T>,
 }
 
-impl<S: Architecture, T: MachineDataWidth> Default for ProgramState<S, T> {
+impl<S: Architecture<T>, T: MachineDataWidth> Default for ProgramState<S, T> {
     fn default() -> Self {
         ProgramState::new()
     }
@@ -42,7 +42,7 @@ impl<S: Architecture, T: MachineDataWidth> Default for ProgramState<S, T> {
 /// See [Syscall] for syscall codes.
 /// TODO put custom types for syscall args
 /// TODO put errno on user state at a thread-local statically known location
-impl<S: Architecture, T: MachineDataWidth> ProgramState<S, T> {
+impl<S: Architecture<T>, T: MachineDataWidth> ProgramState<S, T> {
     pub fn get_stdout(&self) -> &[u8] {
         self.priv_state.stdout.as_slice()
     }

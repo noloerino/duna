@@ -19,7 +19,7 @@ pub struct LabelRef {
 }
 
 impl LabelRef {
-    fn new(target: Label, location: Location) -> LabelRef {
+    pub fn new(target: Label, location: Location) -> LabelRef {
         LabelRef { target, location }
     }
 }
@@ -33,7 +33,7 @@ pub struct LabelDef {
 }
 
 impl LabelDef {
-    fn new(name: Label, location: Location) -> LabelDef {
+    pub fn new(name: Label, location: Location) -> LabelDef {
         LabelDef { name, location }
     }
 }
@@ -42,7 +42,7 @@ pub type ParsedInstStream<S, T> = Vec<PartialInst<S, T>>;
 pub type LineParseResult<S, T> = Result<ParsedInstStream<S, T>, ParseError>;
 pub struct ParseResult<S, T>
 where
-    S: Architecture,
+    S: Architecture<T>,
     T: MachineDataWidth,
 {
     pub file_id: FileId,
@@ -56,16 +56,16 @@ where
 pub struct ParseState {
     /// The section in which parsed values should be placed.
     /// This should default to text.
-    curr_section: ProgramSection,
-    sections: SectionStore,
+    pub curr_section: ProgramSection,
+    pub sections: SectionStore,
     /// These labels were given to a .global declaration, which means either the
     /// current file defined the symbol and is making it visible to the linker, or
     /// the current file will look for the symbol in another file.
-    declared_globals: HashSet<String>,
+    pub declared_globals: HashSet<String>,
 }
 
 impl ParseState {
-    fn new() -> ParseState {
+    pub fn new() -> ParseState {
         ParseState {
             curr_section: ProgramSection::Text,
             sections: SectionStore::new(),
@@ -78,7 +78,7 @@ pub type TokenIter = Peekable<IntoIter<Token>>;
 
 pub trait Parser<S, T>
 where
-    S: Architecture,
+    S: Architecture<T>,
     T: MachineDataWidth,
 {
     fn parse_str(file_id: FileId, contents: &str) -> ParseResult<S, T> {

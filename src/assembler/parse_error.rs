@@ -429,6 +429,7 @@ impl fmt::Display for ParseError {
 
 #[cfg(test)]
 mod tests {
+    use super::super::parser::Parser;
     use crate::architectures::riscv::parser::RiscVParser;
 
     #[test]

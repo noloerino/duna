@@ -1,7 +1,9 @@
 use super::arch::*;
 use super::instruction::RiscVInst;
+use super::registers::RiscVRegister;
 use crate::arch::*;
 use crate::assembler::{Linker, ParseErrorReport, SectionStore};
+use crate::instruction::*;
 use crate::program_state::*;
 use std::str;
 
@@ -33,7 +35,9 @@ impl Program<RiscV, Width32b> for RiscVProgram<Width32b> {
         let mut user_state = &mut state.user_state;
         let text_start: ByteAddr32 = RiscVProgram::TEXT_START.into();
         let stack_start: ByteAddr32 = RiscVProgram::STACK_START.into();
-        user_state.regfile.set(IRegister::SP, stack_start.into());
+        user_state
+            .regfile
+            .set(RiscVRegister::SP, stack_start.into());
         user_state.pc = text_start;
         // store instructions
         let mut next_addr: ByteAddr32 = user_state.pc;
@@ -73,7 +77,13 @@ impl Program<RiscV, Width32b> for RiscVProgram<Width32b> {
         ) {
             self.state.apply_inst(inst);
         }
-        i32::from(self.state.user_state.regfile.read(IRegister::A0))
+        i32::from(self.state.user_state.regfile.read(RiscVRegister::A0))
+    }
+    fn get_inst_vec(&self) -> &[RiscVInst<Width32b>] {
+        self.insts.as_slice()
+    }
+    fn get_state(self) -> ProgramState<RiscV, Width32b> {
+        self.state
     }
 }
 
@@ -81,6 +91,6 @@ impl str::FromStr for RiscVProgram<Width32b> {
     type Err = ParseErrorReport;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Linker::with_main_str(s).link()
+        Linker::with_main_str(s).link::<RiscV>()
     }
 }

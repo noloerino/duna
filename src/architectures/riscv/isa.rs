@@ -460,7 +460,7 @@ mod test {
     const RS2_POS: RiscVRegister = T1;
     const RS2_NEG: RiscVRegister = S1;
 
-    fn get_init_state() -> ProgramState<RiscV<Width32b>, Width32b> {
+    fn get_init_state() -> ProgramState<RiscV, Width32b> {
         let mut state = ProgramState::new();
         state.regfile_set(RS1, DataWord::from(RS1_VAL));
         state.regfile_set(RS2_POS, DataWord::from(RS2_VAL_POS));
@@ -470,7 +470,7 @@ mod test {
 
     #[test]
     fn test_write_x0() {
-        let mut state = ProgramState::<Width32b>::new();
+        let mut state = ProgramState::<RiscV, Width32b>::new();
         state.apply_inst(&Addi::new(ZERO, ZERO, DataWord::from(0x100)));
         assert_eq!(i32::from(state.regfile_read(ZERO)), 0);
     }
@@ -483,7 +483,7 @@ mod test {
     /// Tests an R type instruction. Assumes that the registers being read
     /// are independent of the registers being written.
     fn test_r_type<T: RType<Width32b>>(
-        state: &mut ProgramState<RiscV<Width32b>, Width32b>,
+        state: &mut ProgramState<RiscV, Width32b>,
         args: Vec<RTestData>,
     ) {
         for RTestData { rs2, result } in args {
@@ -500,7 +500,7 @@ mod test {
     /// Tests an I type arithmetic instruction. Assumes that the registers being read
     /// are independent of the registers being written.
     fn test_i_type_arith<T: ITypeArith<Width32b>>(
-        state: &mut ProgramState<RiscV<Width32b>, Width32b>,
+        state: &mut ProgramState<RiscV, Width32b>,
         args: Vec<IArithTestData>,
     ) {
         for IArithTestData { imm, result } in args {
@@ -652,7 +652,7 @@ mod test {
 
     /// Tests a branch instruction. Taken jumps move forward by 0x100, or backwards by 0x100.
     fn test_b_type<T: BType<Width32b>>(
-        state: &mut ProgramState<RiscV<Width32b>, Width32b>,
+        state: &mut ProgramState<RiscV, Width32b>,
         args: Vec<BTestData>,
     ) {
         for &dist in &[0x100, -0x100] {

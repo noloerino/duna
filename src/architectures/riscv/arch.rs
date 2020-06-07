@@ -6,9 +6,9 @@ use crate::arch::*;
 
 pub struct RiscV;
 
-impl Architecture for RiscV {
+impl Architecture<Width32b> for RiscV {
     type Register = RiscVRegister;
     type Instruction = RiscVInst<Width32b>;
     type Program = RiscVProgram<Width32b>;
-    type Parser = RiscVParser;
+    type Parser = RiscVParser<Width32b>;
 }

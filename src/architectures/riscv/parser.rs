@@ -1,5 +1,5 @@
 use super::arch::RiscV;
-use super::instruction::RiscVInst;
+use super::instruction::*;
 use super::isa;
 use super::isa::*;
 use super::pseudo_inst;
@@ -10,9 +10,11 @@ use crate::arch::*;
 use crate::assembler::lexer::*;
 use crate::assembler::parser::*;
 use crate::assembler::*;
+use crate::instruction::*;
 use crate::program_state::DataWidth;
 use std::collections::HashMap;
 use std::iter::Peekable;
+use std::marker::PhantomData;
 use std::vec::IntoIter;
 
 #[derive(Copy, Clone)]
@@ -45,11 +47,12 @@ struct ParserData<'a, T: MachineDataWidth> {
     reg_expansion_table: &'a HashMap<String, RiscVRegister>,
 }
 
-pub struct RiscVParser {
+pub struct RiscVParser<T: MachineDataWidth> {
     file_id: FileId,
     lines: LineTokenStream,
     reporter: ParseErrorReporter,
     state: ParseState,
+    _phantom: PhantomData<T>,
 }
 
 type TokenIter = Peekable<IntoIter<Token>>;
@@ -124,23 +127,24 @@ lazy_static! {
     };
 }
 
-impl Parser<RiscV, Width32b> for RiscVParser {
+impl Parser<RiscV, Width32b> for RiscVParser<Width32b> {
     fn parse_lex_result(lex_result: LexResult) -> ParseResult<RiscV, Width32b> {
         RiscVParser {
             file_id: lex_result.file_id,
             lines: lex_result.lines,
             reporter: lex_result.reporter,
             state: ParseState::new(),
+            _phantom: PhantomData,
         }
         .parse()
     }
 }
 
-impl RiscVParser {
+impl RiscVParser<Width32b> {
     fn parse(mut self) -> ParseResult<RiscV, Width32b> {
         let mut insts = Vec::<PartialInst<RiscV, Width32b>>::new();
         let mut last_label: Option<LabelDef> = None;
-        let parser_data = ParserData {
+        let parser_data = &ParserData {
             inst_expansion_table: &RV32_INST_EXPANSION_TABLE,
             reg_expansion_table: &REG_EXPANSION_TABLE,
         };
@@ -1031,7 +1035,6 @@ impl<'a, T: MachineDataWidth> LineParser<'a, T> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::instruction::RiscVInst;
     use super::super::isa::*;
     use super::super::registers::RiscVRegister::*;
     use super::*;
