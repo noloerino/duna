@@ -30,7 +30,7 @@ pub struct JInstFields {
 }
 
 pub struct RiscVInst<T: MachineDataWidth> {
-    pub eval: Box<dyn Fn(&ProgramState<RiscV, T>) -> InstResult<RiscVRegister, T>>,
+    pub eval: Box<dyn Fn(&ProgramState<RiscV<T>, T>) -> InstResult<RiscVRegister, T>>,
     data: RiscVInstData,
 }
 
@@ -71,7 +71,7 @@ enum RiscVInstData {
     },
 }
 
-impl<T: MachineDataWidth> ConcreteInst<RiscV, T> for RiscVInst<T> {
+impl<T: MachineDataWidth> ConcreteInst<RiscV<T>, T> for RiscVInst<T> {
     fn to_machine_code(&self) -> u32 {
         match self.data {
             RiscVInstData::R {
@@ -144,7 +144,7 @@ impl<T: MachineDataWidth> ConcreteInst<RiscV, T> for RiscVInst<T> {
         .as_u32()
     }
 
-    fn apply(&self, state: &ProgramState<RiscV, T>) -> InstResult<RiscVRegister, T> {
+    fn apply(&self, state: &ProgramState<RiscV<T>, T>) -> InstResult<RiscVRegister, T> {
         (*self.eval)(state)
     }
 }
@@ -259,7 +259,7 @@ pub trait EnvironInst<T: MachineDataWidth> {
     }
     fn funct12() -> BitStr32;
     fn inst_fields() -> IInstFields;
-    fn eval(state: &ProgramState<RiscV, T>) -> TrapKind;
+    fn eval(state: &ProgramState<RiscV<T>, T>) -> TrapKind;
 }
 
 pub trait SType<T: MachineDataWidth> {

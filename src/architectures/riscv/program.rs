@@ -9,7 +9,7 @@ use std::str;
 
 pub struct RiscVProgram<T: MachineDataWidth> {
     pub insts: Vec<RiscVInst<T>>,
-    pub state: ProgramState<RiscV, T>,
+    pub state: ProgramState<RiscV<T>, T>,
 }
 
 impl RiscVProgram<Width32b> {
@@ -18,7 +18,7 @@ impl RiscVProgram<Width32b> {
     pub const DATA_START: u32 = 0x2000_0000;
 }
 
-impl Program<RiscV, Width32b> for RiscVProgram<Width32b> {
+impl Program<RiscV<Width32b>, Width32b> for RiscVProgram<Width32b> {
     /// Initializes a new program instance from the provided instructions.
     ///
     /// The instructions are loaded into memory at the start of the instruction section,
@@ -82,7 +82,7 @@ impl Program<RiscV, Width32b> for RiscVProgram<Width32b> {
     fn get_inst_vec(&self) -> &[RiscVInst<Width32b>] {
         self.insts.as_slice()
     }
-    fn get_state(self) -> ProgramState<RiscV, Width32b> {
+    fn get_state(self) -> ProgramState<RiscV<Width32b>, Width32b> {
         self.state
     }
 }
