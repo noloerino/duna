@@ -1,3 +1,4 @@
+use crate::arch::*;
 use crate::program_state::*;
 use std::fmt;
 

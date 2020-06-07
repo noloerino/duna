@@ -2,7 +2,8 @@ use super::datatypes::*;
 use super::parse_error::{ParseError, ParseErrorReporter};
 use super::parser::{Label, LabelRef, ParseResult, RiscVParser};
 use super::partial_inst::{PartialInst, PartialInstType};
-use crate::program_state::{MachineDataWidth, RiscVProgram, Width32b};
+use crate::arch::*;
+use crate::program_state::RiscVProgram;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 

@@ -2,7 +2,8 @@ use super::assembler_impl::{Assembler, SectionStore, UnlinkedProgram};
 use super::datatypes::*;
 use super::parse_error::{ParseError, ParseErrorReport, ParseErrorReporter};
 use super::parser::{Label, LabelDef};
-use crate::program_state::{RiscVProgram, Width32b};
+use crate::arch::*;
+use crate::program_state::RiscVProgram;
 use std::collections::HashMap;
 use std::fs;
 

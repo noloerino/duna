@@ -1,6 +1,7 @@
 use super::parser::{LabelDef, LabelRef};
+use crate::arch::*;
 use crate::instruction::ConcreteInst;
-use crate::program_state::{IRegister, MachineDataWidth};
+use crate::program_state::IRegister;
 
 pub(crate) enum NeededRegs<T: MachineDataWidth> {
     Two {

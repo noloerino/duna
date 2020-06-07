@@ -1,6 +1,7 @@
+use crate::arch::*;
 use crate::instruction::*;
 use crate::isa::*;
-use crate::program_state::{BitStr32, IRegister, MachineDataWidth, RegSize};
+use crate::program_state::{BitStr32, IRegister};
 use IRegister::*;
 
 pub struct Nop;

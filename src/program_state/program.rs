@@ -1,6 +1,7 @@
 use super::datatypes::*;
 use super::memory::Memory;
 use super::registers::{IRegister, RegFile};
+use crate::arch::*;
 use crate::assembler::{Linker, ParseErrorReport, SectionStore};
 use crate::instruction::ConcreteInst;
 use std::collections::HashMap;

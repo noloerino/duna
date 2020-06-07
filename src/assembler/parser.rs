@@ -3,6 +3,7 @@ use super::datatypes::*;
 use super::lexer::*;
 use super::parse_error::{ErrMetadata, ParseError, ParseErrorReporter};
 use super::partial_inst::PartialInst;
+use crate::arch::*;
 use crate::instruction::*;
 use crate::isa;
 use crate::program_state::*;

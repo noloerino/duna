@@ -1,3 +1,4 @@
+use crate::arch::*;
 use crate::instruction::*;
 use crate::program_state::*;
 use duna_macro::*;

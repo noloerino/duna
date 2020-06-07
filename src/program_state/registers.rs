@@ -1,4 +1,5 @@
 use super::datatypes::*;
+use crate::arch::*;
 use std::fmt;
 
 #[derive(Copy, Clone, PartialEq, Debug)]
