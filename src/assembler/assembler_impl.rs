@@ -1,8 +1,6 @@
-use super::lexer::Location;
-use super::linker::FileId;
+use super::datatypes::*;
 use super::parse_error::{ParseError, ParseErrorReporter};
-use super::parser::LabelRef;
-use super::parser::{Label, ParseResult, RiscVParser};
+use super::parser::{Label, LabelRef, ParseResult, RiscVParser};
 use super::partial_inst::{PartialInst, PartialInstType};
 use crate::program_state::{MachineDataWidth, RiscVProgram, Width32b};
 use std::collections::{HashMap, HashSet};
@@ -235,7 +233,6 @@ impl UnlinkedProgram<Width32b> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::linker::FileData;
     use super::*;
     use crate::instruction::BType;
     use crate::isa::Beq;

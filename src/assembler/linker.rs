@@ -1,29 +1,10 @@
 use super::assembler_impl::{Assembler, SectionStore, UnlinkedProgram};
+use super::datatypes::*;
 use super::parse_error::{ParseError, ParseErrorReport, ParseErrorReporter};
 use super::parser::{Label, LabelDef};
 use crate::program_state::{RiscVProgram, Width32b};
 use std::collections::HashMap;
 use std::fs;
-
-pub struct FileData {
-    pub file_name: String,
-    pub content: String,
-}
-
-impl FileData {
-    #[cfg(test)]
-    pub fn from_test_program(content: &str) -> FileData {
-        FileData {
-            file_name: "test".to_string(),
-            content: content.to_string(),
-        }
-    }
-}
-
-/// Used to make error reporting easier without having to worry about lifetimes with string
-/// references. Should map to a FileData somehow.
-pub type FileId = usize;
-pub type FileMap = Vec<FileData>;
 
 /// Links programs together.
 ///

@@ -1,5 +1,5 @@
-use super::lexer::{ImmRenderType, Location, TokenType};
-use super::linker::{FileData, FileMap};
+use super::datatypes::*;
+use super::lexer::{ImmRenderType, TokenType};
 use super::parser::{LabelDef, LabelRef};
 use std::fmt;
 

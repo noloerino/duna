@@ -1,4 +1,5 @@
 mod assembler_impl;
+mod datatypes;
 mod lexer;
 mod linker;
 mod parse_error;

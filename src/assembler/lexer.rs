@@ -1,8 +1,7 @@
-use super::linker::FileId;
+use super::datatypes::*;
 use super::parse_error::{ErrMetadata, ParseError, ParseErrorReporter};
 use std::fmt;
-use std::iter::Enumerate;
-use std::iter::Peekable;
+use std::iter::{Enumerate, Peekable};
 use std::str::Chars;
 
 pub struct LexResult<'a> {
@@ -10,26 +9,6 @@ pub struct LexResult<'a> {
     pub lines: LineTokenStream,
     pub contents: &'a str,
     pub reporter: ParseErrorReporter,
-}
-
-// The line number of a token.
-pub type LineNo = usize;
-// The offset of a token within a line.
-pub type LineOffs = usize;
-
-#[derive(Copy, Clone, Eq, PartialEq, PartialOrd, Hash, Debug)]
-pub struct Location {
-    /// Holds a reference to the file from which this came.
-    pub file_id: FileId,
-    /// Holds a reference to the line from which this came (used for error messages)
-    pub lineno: LineNo,
-    pub offs: LineOffs,
-}
-
-impl fmt::Display for Location {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}:{}", self.lineno, self.offs)
-    }
 }
 
 #[derive(Eq, PartialEq, Debug)]
@@ -472,7 +451,6 @@ impl<'a> Lexer<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::linker::FileData;
     use super::*;
 
     fn get_test_reporter() -> ParseErrorReporter {

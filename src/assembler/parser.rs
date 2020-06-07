@@ -1,6 +1,6 @@
 use super::assembler_impl::{ProgramSection, SectionStore};
+use super::datatypes::*;
 use super::lexer::*;
-use super::linker::FileId;
 use super::parse_error::{ErrMetadata, ParseError, ParseErrorReporter};
 use super::partial_inst::PartialInst;
 use crate::instruction::*;
