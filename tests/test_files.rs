@@ -1,5 +1,8 @@
+use duna::arch::*;
+use duna::architectures::riscv::arch::RiscV;
+use duna::architectures::riscv::program::RiscVProgram;
 use duna::assembler::{Linker, ParseErrorReport};
-use duna::program_state::{RiscVProgram, Width32b};
+use duna::program_state::Program;
 use std::path::Path;
 
 fn get_full_test_path(relative_path: &str) -> String {
@@ -11,8 +14,8 @@ fn get_full_test_path(relative_path: &str) -> String {
 }
 
 fn program_from_file(filename: &str) -> RiscVProgram<Width32b> {
-    let program = Linker::with_main(&get_full_test_path(filename))
-        .link()
+    let program: RiscVProgram<Width32b> = Linker::with_main(&get_full_test_path(filename))
+        .link::<RiscV<Width32b>, Width32b>()
         .unwrap();
     // stdout is suppressed unless a test fails
     program.dump_insts();
@@ -25,7 +28,7 @@ fn err_report_from_files(main_filename: &str, others: Vec<&str>) -> ParseErrorRe
         linker = linker.with_file(&get_full_test_path(file));
     }
     let report = linker
-        .link()
+        .link::<RiscV<Width32b>, Width32b>()
         .err() // needed because RiscVProgram is not Debug
         .expect("linker did not error when it should have");
     report.report();
@@ -94,7 +97,7 @@ fn test_local_labels() {
 /// Tests linking two files that have no label dependencies.
 fn test_basic_link() {
     let mut program = Linker::with_main("tests/asm_files/local_labels.s")
-        .link()
+        .link::<RiscV<Width32b>, Width32b>()
         .unwrap();
     program.dump_insts();
     assert_eq!(program.run() as u32, 0xABCD_0123u32);
@@ -105,7 +108,7 @@ fn test_basic_link() {
 fn test_global_link() {
     let mut program = Linker::with_main("tests/asm_files/global_link_0.s")
         .with_file("tests/asm_files/global_link_1.s")
-        .link()
+        .link::<RiscV<Width32b>, Width32b>()
         .unwrap();
     program.dump_insts();
     assert_eq!(program.run(), 0x1234);

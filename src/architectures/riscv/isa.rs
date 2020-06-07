@@ -5,6 +5,7 @@ use crate::arch::*;
 use crate::instruction::*;
 use crate::program_state::*;
 use duna_macro::*;
+use num_traits::ops::wrapping::WrappingAdd;
 
 fn f3(val: u32) -> BitStr32 {
     BitStr32::new(val, 3)
@@ -33,7 +34,7 @@ impl<T: MachineDataWidth> RType<T> for Add {
     }
     fn eval(rs1_val: T::RegData, rs2_val: T::RegData) -> T::RegData {
         let v1: T::Signed = rs1_val.into();
-        (v1 + rs2_val.into()).into()
+        (v1.wrapping_add(&rs2_val.into())).into()
     }
 }
 
@@ -50,7 +51,7 @@ impl<T: MachineDataWidth> ITypeArith<T> for Addi {
     fn eval(rs1_val: T::RegData, imm: BitStr32) -> T::RegData {
         let v1: T::Signed = rs1_val.into();
         let imm_val: T::Signed = imm.into();
-        (v1 + imm_val).into()
+        (v1.wrapping_add(&imm_val)).into()
     }
 }
 
@@ -101,7 +102,11 @@ impl<T: MachineDataWidth> UType<T> for Auipc {
         imm: BitStr32,
     ) -> UserDiff<RiscVRegister, T> {
         let pc: T::Signed = state.pc.into();
-        UserDiff::reg_write_pc_p4(state, rd, (pc + imm.zero_pad_lsb().into()).into())
+        UserDiff::reg_write_pc_p4(
+            state,
+            rd,
+            (pc.wrapping_add(&imm.zero_pad_lsb().into())).into(),
+        )
     }
 }
 
@@ -224,7 +229,12 @@ impl<T: MachineDataWidth> JType<T> for Jal {
     ) -> UserDiff<RiscVRegister, T> {
         let pc: T::Signed = state.pc.into();
         let offs: T::Signed = imm.into();
-        UserDiff::reg_write_op(state, (pc + offs).into(), rd, state.pc.plus_4().into())
+        UserDiff::reg_write_op(
+            state,
+            (pc.wrapping_add(&offs)).into(),
+            rd,
+            state.pc.plus_4().into(),
+        )
     }
 }
 
@@ -246,7 +256,7 @@ impl<T: MachineDataWidth> IType<T> for Jalr {
         let v1: T::Signed = state.regfile.read(rs1).into();
         UserDiff::reg_write_op(
             state,
-            (v1 + imm.into()).into(),
+            (v1.wrapping_add(&imm.into())).into(),
             rd,
             state.pc.plus_4().into(),
         )
@@ -296,7 +306,7 @@ impl<T: MachineDataWidth> ITypeLoad<T> for Lh {
     // TODO define alignment behavior
     fn eval(mem: &Memory<T>, addr: T::ByteAddr) -> T::RegData {
         let og_addr: T::Signed = addr.into();
-        let second_byte_addr: T::ByteAddr = (og_addr + T::sgn_one()).into();
+        let second_byte_addr: T::ByteAddr = (og_addr.wrapping_add(&T::sgn_one())).into();
         let upper_byte: T::Signed =
             <T::RegData>::sign_ext_from_byte(mem.get_byte(second_byte_addr)).into();
         let lower_byte: T::Signed = <T::RegData>::zero_pad_from_byte(mem.get_byte(addr)).into();
@@ -317,7 +327,7 @@ impl<T: MachineDataWidth> ITypeLoad<T> for Lhu {
     // TODO define alignment behavior
     fn eval(mem: &Memory<T>, addr: T::ByteAddr) -> T::RegData {
         let og_addr: T::Signed = addr.into();
-        let second_byte_addr: T::ByteAddr = (og_addr + T::sgn_one()).into();
+        let second_byte_addr: T::ByteAddr = (og_addr.wrapping_add(&T::sgn_one())).into();
         let upper_byte: T::Signed =
             <T::RegData>::zero_pad_from_byte(mem.get_byte(second_byte_addr)).into();
         let lower_byte: T::Signed = <T::RegData>::zero_pad_from_byte(mem.get_byte(addr)).into();
@@ -376,7 +386,7 @@ impl<T: MachineDataWidth> SType<T> for Sb {
     ) -> UserDiff<RiscVRegister, T> {
         // TODO implement more granular diffs
         let base_addr: T::Signed = state.regfile.read(rs1).into();
-        let byte_addr: T::ByteAddr = (base_addr + imm.into()).into();
+        let byte_addr: T::ByteAddr = (base_addr.wrapping_add(&imm.into())).into();
         let new_word = state.memory.get_word(byte_addr.to_word_address()).set_byte(
             byte_addr.get_word_offset(),
             state.regfile.read(rs2).get_byte(0),
@@ -402,7 +412,7 @@ impl<T: MachineDataWidth> SType<T> for Sh {
     ) -> UserDiff<RiscVRegister, T> {
         // TODO implement more granular diffs
         let base_addr: T::Signed = state.regfile.read(rs1).into();
-        let byte_addr: T::ByteAddr = (base_addr + imm.into()).into();
+        let byte_addr: T::ByteAddr = (base_addr.wrapping_add(&imm.into())).into();
         let new_word = state
             .memory
             .get_word(byte_addr.to_word_address())
@@ -412,7 +422,7 @@ impl<T: MachineDataWidth> SType<T> for Sh {
             )
             .set_byte(
                 // will panic if not properly aligned, but we don't care yet
-                byte_addr.get_word_offset() + 1,
+                byte_addr.get_word_offset().wrapping_add(1),
                 state.regfile.read(rs2).get_byte(1),
             );
         UserDiff::mem_write_op(state, byte_addr.to_word_address(), new_word)
@@ -435,7 +445,7 @@ impl<T: MachineDataWidth> SType<T> for Sw {
         imm: BitStr32,
     ) -> UserDiff<RiscVRegister, T> {
         let base_addr: T::Signed = state.regfile.read(rs1).into();
-        let byte_addr: T::ByteAddr = (base_addr + imm.into()).into();
+        let byte_addr: T::ByteAddr = (base_addr.wrapping_add(&imm.into())).into();
         UserDiff::mem_write_op(
             state,
             byte_addr.to_word_address(),

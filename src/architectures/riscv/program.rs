@@ -5,6 +5,8 @@ use crate::arch::*;
 use crate::assembler::{Linker, ParseErrorReport, SectionStore};
 use crate::instruction::*;
 use crate::program_state::*;
+use num_traits::cast::{FromPrimitive, ToPrimitive};
+use num_traits::ops::wrapping::WrappingSub;
 use std::str;
 
 pub struct RiscVProgram<T: MachineDataWidth> {
@@ -12,13 +14,16 @@ pub struct RiscVProgram<T: MachineDataWidth> {
     pub state: ProgramState<RiscV<T>, T>,
 }
 
-impl RiscVProgram<Width32b> {
-    pub const TEXT_START: u32 = 0x1000_0000;
-    pub const STACK_START: u32 = 0x7FFF_FFF0;
-    pub const DATA_START: u32 = 0x2000_0000;
+impl<T: MachineDataWidth> RiscVProgram<T> {
+    pub const TEXT_START_32: u32 = 0x1000_0000;
+    pub const STACK_START_32: u32 = 0x7FFF_FFF0;
+    pub const DATA_START_32: u32 = 0x2000_0000;
+    pub const TEXT_START_64: u64 = 0x1000_0000_0000_0000;
+    pub const STACK_START_64: u64 = 0x7FFF_FFFF_FFFF_FFF0;
+    pub const DATA_START_64: u64 = 0x2000_0000_0000_0000;
 }
 
-impl Program<RiscV<Width32b>, Width32b> for RiscVProgram<Width32b> {
+impl<T: MachineDataWidth> Program<RiscV<T>, T> for RiscVProgram<T> {
     /// Initializes a new program instance from the provided instructions.
     ///
     /// The instructions are loaded into memory at the start of the instruction section,
@@ -30,17 +35,39 @@ impl Program<RiscV<Width32b>, Width32b> for RiscVProgram<Width32b> {
     ///
     /// Until paged memory is implemented, rodata is placed sequentially with data, and
     /// no guarantees on read-onliness are enforced.
-    fn new(insts: Vec<RiscVInst<Width32b>>, sections: SectionStore) -> RiscVProgram<Width32b> {
+    fn new(insts: Vec<RiscVInst<T>>, sections: SectionStore) -> RiscVProgram<T> {
         let mut state = ProgramState::new();
         let mut user_state = &mut state.user_state;
-        let text_start: ByteAddr32 = RiscVProgram::TEXT_START.into();
-        let stack_start: ByteAddr32 = RiscVProgram::STACK_START.into();
+        let text_start: T::ByteAddr = match T::get_enum() {
+            BitWidthEnum::BitWidth32 => {
+                <T::Unsigned as FromPrimitive>::from_u32(RiscVProgram::<T>::TEXT_START_32)
+                    .unwrap()
+                    .into()
+            }
+            BitWidthEnum::BitWidth64 => {
+                <T::Unsigned as FromPrimitive>::from_u64(RiscVProgram::<T>::TEXT_START_64)
+                    .unwrap()
+                    .into()
+            }
+        };
+        let stack_start: T::ByteAddr = match T::get_enum() {
+            BitWidthEnum::BitWidth32 => {
+                <T::Unsigned as FromPrimitive>::from_u32(RiscVProgram::<T>::STACK_START_32)
+                    .unwrap()
+                    .into()
+            }
+            BitWidthEnum::BitWidth64 => {
+                <T::Unsigned as FromPrimitive>::from_u64(RiscVProgram::<T>::STACK_START_64)
+                    .unwrap()
+                    .into()
+            }
+        };
         user_state
             .regfile
             .set(RiscVRegister::SP, stack_start.into());
         user_state.pc = text_start;
         // store instructions
-        let mut next_addr: ByteAddr32 = user_state.pc;
+        let mut next_addr: T::ByteAddr = user_state.pc;
         for inst in &insts {
             user_state.memory.set_word(
                 next_addr.to_word_address(),
@@ -51,9 +78,21 @@ impl Program<RiscV<Width32b>, Width32b> for RiscVProgram<Width32b> {
         // store data
         let all_data = sections.data.into_iter().chain(sections.rodata.into_iter());
         for (offs, byte) in all_data.enumerate() {
-            user_state
-                .memory
-                .set_byte((RiscVProgram::DATA_START + offs as u32).into(), byte.into())
+            user_state.memory.set_byte(
+                match T::get_enum() {
+                    BitWidthEnum::BitWidth32 => {
+                        <T::Unsigned as FromPrimitive>::from_u32(RiscVProgram::<T>::DATA_START_32)
+                            .unwrap()
+                            .into()
+                    }
+                    BitWidthEnum::BitWidth64 => {
+                        <T::Unsigned as FromPrimitive>::from_u64(RiscVProgram::<T>::DATA_START_64)
+                            .unwrap()
+                            .into()
+                    }
+                },
+                byte.into(),
+            )
         }
         RiscVProgram { insts, state }
     }
@@ -68,29 +107,45 @@ impl Program<RiscV<Width32b>, Width32b> for RiscVProgram<Width32b> {
     /// Runs the program to completion, returning the value in register a0.
     fn run(&mut self) -> i32 {
         // for now, just use the instruction vec to determine the next instruction
-        let pc_start = RiscVProgram::TEXT_START;
+        let pc_start: T::Unsigned = match T::get_enum() {
+            BitWidthEnum::BitWidth32 => {
+                <T::Unsigned as FromPrimitive>::from_u32(RiscVProgram::<T>::TEXT_START_32)
+                    .unwrap()
+                    .into()
+            }
+            BitWidthEnum::BitWidth64 => {
+                <T::Unsigned as FromPrimitive>::from_u64(RiscVProgram::<T>::TEXT_START_64)
+                    .unwrap()
+                    .into()
+            }
+        };
         // for now, if we're out of instructions just call it a day
         // if pc dipped below pc_start, panic for now is also fine
-        while let Some(inst) = self.insts.get(
-            ByteAddr32::from(u32::from(self.state.user_state.pc) - pc_start).to_word_address()
-                as usize,
-        ) {
+        while let Some(inst) = self.insts.get({
+            let addr_value: T::Unsigned =
+                <T::Unsigned>::from(self.state.user_state.pc).wrapping_sub(&pc_start);
+            let addr = <T::ByteAddr as From<T::Unsigned>>::from(addr_value).to_word_address();
+            ToPrimitive::to_usize(&addr).unwrap()
+        }) {
             self.state.apply_inst(inst);
         }
-        i32::from(self.state.user_state.regfile.read(RiscVRegister::A0))
+        ToPrimitive::to_i32(&<T::Signed as From<T::RegData>>::from(
+            self.state.user_state.regfile.read(RiscVRegister::A0),
+        ))
+        .unwrap()
     }
-    fn get_inst_vec(&self) -> &[RiscVInst<Width32b>] {
+    fn get_inst_vec(&self) -> &[RiscVInst<T>] {
         self.insts.as_slice()
     }
-    fn get_state(self) -> ProgramState<RiscV<Width32b>, Width32b> {
+    fn get_state(self) -> ProgramState<RiscV<T>, T> {
         self.state
     }
 }
 
-impl str::FromStr for RiscVProgram<Width32b> {
+impl<T: MachineDataWidth> str::FromStr for RiscVProgram<T> {
     type Err = ParseErrorReport;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Linker::with_main_str(s).link::<RiscV>()
+        Linker::with_main_str(s).link::<RiscV<T>, T>()
     }
 }

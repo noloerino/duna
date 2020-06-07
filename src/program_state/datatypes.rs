@@ -1,5 +1,7 @@
 use crate::arch::RegSize;
 use duna_macro::*;
+use num_traits::cast::ToPrimitive;
+use num_traits::int::PrimInt;
 use std::cmp::{max, min};
 use std::fmt;
 use std::hash::Hash;
@@ -350,8 +352,9 @@ impl From<DataByte> for i8 {
     }
 }
 
-pub trait ByteAddress: Clone + Copy {
-    type WordAddress: Eq + Hash + Copy + Clone;
+/// TODO From<u64> is a temporary hack
+pub trait ByteAddress: Clone + Copy + From<u64> {
+    type WordAddress: PrimInt + ToPrimitive + Hash;
 
     fn to_word_address(self) -> Self::WordAddress;
 

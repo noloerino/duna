@@ -15,17 +15,3 @@ impl<T: MachineDataWidth> Architecture<T> for RiscV<T> {
     type Program = RiscVProgram<T>;
     type Parser = RiscVParser<T>;
 }
-
-// struct DummyInst;
-// impl ConcreteInst<RiscV<Width64b>, Width64b> for DummyInst {}
-// struct DummyProgram;
-// impl Program<RiscV<Width64b>, Width64b> for DummyProgram {}
-// struct DummyParser;
-// impl Parser<RiscV<Width64b>, Width64b> for DummyParser {}
-
-// impl Architecture<Width64b> for RiscV<Width64b> {
-//     type Register = RiscVRegister;
-//     type Instruction = DummyInst;
-//     type Program = DummyProgram;
-//     type Parser = DummyParser;
-// }

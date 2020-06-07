@@ -58,6 +58,7 @@ pub struct RiscVParser<T: MachineDataWidth> {
 type TokenIter = Peekable<IntoIter<Token>>;
 
 lazy_static! {
+    /*
     static ref RV32_INST_EXPANSION_TABLE: HashMap<String, ParseType<Width32b>> = {
         use super::isa::*;
         use ParseType::*;
@@ -113,6 +114,7 @@ lazy_static! {
         .map(|(s, t)| (s.to_string(), t))
         .collect()
     };
+    */
     static ref REG_EXPANSION_TABLE: HashMap<String, RiscVRegister> = {
         let mut reg_expansion_table: HashMap<String, RiscVRegister> = RiscVRegister::REG_ARRAY
             .iter()
@@ -127,8 +129,8 @@ lazy_static! {
     };
 }
 
-impl Parser<RiscV<Width32b>, Width32b> for RiscVParser<Width32b> {
-    fn parse_lex_result(lex_result: LexResult) -> ParseResult<RiscV<Width32b>, Width32b> {
+impl<T: MachineDataWidth> Parser<RiscV<T>, T> for RiscVParser<T> {
+    fn parse_lex_result(lex_result: LexResult) -> ParseResult<RiscV<T>, T> {
         RiscVParser {
             file_id: lex_result.file_id,
             lines: lex_result.lines,
@@ -140,12 +142,65 @@ impl Parser<RiscV<Width32b>, Width32b> for RiscVParser<Width32b> {
     }
 }
 
-impl RiscVParser<Width32b> {
-    fn parse(mut self) -> ParseResult<RiscV<Width32b>, Width32b> {
-        let mut insts = Vec::<PartialInst<RiscV<Width32b>, Width32b>>::new();
+impl<T: MachineDataWidth> RiscVParser<T> {
+    fn parse(mut self) -> ParseResult<RiscV<T>, T> {
+        let mut insts = Vec::<PartialInst<RiscV<T>, T>>::new();
         let mut last_label: Option<LabelDef> = None;
-        let parser_data = &ParserData {
-            inst_expansion_table: &RV32_INST_EXPANSION_TABLE,
+        use super::isa::*;
+        use ParseType::*;
+        let inst_expansion_table = &[
+            ("add", R(Add::new)),
+            ("addi", Arith(Addi::new)),
+            ("and", R(And::new)),
+            ("andi", Arith(Andi::new)),
+            ("auipc", U(Auipc::new)),
+            ("beq", B(Beq::new)),
+            ("bge", B(Bge::new)),
+            ("bgeu", B(Bgeu::new)),
+            ("blt", B(Blt::new)),
+            ("bltu", B(Bltu::new)),
+            ("bne", B(Bne::new)),
+            // ("ebreak", Env),
+            ("ecall", Env(Ecall::new)),
+            ("jal", ParseType::Jal),
+            ("jalr", ParseType::Jalr),
+            ("lb", MemL(Lb::new)),
+            ("lbu", MemL(Lbu::new)),
+            ("lh", MemL(Lh::new)),
+            ("lhu", MemL(Lhu::new)),
+            ("lui", U(Lui::new)),
+            ("lw", MemL(Lw::new)),
+            // ("or", R),
+            // ("ori", Arith),
+            ("sb", MemS(Sb::new)),
+            ("sh", MemS(Sh::new)),
+            // ("sll", R),
+            // ("slli", Arith),
+            // ("slt", R),
+            // ("slti", Arith),
+            // ("sltiu", Arith),
+            // ("sltu", R),
+            // ("sra", R),
+            // ("srai", Arith),
+            // ("srl", R),
+            // ("srli", Arith),
+            // ("sub", R),
+            ("sw", MemS(Sw::new)),
+            // ("xor", R),
+            // ("xori", Arith),
+            ("li", ParseType::Li),
+            ("mv", RegReg(Mv::expand)),
+            ("nop", NoArgs(Nop::expand)),
+            ("j", LikeJ(J::expand)),
+            ("jr", OneReg(Jr::expand)),
+            ("ret", NoArgs(Ret::expand)),
+        ]
+        .iter()
+        .cloned()
+        .map(|(s, t)| (s.to_string(), t))
+        .collect();
+        let parser_data: &ParserData<T> = &ParserData {
+            inst_expansion_table: &inst_expansion_table,
             reg_expansion_table: &REG_EXPANSION_TABLE,
         };
         for line in self.lines {
@@ -1074,7 +1129,7 @@ mod tests {
             sections,
             insts,
             ..
-        } = RiscVParser::parse_str(0, prog);
+        } = RiscVParser::<Width32b>::parse_str(0, prog);
         assert!(reporter.is_empty(), insts.is_empty());
         assert_eq!(sections.data, vec![0x12, 0xef, 0xbe, 0xad, 0xde]);
     }
@@ -1086,7 +1141,7 @@ mod tests {
             ".section .data\n.byte 0x123", // immediate too large
         ];
         for prog in &programs {
-            let ParseResult { reporter, .. } = RiscVParser::parse_str(0, prog);
+            let ParseResult { reporter, .. } = RiscVParser::<Width32b>::parse_str(0, prog);
             assert!(!reporter.is_empty());
         }
     }
@@ -1148,7 +1203,7 @@ mod tests {
             "add x1,,x2, x3",
         ];
         for inst in bad_insts {
-            let ParseResult { reporter, .. } = RiscVParser::parse_str(0, inst);
+            let ParseResult { reporter, .. } = RiscVParser::<Width32b>::parse_str(0, inst);
             assert!(!reporter.is_empty());
         }
     }
@@ -1180,7 +1235,7 @@ mod tests {
         // immediates for instructions like addi can only be 12 bits long
         let ParseResult {
             insts, reporter, ..
-        } = RiscVParser::parse_str(0, "addi sp sp 0xF000");
+        } = RiscVParser::<Width32b>::parse_str(0, "addi sp sp 0xF000");
         assert!(!reporter.is_empty());
         assert!(insts.is_empty());
     }

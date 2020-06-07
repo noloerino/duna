@@ -2,9 +2,11 @@
 use crate::assembler::parser::Parser;
 use crate::instruction::ConcreteInst;
 use crate::program_state::*;
+use num_traits::cast;
+use num_traits::int;
+use num_traits::ops::wrapping;
+use num_traits::sign;
 use std::fmt;
-use std::num::Wrapping;
-use std::ops::{Add, BitAnd, BitOr, Shl};
 
 /// Represents an architecture, parameterized on bitwidth, e.g. "x86" or "riscv".
 // TODO make generic over bit width
@@ -41,6 +43,11 @@ pub trait RegSize: Copy + Clone + PartialEq + fmt::Display + From<BitStr32> + Fr
     fn sign_ext_from_word(value: DataWord) -> Self;
 }
 
+pub enum BitWidthEnum {
+    BitWidth32,
+    BitWidth64,
+}
+
 /// Encodes the difference between a 32-bit and 64-bit system.
 pub trait MachineDataWidth: Clone + Copy {
     type Signed: From<BitStr32>
@@ -48,21 +55,29 @@ pub trait MachineDataWidth: Clone + Copy {
         + From<Self::ByteAddr>
         + Eq
         + Ord
-        + Add<Output = Self::Signed>
-        + BitAnd<Output = Self::Signed>
-        + BitOr<Output = Self::Signed>
-        + Shl<usize, Output = Self::Signed>
+        + cast::FromPrimitive
+        + cast::ToPrimitive
+        + int::PrimInt
+        + sign::Signed
+        + wrapping::WrappingAdd
         + Copy
         + Clone;
     type Unsigned: From<Self::RegData>
         + From<Self::ByteAddr>
         + Eq
         + Ord
-        + Add<Output = Self::Unsigned>
+        + cast::FromPrimitive
+        + cast::ToPrimitive
+        + int::PrimInt
+        + sign::Unsigned
+        + wrapping::WrappingAdd
+        + wrapping::WrappingSub
         + Copy
         + Clone;
     type RegData: RegSize + From<Self::Signed> + From<Self::Unsigned> + From<Self::ByteAddr>;
     type ByteAddr: ByteAddress + From<Self::Signed> + From<Self::Unsigned> + From<Self::RegData>;
+
+    fn get_enum() -> BitWidthEnum;
 
     fn sgn_zero() -> Self::Signed;
     fn sgn_one() -> Self::Signed;
@@ -76,33 +91,37 @@ pub trait MachineDataWidth: Clone + Copy {
 pub struct Width32b;
 
 impl MachineDataWidth for Width32b {
-    type Signed = Wrapping<i32>;
-    type Unsigned = Wrapping<u32>;
+    type Signed = i32;
+    type Unsigned = u32;
     type RegData = DataWord;
     type ByteAddr = ByteAddr32;
 
+    fn get_enum() -> BitWidthEnum {
+        BitWidthEnum::BitWidth32
+    }
+
     fn sgn_zero() -> Self::Signed {
-        Wrapping(0i32)
+        0i32
     }
 
     fn sgn_one() -> Self::Signed {
-        Wrapping(1i32)
+        1i32
     }
 
-    fn sgn_to_isize(n: Wrapping<i32>) -> isize {
-        n.0 as isize
+    fn sgn_to_isize(n: i32) -> isize {
+        n as isize
     }
 
-    fn isize_to_sgn(n: isize) -> Wrapping<i32> {
-        Wrapping(n as i32)
+    fn isize_to_sgn(n: isize) -> i32 {
+        n as i32
     }
 
-    fn usgn_to_usize(n: Wrapping<u32>) -> usize {
-        n.0 as usize
+    fn usgn_to_usize(n: u32) -> usize {
+        n as usize
     }
 
-    fn usize_to_usgn(n: usize) -> Wrapping<u32> {
-        Wrapping(n as u32)
+    fn usize_to_usgn(n: usize) -> u32 {
+        n as u32
     }
 }
 
@@ -110,32 +129,36 @@ impl MachineDataWidth for Width32b {
 pub struct Width64b;
 
 impl MachineDataWidth for Width64b {
-    type Signed = Wrapping<i64>;
-    type Unsigned = Wrapping<u64>;
+    type Signed = i64;
+    type Unsigned = u64;
     type RegData = DataDword;
     type ByteAddr = ByteAddr64;
 
+    fn get_enum() -> BitWidthEnum {
+        BitWidthEnum::BitWidth64
+    }
+
     fn sgn_zero() -> Self::Signed {
-        Wrapping(0i64)
+        0i64
     }
 
     fn sgn_one() -> Self::Signed {
-        Wrapping(1i64)
+        1i64
     }
 
-    fn sgn_to_isize(n: Wrapping<i64>) -> isize {
-        n.0 as isize
+    fn sgn_to_isize(n: i64) -> isize {
+        n as isize
     }
 
-    fn isize_to_sgn(n: isize) -> Wrapping<i64> {
-        Wrapping(n as i64)
+    fn isize_to_sgn(n: isize) -> i64 {
+        n as i64
     }
 
-    fn usgn_to_usize(n: Wrapping<u64>) -> usize {
-        n.0 as usize
+    fn usgn_to_usize(n: u64) -> usize {
+        n as usize
     }
 
-    fn usize_to_usgn(n: usize) -> Wrapping<u64> {
-        Wrapping(n as u64)
+    fn usize_to_usgn(n: usize) -> u64 {
+        n as u64
     }
 }
