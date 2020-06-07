@@ -429,7 +429,7 @@ impl fmt::Display for ParseError {
 
 #[cfg(test)]
 mod tests {
-    use super::super::parser::RiscVParser;
+    use crate::architectures::riscv::parser::RiscVParser;
 
     #[test]
     /// Tests that an error produced by the lexer makes it so the affected line is not passed

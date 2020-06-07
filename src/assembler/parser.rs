@@ -38,8 +38,8 @@ impl LabelDef {
     }
 }
 
-type ParsedInstStream<S, T> = Vec<PartialInst<S, T>>;
-type LineParseResult<S, T> = Result<ParsedInstStream<S, T>, ParseError>;
+pub type ParsedInstStream<S, T> = Vec<PartialInst<S, T>>;
+pub type LineParseResult<S, T> = Result<ParsedInstStream<S, T>, ParseError>;
 pub struct ParseResult<S, T>
 where
     S: Architecture<T>,
@@ -53,7 +53,7 @@ where
 }
 
 /// State about the program being parsed.
-struct ParseState {
+pub struct ParseState {
     /// The section in which parsed values should be placed.
     /// This should default to text.
     curr_section: ProgramSection,
@@ -74,7 +74,7 @@ impl ParseState {
     }
 }
 
-type TokenIter = Peekable<IntoIter<Token>>;
+pub type TokenIter = Peekable<IntoIter<Token>>;
 
 pub trait Parser<S, T>
 where

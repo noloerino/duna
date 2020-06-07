@@ -1,12 +1,12 @@
 //! Defines a few traits needed to add support for a new architecture to duna.
-use crate::assembler::Parser;
+use crate::assembler::parser::Parser;
 use crate::instruction::ConcreteInst;
 use crate::program_state::*;
 use std::fmt;
 use std::num::Wrapping;
 use std::ops::{Add, BitAnd, BitOr, Shl};
 
-/// Represents an architecture paramterized on bitwidth, e.g. "x86" or "riscv".
+/// Represents an architecture, parameterized on bitwidth, e.g. "x86" or "riscv".
 pub trait Architecture<T: MachineDataWidth>: Sized {
     type Register: IRegister;
     type Instruction: ConcreteInst<Self, T>;
