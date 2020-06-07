@@ -3,7 +3,7 @@ use crate::program_state::{InstResult, ProgramState};
 
 pub trait ConcreteInst<S, T>
 where
-    S: Architecture<T>,
+    S: Architecture,
     T: MachineDataWidth,
 {
     fn to_machine_code(&self) -> u32;

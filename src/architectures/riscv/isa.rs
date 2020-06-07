@@ -96,10 +96,10 @@ impl<T: MachineDataWidth> UType<T> for Auipc {
     }
 
     fn eval(
-        state: &UserProgState<RiscV, T>,
+        state: &UserProgState<RiscVRegister, T>,
         rd: RiscVRegister,
         imm: BitStr32,
-    ) -> UserDiff<RiscV, T> {
+    ) -> UserDiff<RiscVRegister, T> {
         let pc: T::Signed = state.pc.into();
         UserDiff::reg_write_pc_p4(state, rd, (pc + imm.zero_pad_lsb().into()).into())
     }
@@ -218,10 +218,10 @@ impl<T: MachineDataWidth> JType<T> for Jal {
     }
 
     fn eval(
-        state: &UserProgState<RiscV, T>,
+        state: &UserProgState<RiscVRegister, T>,
         rd: RiscVRegister,
         imm: BitStr32,
-    ) -> UserDiff<RiscV, T> {
+    ) -> UserDiff<RiscVRegister, T> {
         let pc: T::Signed = state.pc.into();
         let offs: T::Signed = imm.into();
         UserDiff::reg_write_op(state, (pc + offs).into(), rd, state.pc.plus_4().into())
@@ -238,11 +238,11 @@ impl<T: MachineDataWidth> IType<T> for Jalr {
     }
 
     fn eval(
-        state: &UserProgState<RiscV, T>,
+        state: &UserProgState<RiscVRegister, T>,
         rd: RiscVRegister,
         rs1: RiscVRegister,
         imm: BitStr32,
-    ) -> UserDiff<RiscV, T> {
+    ) -> UserDiff<RiscVRegister, T> {
         let v1: T::Signed = state.regfile.read(rs1).into();
         UserDiff::reg_write_op(
             state,
@@ -334,10 +334,10 @@ impl<T: MachineDataWidth> UType<T> for Lui {
     }
 
     fn eval(
-        state: &UserProgState<RiscV, T>,
+        state: &UserProgState<RiscVRegister, T>,
         rd: RiscVRegister,
         imm: BitStr32,
-    ) -> UserDiff<RiscV, T> {
+    ) -> UserDiff<RiscVRegister, T> {
         let imm_val: T::Signed = imm.zero_pad_lsb().into();
         UserDiff::reg_write_pc_p4(state, rd, imm_val.into())
     }
@@ -369,11 +369,11 @@ impl<T: MachineDataWidth> SType<T> for Sb {
     }
 
     fn eval(
-        state: &UserProgState<RiscV, T>,
+        state: &UserProgState<RiscVRegister, T>,
         rs1: RiscVRegister,
         rs2: RiscVRegister,
         imm: BitStr32,
-    ) -> UserDiff<RiscV, T> {
+    ) -> UserDiff<RiscVRegister, T> {
         // TODO implement more granular diffs
         let base_addr: T::Signed = state.regfile.read(rs1).into();
         let byte_addr: T::ByteAddr = (base_addr + imm.into()).into();
@@ -395,11 +395,11 @@ impl<T: MachineDataWidth> SType<T> for Sh {
     }
 
     fn eval(
-        state: &UserProgState<RiscV, T>,
+        state: &UserProgState<RiscVRegister, T>,
         rs1: RiscVRegister,
         rs2: RiscVRegister,
         imm: BitStr32,
-    ) -> UserDiff<RiscV, T> {
+    ) -> UserDiff<RiscVRegister, T> {
         // TODO implement more granular diffs
         let base_addr: T::Signed = state.regfile.read(rs1).into();
         let byte_addr: T::ByteAddr = (base_addr + imm.into()).into();
@@ -429,11 +429,11 @@ impl<T: MachineDataWidth> SType<T> for Sw {
     }
 
     fn eval(
-        state: &UserProgState<RiscV, T>,
+        state: &UserProgState<RiscVRegister, T>,
         rs1: RiscVRegister,
         rs2: RiscVRegister,
         imm: BitStr32,
-    ) -> UserDiff<RiscV, T> {
+    ) -> UserDiff<RiscVRegister, T> {
         let base_addr: T::Signed = state.regfile.read(rs1).into();
         let byte_addr: T::ByteAddr = (base_addr + imm.into()).into();
         UserDiff::mem_write_op(
@@ -460,7 +460,7 @@ mod test {
     const RS2_POS: RiscVRegister = T1;
     const RS2_NEG: RiscVRegister = S1;
 
-    fn get_init_state() -> ProgramState<RiscV, Width32b> {
+    fn get_init_state() -> ProgramState<RiscV<Width32b>, Width32b> {
         let mut state = ProgramState::new();
         state.regfile_set(RS1, DataWord::from(RS1_VAL));
         state.regfile_set(RS2_POS, DataWord::from(RS2_VAL_POS));
@@ -483,7 +483,7 @@ mod test {
     /// Tests an R type instruction. Assumes that the registers being read
     /// are independent of the registers being written.
     fn test_r_type<T: RType<Width32b>>(
-        state: &mut ProgramState<RiscV, Width32b>,
+        state: &mut ProgramState<RiscV<Width32b>, Width32b>,
         args: Vec<RTestData>,
     ) {
         for RTestData { rs2, result } in args {
@@ -500,7 +500,7 @@ mod test {
     /// Tests an I type arithmetic instruction. Assumes that the registers being read
     /// are independent of the registers being written.
     fn test_i_type_arith<T: ITypeArith<Width32b>>(
-        state: &mut ProgramState<RiscV, Width32b>,
+        state: &mut ProgramState<RiscV<Width32b>, Width32b>,
         args: Vec<IArithTestData>,
     ) {
         for IArithTestData { imm, result } in args {
@@ -652,7 +652,7 @@ mod test {
 
     /// Tests a branch instruction. Taken jumps move forward by 0x100, or backwards by 0x100.
     fn test_b_type<T: BType<Width32b>>(
-        state: &mut ProgramState<RiscV, Width32b>,
+        state: &mut ProgramState<RiscV<Width32b>, Width32b>,
         args: Vec<BTestData>,
     ) {
         for &dist in &[0x100, -0x100] {

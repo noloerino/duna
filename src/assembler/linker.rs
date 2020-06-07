@@ -63,7 +63,7 @@ impl Linker {
     }
 
     /// Attempts to link the provided programs together into a single executable.
-    pub fn link<S: Architecture<T>, T: MachineDataWidth>(
+    pub fn link<S: Architecture, T: MachineDataWidth>(
         self,
     ) -> Result<S::Program, ParseErrorReport> {
         assert!(

@@ -30,7 +30,7 @@ pub struct JInstFields {
 }
 
 pub struct RiscVInst<T: MachineDataWidth> {
-    pub eval: Box<dyn Fn(&ProgramState<RiscV, T>) -> InstResult<RiscV, T>>,
+    pub eval: Box<dyn Fn(&ProgramState<RiscV, T>) -> InstResult<RiscVRegister, T>>,
     data: RiscVInstData,
 }
 
@@ -232,7 +232,7 @@ pub trait IType<T: MachineDataWidth> {
         rd: RiscVRegister,
         rs1: RiscVRegister,
         imm: BitStr32,
-    ) -> UserDiff<RiscV, T>;
+    ) -> UserDiff<RiscVRegister, T>;
 }
 
 pub(crate) trait ITypeArith<T: MachineDataWidth>: IType<T> {
@@ -283,7 +283,7 @@ pub trait SType<T: MachineDataWidth> {
         rs1: RiscVRegister,
         rs2: RiscVRegister,
         imm: BitStr32,
-    ) -> UserDiff<RiscV, T>;
+    ) -> UserDiff<RiscVRegister, T>;
 }
 
 pub trait BType<T: MachineDataWidth> {
@@ -337,7 +337,7 @@ pub trait UType<T: MachineDataWidth> {
         state: &UserProgState<RiscVRegister, T>,
         rd: RiscVRegister,
         imm: BitStr32,
-    ) -> UserDiff<RiscV, T>;
+    ) -> UserDiff<RiscVRegister, T>;
 }
 
 pub trait JType<T: MachineDataWidth> {
@@ -359,5 +359,5 @@ pub trait JType<T: MachineDataWidth> {
         state: &UserProgState<RiscVRegister, T>,
         rd: RiscVRegister,
         imm: BitStr32,
-    ) -> UserDiff<RiscV, T>;
+    ) -> UserDiff<RiscVRegister, T>;
 }

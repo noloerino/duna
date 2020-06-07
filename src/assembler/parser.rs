@@ -42,7 +42,7 @@ pub type ParsedInstStream<S, T> = Vec<PartialInst<S, T>>;
 pub type LineParseResult<S, T> = Result<ParsedInstStream<S, T>, ParseError>;
 pub struct ParseResult<S, T>
 where
-    S: Architecture<T>,
+    S: Architecture,
     T: MachineDataWidth,
 {
     pub file_id: FileId,
@@ -78,7 +78,7 @@ pub type TokenIter = Peekable<IntoIter<Token>>;
 
 pub trait Parser<S, T>
 where
-    S: Architecture<T>,
+    S: Architecture,
     T: MachineDataWidth,
 {
     fn parse_str(file_id: FileId, contents: &str) -> ParseResult<S, T> {

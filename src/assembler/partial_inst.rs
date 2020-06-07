@@ -1,7 +1,7 @@
 use super::parser::{LabelDef, LabelRef};
 use crate::arch::*;
 
-pub(crate) enum NeededRegs<S: Architecture<T>, T: MachineDataWidth> {
+pub(crate) enum NeededRegs<S: Architecture, T: MachineDataWidth> {
     Two {
         assemble: fn(S::Register, S::Register, T::RegData) -> S::Instruction,
         reg1: S::Register,
@@ -16,12 +16,12 @@ pub(crate) enum NeededRegs<S: Architecture<T>, T: MachineDataWidth> {
     },
 }
 
-pub(crate) struct NeedsLabel<S: Architecture<T>, T: MachineDataWidth> {
+pub(crate) struct NeedsLabel<S: Architecture, T: MachineDataWidth> {
     tpe: NeededRegs<S, T>,
     needed_label: LabelRef,
 }
 
-impl<S: Architecture<T>, T: MachineDataWidth> NeedsLabel<S, T> {
+impl<S: Architecture, T: MachineDataWidth> NeedsLabel<S, T> {
     /// Attempts to replace the needed label with the provided immediate
     pub fn fulfill_label(&self, imm: T::RegData) -> S::Instruction {
         use NeededRegs::*;
@@ -37,18 +37,18 @@ impl<S: Architecture<T>, T: MachineDataWidth> NeedsLabel<S, T> {
     }
 }
 
-pub(crate) enum PartialInstType<S: Architecture<T>, T: MachineDataWidth> {
+pub(crate) enum PartialInstType<S: Architecture, T: MachineDataWidth> {
     Complete(S::Instruction),
     NeedsLabelRef(NeedsLabel<S, T>),
 }
 
-pub struct PartialInst<S: Architecture<T>, T: MachineDataWidth> {
+pub struct PartialInst<S: Architecture, T: MachineDataWidth> {
     pub(crate) tpe: PartialInstType<S, T>,
     /// A label pointing to this instructions.
     pub label: Option<LabelDef>,
 }
 
-impl<S: Architecture<T>, T: MachineDataWidth> PartialInst<S, T> {
+impl<S: Architecture, T: MachineDataWidth> PartialInst<S, T> {
     pub fn new_complete(inst: S::Instruction) -> PartialInst<S, T> {
         PartialInst {
             tpe: PartialInstType::Complete(inst),

@@ -7,11 +7,13 @@ use std::num::Wrapping;
 use std::ops::{Add, BitAnd, BitOr, Shl};
 
 /// Represents an architecture, parameterized on bitwidth, e.g. "x86" or "riscv".
-pub trait Architecture<T: MachineDataWidth>: Sized {
+// TODO make generic over bit width
+// pub trait Architecture<T: MachineDataWidth>: Sized {
+pub trait Architecture: Sized {
     type Register: IRegister;
-    type Instruction: ConcreteInst<Self, T>;
-    type Program: Program<Self, T>;
-    type Parser: Parser<Self, T>;
+    type Instruction: ConcreteInst<Self, Width32b>;
+    type Program: Program<Self, Width32b>;
+    type Parser: Parser<Self, Width32b>;
 }
 
 /// Represents a data type that can be used to hold data in a register.
