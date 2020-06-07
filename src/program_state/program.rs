@@ -2,98 +2,34 @@ use super::datatypes::*;
 use super::memory::Memory;
 use super::registers::{IRegister, RegFile};
 use crate::arch::*;
-use crate::assembler::{Linker, ParseErrorReport, SectionStore};
+use crate::assembler::SectionStore;
 use crate::instruction::ConcreteInst;
 use std::collections::HashMap;
-use std::str;
 
-pub struct RiscVProgram<T: MachineDataWidth> {
-    pub insts: Vec<ConcreteInst<T>>,
-    pub state: ProgramState<T>,
-}
-
-impl RiscVProgram<Width32b> {
-    pub const TEXT_START: u32 = 0x1000_0000;
-    pub const STACK_START: u32 = 0x7FFF_FFF0;
-    pub const DATA_START: u32 = 0x2000_0000;
-
-    /// Initializes a new program instance from the provided instructions.
-    ///
-    /// The instructions are loaded into memory at the start of the instruction section,
-    /// which defaults to TEXT_START to avoid any accidental null pointer derefs.
-    ///
-    /// The stack pointer is initialized to STACK_START.
-    ///
-    /// The data given in SectionStore is used to initialize the data and rodata sections.
-    ///
-    /// Until paged memory is implemented, rodata is placed sequentially with data, and
-    /// no guarantees on read-onliness are enforced.
-    pub fn new(
-        insts: Vec<ConcreteInst<Width32b>>,
-        sections: SectionStore,
-    ) -> RiscVProgram<Width32b> {
-        let mut state = ProgramState::new();
-        let mut user_state = &mut state.user_state;
-        let text_start: ByteAddr32 = RiscVProgram::TEXT_START.into();
-        let stack_start: ByteAddr32 = RiscVProgram::STACK_START.into();
-        user_state.regfile.set(IRegister::SP, stack_start.into());
-        user_state.pc = text_start;
-        // store instructions
-        let mut next_addr: ByteAddr32 = user_state.pc;
-        for inst in &insts {
-            user_state.memory.set_word(
-                next_addr.to_word_address(),
-                DataWord::from(inst.to_machine_code()),
-            );
-            next_addr = next_addr.plus_4()
-        }
-        // store data
-        let all_data = sections.data.into_iter().chain(sections.rodata.into_iter());
-        for (offs, byte) in all_data.enumerate() {
-            user_state
-                .memory
-                .set_byte((RiscVProgram::DATA_START + offs as u32).into(), byte.into())
-        }
-        RiscVProgram { insts, state }
-    }
-
+pub trait Program<S, T>
+where
+    S: Architecture<T>,
+    T: MachineDataWidth,
+{
+    fn new(insts: Vec<S::Instruction>, sections: SectionStore) -> Self;
     /// Prints out all the instructions that this program contains.
-    pub fn dump_insts(&self) {
-        for inst in &self.insts {
-            println!("{:?}", inst);
-        }
-    }
+    fn dump_insts(&self);
+    /// Runs the program to completion, returning an exit code.
+    fn run(&mut self) -> i32;
 
-    /// Runs the program to completion, returning the value in register a0.
-    pub fn run(&mut self) -> i32 {
-        // for now, just use the instruction vec to determine the next instruction
-        let pc_start = RiscVProgram::TEXT_START;
-        // for now, if we're out of instructions just call it a day
-        // if pc dipped below pc_start, panic for now is also fine
-        while let Some(inst) = self.insts.get(
-            ByteAddr32::from(u32::from(self.state.user_state.pc) - pc_start).to_word_address()
-                as usize,
-        ) {
-            self.state.apply_inst(inst);
-        }
-        i32::from(self.state.user_state.regfile.read(IRegister::A0))
-    }
+    /// Returns the instructions provided to this program.
+    fn get_inst_vec(&self) -> &[S::Instruction];
+
+    /// Returns the current state of this program.
+    fn get_state(self) -> ProgramState<S, T>;
 }
 
-impl str::FromStr for RiscVProgram<Width32b> {
-    type Err = ParseErrorReport;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Linker::with_main_str(s).link()
-    }
-}
-
-pub struct ProgramState<T: MachineDataWidth> {
+pub struct ProgramState<S: Architecture<T>, T: MachineDataWidth> {
     pub(crate) priv_state: PrivProgState,
-    pub(crate) user_state: UserProgState<T>,
+    pub(crate) user_state: UserProgState<S::Register, T>,
 }
 
-impl<T: MachineDataWidth> Default for ProgramState<T> {
+impl<S: Architecture<T>, T: MachineDataWidth> Default for ProgramState<S, T> {
     fn default() -> Self {
         ProgramState::new()
     }
@@ -106,7 +42,7 @@ impl<T: MachineDataWidth> Default for ProgramState<T> {
 /// See [Syscall] for syscall codes.
 /// TODO put custom types for syscall args
 /// TODO put errno on user state at a thread-local statically known location
-impl<T: MachineDataWidth> ProgramState<T> {
+impl<S: Architecture<T>, T: MachineDataWidth> ProgramState<S, T> {
     pub fn get_stdout(&self) -> &[u8] {
         self.priv_state.stdout.as_slice()
     }
@@ -119,11 +55,11 @@ impl<T: MachineDataWidth> ProgramState<T> {
         self.user_state.pc = addr
     }
 
-    pub fn regfile_read(&self, reg: IRegister) -> T::RegData {
+    pub fn regfile_read(&self, reg: S::Register) -> T::RegData {
         self.user_state.regfile.read(reg)
     }
 
-    pub fn regfile_set(&mut self, reg: IRegister, val: T::RegData) {
+    pub fn regfile_set(&mut self, reg: S::Register, val: T::RegData) {
         self.user_state.regfile.set(reg, val);
     }
 
@@ -148,19 +84,21 @@ impl<T: MachineDataWidth> ProgramState<T> {
     }
 
     pub fn dispatch_syscall(&self) -> PrivStateChange<T> {
-        use IRegister::*;
-        let rf = &self.user_state.regfile;
-        let a0 = rf.read(A0);
-        let a1 = rf.read(A1);
-        let a2 = rf.read(A2);
-        if let Some(nr) = Syscall::from_number::<T>(self.user_state.regfile.read(A7).into()) {
-            match nr {
-                Syscall::Write => self.syscall_write(a0, a1.into(), a2),
-                _ => self.syscall_unknown(),
-            }
-        } else {
-            self.syscall_unknown()
-        }
+        unimplemented!();
+        // TODO abstract calling conventions
+        // use IRegister::*;
+        // let rf = &self.user_state.regfile;
+        // let a0 = rf.read(A0);
+        // let a1 = rf.read(A1);
+        // let a2 = rf.read(A2);
+        // if let Some(nr) = Syscall::from_number::<T>(self.user_state.regfile.read(A7).into()) {
+        //     match nr {
+        //         Syscall::Write => self.syscall_write(a0, a1.into(), a2),
+        //         _ => self.syscall_unknown(),
+        //     }
+        // } else {
+        //     self.syscall_unknown()
+        // }
     }
 
     /// Writes contents to a specified file descriptor.
@@ -182,20 +120,20 @@ impl<T: MachineDataWidth> ProgramState<T> {
         panic!("Unknown syscall")
     }
 
-    pub fn new() -> ProgramState<T> {
+    pub fn new() -> ProgramState<S, T> {
         ProgramState {
             priv_state: PrivProgState::new(),
             user_state: UserProgState::new(),
         }
     }
 
-    pub fn apply_inst(&mut self, inst: &ConcreteInst<T>) {
-        self.apply_diff(&(*inst.eval)(self));
+    pub fn apply_inst(&mut self, inst: &S::Instruction) {
+        self.apply_diff(&inst.apply(self));
     }
 
     /// Performs the described operation.
     /// The privileged operation is applied first, followed by the user operation.
-    pub fn apply_diff(&mut self, diff: &InstResult<T>) {
+    pub fn apply_diff(&mut self, diff: &InstResult<S::Register, T>) {
         match diff {
             InstResult::Trap(trap_kind) => {
                 let priv_diff = &self.handle_trap(trap_kind);
@@ -210,7 +148,7 @@ impl<T: MachineDataWidth> ProgramState<T> {
     /// Since the privileged diff is applied first during execution, the user diff should
     /// be applied first during a revert.
     /// TODO figure out how to implement that...
-    pub fn revert_diff(&mut self, diff: &ProgramDiff<T>) {
+    pub fn revert_diff(&mut self, diff: &ProgramDiff<S::Register, T>) {
         match diff {
             ProgramDiff::UserOnly(user_only) => self.user_state.revert_diff(user_only),
             ProgramDiff::PrivOnly(priv_only) => {
@@ -281,11 +219,11 @@ impl PrivProgState {
         PrivProgState { stdout: Vec::new() }
     }
 
-    pub fn apply_diff<T: MachineDataWidth>(
+    pub fn apply_diff<R: IRegister, T: MachineDataWidth>(
         &mut self,
-        user_state: &UserProgState<T>,
+        user_state: &UserProgState<R, T>,
         diff: &PrivStateChange<T>,
-    ) -> UserDiff<T> {
+    ) -> UserDiff<R, T> {
         use PrivStateChange::*;
         match diff {
             NoChange => UserDiff::noop(user_state),
@@ -300,7 +238,9 @@ impl PrivProgState {
                 // TODO impl for other files
                 print!("{}", String::from_utf8_lossy(&bytes));
                 self.stdout.extend(bytes);
-                UserDiff::reg_write_pc_p4(user_state, IRegister::A0, *len)
+                // TODO parameterize priv state over R as well
+                // UserDiff::reg_write_pc_p4(user_state, IRegister::A0, *len)
+                UserDiff::noop(user_state)
             }
             Exit => unimplemented!(),
         }
@@ -308,9 +248,9 @@ impl PrivProgState {
 
     /// Reverts a privileged state change.
     /// The originally produced UserOnly diff MUST have already been applied.
-    pub fn revert_diff<T: MachineDataWidth>(
+    pub fn revert_diff<R: IRegister, T: MachineDataWidth>(
         &mut self,
-        _user_state: &UserProgState<T>,
+        _user_state: &UserProgState<R, T>,
         diff: &PrivStateChange<T>,
     ) {
         use PrivStateChange::*;
@@ -328,20 +268,20 @@ impl PrivProgState {
 }
 
 /// Contains program state that is visible to the user.
-pub struct UserProgState<T: MachineDataWidth> {
+pub struct UserProgState<R: IRegister, T: MachineDataWidth> {
     pub pc: T::ByteAddr,
-    pub regfile: RegFile<T>,
+    pub regfile: RegFile<R, T>,
     pub memory: Memory<T>,
 }
 
-impl<T: MachineDataWidth> Default for UserProgState<T> {
+impl<R: IRegister, T: MachineDataWidth> Default for UserProgState<R, T> {
     fn default() -> Self {
         UserProgState::new()
     }
 }
 
-impl<T: MachineDataWidth> UserProgState<T> {
-    pub fn new() -> UserProgState<T> {
+impl<R: IRegister, T: MachineDataWidth> UserProgState<R, T> {
+    pub fn new() -> UserProgState<R, T> {
         UserProgState {
             pc: T::sgn_zero().into(),
             regfile: RegFile::new(),
@@ -349,7 +289,7 @@ impl<T: MachineDataWidth> UserProgState<T> {
         }
     }
 
-    pub fn apply_diff(&mut self, diff: &UserDiff<T>) {
+    pub fn apply_diff(&mut self, diff: &UserDiff<R, T>) {
         self.pc = diff.pc.new_pc;
         if let Some(RegDiff {
             reg,
@@ -367,7 +307,7 @@ impl<T: MachineDataWidth> UserProgState<T> {
         }
     }
 
-    pub fn revert_diff(&mut self, diff: &UserDiff<T>) {
+    pub fn revert_diff(&mut self, diff: &UserDiff<R, T>) {
         self.pc = diff.pc.old_pc;
         if let Some(RegDiff {
             reg,
@@ -405,8 +345,8 @@ struct PcDiff<T: MachineDataWidth> {
 }
 
 /// A change to a register.
-struct RegDiff<T: MachineDataWidth> {
-    reg: IRegister,
+struct RegDiff<R: IRegister, T: MachineDataWidth> {
+    reg: R,
     val: RegDataChange<T>,
 }
 
@@ -427,15 +367,15 @@ pub enum TrapKind {
 
 /// Encodes a change that occurs within the user space of a program, which entails a write to the
 /// PC and possibly a register or memory operation.
-pub enum InstResult<T: MachineDataWidth> {
+pub enum InstResult<R: IRegister, T: MachineDataWidth> {
     Trap(TrapKind),
-    UserStateChange(UserDiff<T>),
+    UserStateChange(UserDiff<R, T>),
 }
 
 /// Represents a diff as it is applied to a program.
-pub enum ProgramDiff<T: MachineDataWidth> {
+pub enum ProgramDiff<R: IRegister, T: MachineDataWidth> {
     PrivOnly(PrivStateChange<T>),
-    UserOnly(UserDiff<T>),
+    UserOnly(UserDiff<R, T>),
 }
 
 #[derive(Copy, Clone)]
@@ -458,23 +398,23 @@ pub enum PrivStateChange<T: MachineDataWidth> {
 }
 
 /// Represents a diff that is applied only to the user state of a program.
-pub struct UserDiff<T: MachineDataWidth> {
+pub struct UserDiff<R: IRegister, T: MachineDataWidth> {
     pc: PcDiff<T>,
-    reg: Option<RegDiff<T>>,
+    reg: Option<RegDiff<R, T>>,
     mem: Option<MemDiff<T>>,
 }
 
-impl<T: MachineDataWidth> UserDiff<T> {
-    pub fn into_inst_result(self) -> InstResult<T> {
+impl<R: IRegister, T: MachineDataWidth> UserDiff<R, T> {
+    pub fn into_inst_result(self) -> InstResult<R, T> {
         InstResult::UserStateChange(self)
     }
 
     fn new(
-        state: &UserProgState<T>,
+        state: &UserProgState<R, T>,
         new_pc: T::ByteAddr,
-        reg_change: Option<RegDiff<T>>,
+        reg_change: Option<RegDiff<R, T>>,
         mem_change: Option<MemDiff<T>>,
-    ) -> UserDiff<T> {
+    ) -> Self {
         UserDiff {
             pc: PcDiff {
                 old_pc: state.pc,
@@ -486,27 +426,27 @@ impl<T: MachineDataWidth> UserDiff<T> {
     }
 
     fn new_pc_p4(
-        state: &UserProgState<T>,
-        reg_change: Option<RegDiff<T>>,
+        state: &UserProgState<R, T>,
+        reg_change: Option<RegDiff<R, T>>,
         mem_change: Option<MemDiff<T>>,
-    ) -> UserDiff<T> {
+    ) -> Self {
         UserDiff::new(state, state.pc.plus_4(), reg_change, mem_change)
     }
 
-    pub fn noop(state: &UserProgState<T>) -> UserDiff<T> {
+    pub fn noop(state: &UserProgState<R, T>) -> Self {
         UserDiff::new_pc_p4(state, None, None)
     }
 
-    pub fn pc_update_op(state: &UserProgState<T>, new_pc: T::ByteAddr) -> UserDiff<T> {
+    pub fn pc_update_op(state: &UserProgState<R, T>, new_pc: T::ByteAddr) -> Self {
         UserDiff::new(state, new_pc, None, None)
     }
 
     pub fn reg_write_op(
-        state: &UserProgState<T>,
+        state: &UserProgState<R, T>,
         new_pc: T::ByteAddr,
-        reg: IRegister,
+        reg: R,
         val: T::RegData,
-    ) -> UserDiff<T> {
+    ) -> Self {
         UserDiff::new(
             state,
             new_pc,
@@ -521,21 +461,17 @@ impl<T: MachineDataWidth> UserDiff<T> {
         )
     }
 
-    pub fn reg_write_pc_p4(
-        state: &UserProgState<T>,
-        reg: IRegister,
-        val: T::RegData,
-    ) -> UserDiff<T> {
+    pub fn reg_write_pc_p4(state: &UserProgState<R, T>, reg: R, val: T::RegData) -> Self {
         UserDiff::reg_write_op(state, state.pc.plus_4(), reg, val)
     }
 
     /// Performs a memory write operation.
     /// This may trap to the OS in the event of exceptional events like a page fault.
     pub fn mem_write_op(
-        state: &UserProgState<T>,
+        state: &UserProgState<R, T>,
         addr: <T::ByteAddr as ByteAddress>::WordAddress,
         val: DataWord,
-    ) -> UserDiff<T> {
+    ) -> Self {
         UserDiff::new_pc_p4(
             state,
             None,
@@ -547,20 +483,5 @@ impl<T: MachineDataWidth> UserDiff<T> {
                 },
             }),
         )
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-    use crate::program_state::Width32b;
-
-    #[test]
-    fn test_e2e_program() {
-        let mut program = "addi s1, zero, 4\nadd a0, s1, zero"
-            .parse::<RiscVProgram<Width32b>>()
-            .unwrap();
-        let result = program.run();
-        assert_eq!(result, 4);
     }
 }

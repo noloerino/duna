@@ -1,6 +1,6 @@
 // #![allow(dead_code)]
 use clap::{App, Arg};
-use duna::assembler::Linker;
+use duna::assembler::{Linker, ParseErrorReport};
 use std::process;
 
 fn main() {
@@ -23,7 +23,7 @@ fn main() {
     for file in file_names {
         linker = linker.with_file(file);
     }
-    let link_result = linker.link();
+    let link_result = linker.link::<RiscV, ParseErrorReport>();
     let mut program = match link_result {
         Ok(p) => p,
         Err(errs) => {

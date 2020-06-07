@@ -1,31 +1,29 @@
 use super::parser::{LabelDef, LabelRef};
 use crate::arch::*;
-use crate::instruction::ConcreteInst;
-use crate::program_state::IRegister;
 
-pub(crate) enum NeededRegs<T: MachineDataWidth> {
+pub(crate) enum NeededRegs<S: Architecture<T>, T: MachineDataWidth> {
     Two {
-        assemble: fn(IRegister, IRegister, T::RegData) -> ConcreteInst<T>,
-        reg1: IRegister,
-        reg2: IRegister,
+        assemble: fn(S::Register, S::Register, T::RegData) -> S::Instruction,
+        reg1: S::Register,
+        reg2: S::Register,
     },
     One {
-        assemble: fn(IRegister, T::RegData) -> ConcreteInst<T>,
-        reg: IRegister,
+        assemble: fn(S::Register, T::RegData) -> S::Instruction,
+        reg: S::Register,
     },
     Zero {
-        assemble: fn(T::RegData) -> ConcreteInst<T>,
+        assemble: fn(T::RegData) -> S::Instruction,
     },
 }
 
-pub(crate) struct NeedsLabel<T: MachineDataWidth> {
-    tpe: NeededRegs<T>,
+pub(crate) struct NeedsLabel<S: Architecture<T>, T: MachineDataWidth> {
+    tpe: NeededRegs<S, T>,
     needed_label: LabelRef,
 }
 
-impl<T: MachineDataWidth> NeedsLabel<T> {
+impl<S: Architecture<T>, T: MachineDataWidth> NeedsLabel<S, T> {
     /// Attempts to replace the needed label with the provided immediate
-    pub fn fulfill_label(&self, imm: T::RegData) -> ConcreteInst<T> {
+    pub fn fulfill_label(&self, imm: T::RegData) -> S::Instruction {
         use NeededRegs::*;
         match self.tpe {
             Two {
@@ -39,26 +37,26 @@ impl<T: MachineDataWidth> NeedsLabel<T> {
     }
 }
 
-pub(crate) enum PartialInstType<T: MachineDataWidth> {
-    Complete(ConcreteInst<T>),
-    NeedsLabelRef(NeedsLabel<T>),
+pub(crate) enum PartialInstType<S: Architecture<T>, T: MachineDataWidth> {
+    Complete(S::Instruction),
+    NeedsLabelRef(NeedsLabel<S, T>),
 }
 
-pub struct PartialInst<T: MachineDataWidth> {
-    pub(crate) tpe: PartialInstType<T>,
+pub struct PartialInst<S: Architecture<T>, T: MachineDataWidth> {
+    pub(crate) tpe: PartialInstType<S, T>,
     /// A label pointing to this instructions.
     pub label: Option<LabelDef>,
 }
 
-impl<T: MachineDataWidth> PartialInst<T> {
-    pub fn new_complete(inst: ConcreteInst<T>) -> PartialInst<T> {
+impl<S: Architecture<T>, T: MachineDataWidth> PartialInst<S, T> {
+    pub fn new_complete(inst: S::Instruction) -> PartialInst<S, T> {
         PartialInst {
             tpe: PartialInstType::Complete(inst),
             label: None,
         }
     }
 
-    fn new_needs_label(data: NeedsLabel<T>) -> PartialInst<T> {
+    fn new_needs_label(data: NeedsLabel<S, T>) -> PartialInst<S, T> {
         PartialInst {
             tpe: PartialInstType::NeedsLabelRef(data),
             label: None,
@@ -66,11 +64,11 @@ impl<T: MachineDataWidth> PartialInst<T> {
     }
 
     pub fn new_two_reg_needs_label(
-        assemble: fn(IRegister, IRegister, T::RegData) -> ConcreteInst<T>,
-        reg1: IRegister,
-        reg2: IRegister,
+        assemble: fn(S::Register, S::Register, T::RegData) -> S::Instruction,
+        reg1: S::Register,
+        reg2: S::Register,
         needed: LabelRef,
-    ) -> PartialInst<T> {
+    ) -> PartialInst<S, T> {
         PartialInst::new_needs_label(NeedsLabel {
             tpe: NeededRegs::Two {
                 assemble,
@@ -82,10 +80,10 @@ impl<T: MachineDataWidth> PartialInst<T> {
     }
 
     pub fn new_one_reg_needs_label(
-        assemble: fn(IRegister, T::RegData) -> ConcreteInst<T>,
-        reg: IRegister,
+        assemble: fn(S::Register, T::RegData) -> S::Instruction,
+        reg: S::Register,
         needed: LabelRef,
-    ) -> PartialInst<T> {
+    ) -> PartialInst<S, T> {
         PartialInst::new_needs_label(NeedsLabel {
             tpe: NeededRegs::One { assemble, reg },
             needed_label: needed,
@@ -93,9 +91,9 @@ impl<T: MachineDataWidth> PartialInst<T> {
     }
 
     pub fn new_no_reg_needs_label(
-        assemble: fn(T::RegData) -> ConcreteInst<T>,
+        assemble: fn(T::RegData) -> S::Instruction,
         needed: LabelRef,
-    ) -> PartialInst<T> {
+    ) -> PartialInst<S, T> {
         PartialInst::new_needs_label(NeedsLabel {
             tpe: NeededRegs::Zero { assemble },
             needed_label: needed,
@@ -103,7 +101,7 @@ impl<T: MachineDataWidth> PartialInst<T> {
     }
 
     /// Attaches a label to this instruction. Panics if there's already a label.
-    pub fn with_label(self, label: LabelDef) -> PartialInst<T> {
+    pub fn with_label(self, label: LabelDef) -> PartialInst<S, T> {
         match self.label {
             None => PartialInst {
                 tpe: self.tpe,
@@ -121,7 +119,7 @@ impl<T: MachineDataWidth> PartialInst<T> {
     }
 
     /// Creates a concrete inst, or returns the needed label on error.
-    pub fn into_concrete_inst(self) -> Result<ConcreteInst<T>, LabelRef> {
+    pub fn into_concrete_inst(self) -> Result<S::Instruction, LabelRef> {
         match self.tpe {
             PartialInstType::Complete(concrete_inst) => Ok(concrete_inst),
             PartialInstType::NeedsLabelRef(NeedsLabel { needed_label, .. }) => Err(needed_label),
@@ -129,7 +127,7 @@ impl<T: MachineDataWidth> PartialInst<T> {
     }
 
     /// Attempts to coerce this partially-completed instruction into a ConcreteInst.
-    pub fn try_into_concrete_inst(self) -> ConcreteInst<T> {
+    pub fn try_into_concrete_inst(self) -> S::Instruction {
         match self.tpe {
             PartialInstType::Complete(concrete_inst) => concrete_inst,
             PartialInstType::NeedsLabelRef(NeedsLabel { needed_label, .. }) => panic!(

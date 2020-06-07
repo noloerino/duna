@@ -3,7 +3,6 @@ use super::datatypes::*;
 use super::parse_error::{ParseError, ParseErrorReport, ParseErrorReporter};
 use super::parser::{Label, LabelDef};
 use crate::arch::*;
-use crate::program_state::RiscVProgram;
 use std::collections::HashMap;
 use std::fs;
 
@@ -64,14 +63,16 @@ impl Linker {
     }
 
     /// Attempts to link the provided programs together into a single executable.
-    pub fn link(self) -> Result<RiscVProgram<Width32b>, ParseErrorReport> {
+    pub fn link<S: Architecture<T>, T: MachineDataWidth>(
+        self,
+    ) -> Result<S::Program, ParseErrorReport> {
         assert!(
             !self.file_map.is_empty(),
             "Linker is missing a main program"
         );
         let mut reporter = ParseErrorReporter::new();
         // Link other programs' local labels
-        let mut programs: Vec<UnlinkedProgram<Width32b>> = Vec::new();
+        let mut programs: Vec<UnlinkedProgram<S, T>> = Vec::new();
         for (i, FileData { content, .. }) in self.file_map.iter().enumerate() {
             let (prog, new_reporter) = Assembler::assemble_str(i, &content);
             programs.push(prog);
