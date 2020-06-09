@@ -10,16 +10,16 @@ use std::fmt;
 pub struct Assembler;
 
 impl Assembler {
-    pub fn assemble_str<S: Architecture<T>, T: MachineDataWidth>(
+    pub fn assemble_str<S: Architecture>(
         file_id: FileId,
         contents: &str,
-    ) -> (UnlinkedProgram<S, T>, ParseErrorReporter) {
+    ) -> (UnlinkedProgram<S>, ParseErrorReporter) {
         Assembler::assemble(<S::Parser>::parse_str(file_id, contents))
     }
 
-    fn assemble<S: Architecture<T>, T: MachineDataWidth>(
-        parse_result: ParseResult<S, T>,
-    ) -> (UnlinkedProgram<S, T>, ParseErrorReporter) {
+    fn assemble<S: Architecture>(
+        parse_result: ParseResult<S>,
+    ) -> (UnlinkedProgram<S>, ParseErrorReporter) {
         let ParseResult {
             file_id,
             insts,
@@ -109,10 +109,10 @@ impl Default for SectionStore {
 
 /// The parser must perform two passes in order to locate/process labels.
 /// This struct encodes data for a program that still needs to be passed to the assembler.
-pub struct UnlinkedProgram<S: Architecture<T>, T: MachineDataWidth> {
+pub struct UnlinkedProgram<S: Architecture> {
     /// A list of (source file id, instruction), which will be placed in the text segment in the
     /// order in which they appear.
-    pub(super) insts: Vec<(FileId, PartialInst<S, T>)>,
+    pub(super) insts: Vec<(FileId, PartialInst<S>)>,
     // a potential optimization is to store generated labels and needed labels in independent vecs
     // instead of a hashmap, another vec can be used to lookup the corresponding PartialInst
     // TODO put labels in sections
@@ -123,17 +123,17 @@ pub struct UnlinkedProgram<S: Architecture<T>, T: MachineDataWidth> {
     pub(super) sections: SectionStore,
 }
 
-impl<S: Architecture<T>, T: MachineDataWidth> UnlinkedProgram<S, T> {
+impl<S: Architecture> UnlinkedProgram<S> {
     /// Constructs an instance of an UnlinkedProgram from a stream of (file name, instruction).
     /// Also attempts to match needed labels to locally defined labels, and populates the needed
     /// and global symbol tables.
     /// A ParseErrorReporter is also returned to allow the linker to proceed with partial information
     /// in the event of a non-fatal error in this program.
     pub(super) fn new(
-        mut insts: Vec<(FileId, PartialInst<S, T>)>,
+        mut insts: Vec<(FileId, PartialInst<S>)>,
         sections: SectionStore,
         declared_globals: HashSet<String>,
-    ) -> (UnlinkedProgram<S, T>, ParseErrorReporter) {
+    ) -> (UnlinkedProgram<S>, ParseErrorReporter) {
         let mut reporter = ParseErrorReporter::new();
         let mut local_labels: HashMap<Label, (Location, usize)> = Default::default();
         for (i, (_, partial_inst)) in insts.iter().enumerate() {

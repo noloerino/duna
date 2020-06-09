@@ -143,17 +143,17 @@ fn impl_convert_int32_derive(ast: &syn::DeriveInput) -> TokenStream {
 fn impl_itype_arith_derive(ast: &syn::DeriveInput) -> TokenStream {
     let name = &ast.ident;
     let gen = quote! {
-        impl<T: MachineDataWidth> IType<T> for #name {
+        impl<T: RiscV> IType<T> for #name {
             fn inst_fields() -> IInstFields {
                 <#name as ITypeArith<T>>::inst_fields()
             }
 
             fn eval(
-                state: &UserProgState<RiscVRegister, T>,
+                state: &UserProgState<RiscVRegister, T::DataWidth>,
                 rd: RiscVRegister,
                 rs1: RiscVRegister,
                 imm: BitStr32
-            ) -> UserDiff<RiscVRegister, T> {
+            ) -> UserDiff<RiscVRegister, T::DataWidth> {
                 let new_rd_val = <#name as ITypeArith<T>>::eval(state.regfile.read(rs1), imm.into());
                 UserDiff::reg_write_pc_p4(state, rd, new_rd_val)
             }
@@ -165,19 +165,19 @@ fn impl_itype_arith_derive(ast: &syn::DeriveInput) -> TokenStream {
 fn impl_itype_load_derive(ast: &syn::DeriveInput) -> TokenStream {
     let name = &ast.ident;
     let gen = quote! {
-        impl<T: MachineDataWidth> IType<T> for #name {
+        impl<T: RiscV> IType<T> for #name {
             fn inst_fields() -> IInstFields {
                 <#name as ITypeLoad<T>>::inst_fields()
             }
 
             fn eval(
-                state: &UserProgState<RiscVRegister, T>,
+                state: &UserProgState<RiscVRegister, T::DataWidth>,
                 rd: RiscVRegister,
                 rs1: RiscVRegister,
                 imm: BitStr32
-            ) -> UserDiff<RiscVRegister, T> {
-                let rs1_val: T::Signed = state.regfile.read(rs1).into();
-                let addr: T::RegData = (rs1_val + imm.into()).into();
+            ) -> UserDiff<RiscVRegister, T::DataWidth> {
+                let rs1_val: <T::DataWidth as MachineDataWidth>::Signed = state.regfile.read(rs1).into();
+                let addr: <T::DataWidth as MachineDataWidth>::RegData = (rs1_val + imm.into()).into();
                 let new_rd_val = <#name as ITypeLoad<T>>::eval(&state.memory, addr.into());
                 UserDiff::reg_write_pc_p4(state, rd, new_rd_val)
             }

@@ -24,7 +24,7 @@ const J_OPCODE: BitStr32 = BitStr32::new(0b110_1111, 7);
 const S_OPCODE: BitStr32 = BitStr32::new(0b010_0011, 7);
 
 pub struct Add;
-impl<T: MachineDataWidth> RType<T> for Add {
+impl<T: RiscV> RType<T> for Add {
     fn inst_fields() -> RInstFields {
         RInstFields {
             funct7: f7(0),
@@ -32,15 +32,18 @@ impl<T: MachineDataWidth> RType<T> for Add {
             opcode: R_OPCODE,
         }
     }
-    fn eval(rs1_val: T::RegData, rs2_val: T::RegData) -> T::RegData {
-        let v1: T::Signed = rs1_val.into();
+    fn eval(
+        rs1_val: <T::DataWidth as MachineDataWidth>::RegData,
+        rs2_val: <T::DataWidth as MachineDataWidth>::RegData,
+    ) -> <T::DataWidth as MachineDataWidth>::RegData {
+        let v1: <T::DataWidth as MachineDataWidth>::Signed = rs1_val.into();
         (v1.wrapping_add(&rs2_val.into())).into()
     }
 }
 
 #[derive(ITypeArith)]
 pub struct Addi;
-impl<T: MachineDataWidth> ITypeArith<T> for Addi {
+impl<T: RiscV> ITypeArith<T> for Addi {
     fn inst_fields() -> IInstFields {
         IInstFields {
             funct3: f3(0),
@@ -48,15 +51,18 @@ impl<T: MachineDataWidth> ITypeArith<T> for Addi {
         }
     }
 
-    fn eval(rs1_val: T::RegData, imm: BitStr32) -> T::RegData {
-        let v1: T::Signed = rs1_val.into();
-        let imm_val: T::Signed = imm.into();
+    fn eval(
+        rs1_val: <T::DataWidth as MachineDataWidth>::RegData,
+        imm: BitStr32,
+    ) -> <T::DataWidth as MachineDataWidth>::RegData {
+        let v1: <T::DataWidth as MachineDataWidth>::Signed = rs1_val.into();
+        let imm_val: <T::DataWidth as MachineDataWidth>::Signed = imm.into();
         (v1.wrapping_add(&imm_val)).into()
     }
 }
 
 pub struct And;
-impl<T: MachineDataWidth> RType<T> for And {
+impl<T: RiscV> RType<T> for And {
     fn inst_fields() -> RInstFields {
         RInstFields {
             funct7: f7(0),
@@ -65,15 +71,18 @@ impl<T: MachineDataWidth> RType<T> for And {
         }
     }
 
-    fn eval(rs1_val: T::RegData, rs2_val: T::RegData) -> T::RegData {
-        let v1: T::Signed = rs1_val.into();
+    fn eval(
+        rs1_val: <T::DataWidth as MachineDataWidth>::RegData,
+        rs2_val: <T::DataWidth as MachineDataWidth>::RegData,
+    ) -> <T::DataWidth as MachineDataWidth>::RegData {
+        let v1: <T::DataWidth as MachineDataWidth>::Signed = rs1_val.into();
         (v1 & rs2_val.into()).into()
     }
 }
 
 #[derive(ITypeArith)]
 pub struct Andi;
-impl<T: MachineDataWidth> ITypeArith<T> for Andi {
+impl<T: RiscV> ITypeArith<T> for Andi {
     fn inst_fields() -> IInstFields {
         IInstFields {
             funct3: f3(0b111),
@@ -81,15 +90,18 @@ impl<T: MachineDataWidth> ITypeArith<T> for Andi {
         }
     }
 
-    fn eval(rs1_val: T::RegData, imm: BitStr32) -> T::RegData {
-        let v1: T::Signed = rs1_val.into();
-        let imm_val: T::Signed = imm.into();
+    fn eval(
+        rs1_val: <T::DataWidth as MachineDataWidth>::RegData,
+        imm: BitStr32,
+    ) -> <T::DataWidth as MachineDataWidth>::RegData {
+        let v1: <T::DataWidth as MachineDataWidth>::Signed = rs1_val.into();
+        let imm_val: <T::DataWidth as MachineDataWidth>::Signed = imm.into();
         (v1 & imm_val).into()
     }
 }
 
 pub struct Auipc;
-impl<T: MachineDataWidth> UType<T> for Auipc {
+impl<T: RiscV> UType<T> for Auipc {
     fn inst_fields() -> UInstFields {
         UInstFields {
             opcode: BitStr32::new(0b001_0111, 7),
@@ -97,11 +109,11 @@ impl<T: MachineDataWidth> UType<T> for Auipc {
     }
 
     fn eval(
-        state: &UserProgState<RiscVRegister, T>,
+        state: &UserProgState<RiscVRegister, T::DataWidth>,
         rd: RiscVRegister,
         imm: BitStr32,
-    ) -> UserDiff<RiscVRegister, T> {
-        let pc: T::Signed = state.pc.into();
+    ) -> UserDiff<RiscVRegister, T::DataWidth> {
+        let pc: <T::DataWidth as MachineDataWidth>::Signed = state.pc.into();
         UserDiff::reg_write_pc_p4(
             state,
             rd,
@@ -111,7 +123,7 @@ impl<T: MachineDataWidth> UType<T> for Auipc {
 }
 
 pub struct Beq;
-impl<T: MachineDataWidth> BType<T> for Beq {
+impl<T: RiscV> BType<T> for Beq {
     fn inst_fields() -> BInstFields {
         BInstFields {
             opcode: B_OPCODE,
@@ -119,13 +131,16 @@ impl<T: MachineDataWidth> BType<T> for Beq {
         }
     }
 
-    fn eval(rs1_val: T::RegData, rs2_val: T::RegData) -> bool {
+    fn eval(
+        rs1_val: <T::DataWidth as MachineDataWidth>::RegData,
+        rs2_val: <T::DataWidth as MachineDataWidth>::RegData,
+    ) -> bool {
         rs1_val == rs2_val
     }
 }
 
 pub struct Bge;
-impl<T: MachineDataWidth> BType<T> for Bge {
+impl<T: RiscV> BType<T> for Bge {
     fn inst_fields() -> BInstFields {
         BInstFields {
             opcode: B_OPCODE,
@@ -133,14 +148,17 @@ impl<T: MachineDataWidth> BType<T> for Bge {
         }
     }
 
-    fn eval(rs1_val: T::RegData, rs2_val: T::RegData) -> bool {
-        let v1: T::Signed = rs1_val.into();
+    fn eval(
+        rs1_val: <T::DataWidth as MachineDataWidth>::RegData,
+        rs2_val: <T::DataWidth as MachineDataWidth>::RegData,
+    ) -> bool {
+        let v1: <T::DataWidth as MachineDataWidth>::Signed = rs1_val.into();
         v1 >= rs2_val.into()
     }
 }
 
 pub struct Bgeu;
-impl<T: MachineDataWidth> BType<T> for Bgeu {
+impl<T: RiscV> BType<T> for Bgeu {
     fn inst_fields() -> BInstFields {
         BInstFields {
             opcode: B_OPCODE,
@@ -148,14 +166,17 @@ impl<T: MachineDataWidth> BType<T> for Bgeu {
         }
     }
 
-    fn eval(rs1_val: T::RegData, rs2_val: T::RegData) -> bool {
-        let v1: T::Unsigned = rs1_val.into();
+    fn eval(
+        rs1_val: <T::DataWidth as MachineDataWidth>::RegData,
+        rs2_val: <T::DataWidth as MachineDataWidth>::RegData,
+    ) -> bool {
+        let v1: <T::DataWidth as MachineDataWidth>::Unsigned = rs1_val.into();
         v1 >= rs2_val.into()
     }
 }
 
 pub struct Blt;
-impl<T: MachineDataWidth> BType<T> for Blt {
+impl<T: RiscV> BType<T> for Blt {
     fn inst_fields() -> BInstFields {
         BInstFields {
             opcode: B_OPCODE,
@@ -163,14 +184,17 @@ impl<T: MachineDataWidth> BType<T> for Blt {
         }
     }
 
-    fn eval(rs1_val: T::RegData, rs2_val: T::RegData) -> bool {
-        let v1: T::Signed = rs1_val.into();
+    fn eval(
+        rs1_val: <T::DataWidth as MachineDataWidth>::RegData,
+        rs2_val: <T::DataWidth as MachineDataWidth>::RegData,
+    ) -> bool {
+        let v1: <T::DataWidth as MachineDataWidth>::Signed = rs1_val.into();
         v1 < rs2_val.into()
     }
 }
 
 pub struct Bltu;
-impl<T: MachineDataWidth> BType<T> for Bltu {
+impl<T: RiscV> BType<T> for Bltu {
     fn inst_fields() -> BInstFields {
         BInstFields {
             opcode: B_OPCODE,
@@ -178,14 +202,17 @@ impl<T: MachineDataWidth> BType<T> for Bltu {
         }
     }
 
-    fn eval(rs1_val: T::RegData, rs2_val: T::RegData) -> bool {
-        let v1: T::Unsigned = rs1_val.into();
+    fn eval(
+        rs1_val: <T::DataWidth as MachineDataWidth>::RegData,
+        rs2_val: <T::DataWidth as MachineDataWidth>::RegData,
+    ) -> bool {
+        let v1: <T::DataWidth as MachineDataWidth>::Unsigned = rs1_val.into();
         v1 < rs2_val.into()
     }
 }
 
 pub struct Bne;
-impl<T: MachineDataWidth> BType<T> for Bne {
+impl<T: RiscV> BType<T> for Bne {
     fn inst_fields() -> BInstFields {
         BInstFields {
             opcode: B_OPCODE,
@@ -193,13 +220,16 @@ impl<T: MachineDataWidth> BType<T> for Bne {
         }
     }
 
-    fn eval(rs1_val: T::RegData, rs2_val: T::RegData) -> bool {
+    fn eval(
+        rs1_val: <T::DataWidth as MachineDataWidth>::RegData,
+        rs2_val: <T::DataWidth as MachineDataWidth>::RegData,
+    ) -> bool {
         rs1_val != rs2_val
     }
 }
 
 pub struct Ecall;
-impl<T: MachineDataWidth> EnvironInst<T> for Ecall {
+impl<T: RiscV> EnvironInst<T> for Ecall {
     fn funct12() -> BitStr32 {
         BitStr32::new(0, 12)
     }
@@ -211,24 +241,24 @@ impl<T: MachineDataWidth> EnvironInst<T> for Ecall {
         }
     }
 
-    fn eval(_state: &ProgramState<RiscV<T>, T>) -> TrapKind {
+    fn eval(_state: &ProgramState<T>) -> TrapKind {
         TrapKind::Ecall
     }
 }
 
 pub struct Jal;
-impl<T: MachineDataWidth> JType<T> for Jal {
+impl<T: RiscV> JType<T> for Jal {
     fn inst_fields() -> JInstFields {
         JInstFields { opcode: J_OPCODE }
     }
 
     fn eval(
-        state: &UserProgState<RiscVRegister, T>,
+        state: &UserProgState<RiscVRegister, T::DataWidth>,
         rd: RiscVRegister,
         imm: BitStr32,
-    ) -> UserDiff<RiscVRegister, T> {
-        let pc: T::Signed = state.pc.into();
-        let offs: T::Signed = imm.into();
+    ) -> UserDiff<RiscVRegister, T::DataWidth> {
+        let pc: <T::DataWidth as MachineDataWidth>::Signed = state.pc.into();
+        let offs: <T::DataWidth as MachineDataWidth>::Signed = imm.into();
         UserDiff::reg_write_op(
             state,
             (pc.wrapping_add(&offs)).into(),
@@ -239,7 +269,7 @@ impl<T: MachineDataWidth> JType<T> for Jal {
 }
 
 pub struct Jalr;
-impl<T: MachineDataWidth> IType<T> for Jalr {
+impl<T: RiscV> IType<T> for Jalr {
     fn inst_fields() -> IInstFields {
         IInstFields {
             opcode: BitStr32::new(0b110_0111, 7),
@@ -248,12 +278,12 @@ impl<T: MachineDataWidth> IType<T> for Jalr {
     }
 
     fn eval(
-        state: &UserProgState<RiscVRegister, T>,
+        state: &UserProgState<RiscVRegister, T::DataWidth>,
         rd: RiscVRegister,
         rs1: RiscVRegister,
         imm: BitStr32,
-    ) -> UserDiff<RiscVRegister, T> {
-        let v1: T::Signed = state.regfile.read(rs1).into();
+    ) -> UserDiff<RiscVRegister, T::DataWidth> {
+        let v1: <T::DataWidth as MachineDataWidth>::Signed = state.regfile.read(rs1).into();
         UserDiff::reg_write_op(
             state,
             (v1.wrapping_add(&imm.into())).into(),
@@ -265,7 +295,7 @@ impl<T: MachineDataWidth> IType<T> for Jalr {
 
 #[derive(ITypeLoad)]
 pub struct Lb;
-impl<T: MachineDataWidth> ITypeLoad<T> for Lb {
+impl<T: RiscV> ITypeLoad<T> for Lb {
     fn inst_fields() -> IInstFields {
         IInstFields {
             opcode: I_OPCODE_LOAD,
@@ -273,14 +303,17 @@ impl<T: MachineDataWidth> ITypeLoad<T> for Lb {
         }
     }
 
-    fn eval(mem: &Memory<T>, addr: T::ByteAddr) -> T::RegData {
-        <T::RegData>::sign_ext_from_byte(mem.get_byte(addr))
+    fn eval(
+        mem: &Memory<T::DataWidth>,
+        addr: <T::DataWidth as MachineDataWidth>::ByteAddr,
+    ) -> <T::DataWidth as MachineDataWidth>::RegData {
+        <<T::DataWidth as MachineDataWidth>::RegData>::sign_ext_from_byte(mem.get_byte(addr))
     }
 }
 
 #[derive(ITypeLoad)]
 pub struct Lbu;
-impl<T: MachineDataWidth> ITypeLoad<T> for Lbu {
+impl<T: RiscV> ITypeLoad<T> for Lbu {
     fn inst_fields() -> IInstFields {
         IInstFields {
             opcode: I_OPCODE_LOAD,
@@ -288,14 +321,17 @@ impl<T: MachineDataWidth> ITypeLoad<T> for Lbu {
         }
     }
 
-    fn eval(mem: &Memory<T>, addr: T::ByteAddr) -> T::RegData {
-        <T::RegData>::zero_pad_from_byte(mem.get_byte(addr))
+    fn eval(
+        mem: &Memory<T::DataWidth>,
+        addr: <T::DataWidth as MachineDataWidth>::ByteAddr,
+    ) -> <T::DataWidth as MachineDataWidth>::RegData {
+        <<T::DataWidth as MachineDataWidth>::RegData>::zero_pad_from_byte(mem.get_byte(addr))
     }
 }
 
 #[derive(ITypeLoad)]
 pub struct Lh;
-impl<T: MachineDataWidth> ITypeLoad<T> for Lh {
+impl<T: RiscV> ITypeLoad<T> for Lh {
     fn inst_fields() -> IInstFields {
         IInstFields {
             opcode: I_OPCODE_LOAD,
@@ -304,19 +340,28 @@ impl<T: MachineDataWidth> ITypeLoad<T> for Lh {
     }
 
     // TODO define alignment behavior
-    fn eval(mem: &Memory<T>, addr: T::ByteAddr) -> T::RegData {
-        let og_addr: T::Signed = addr.into();
-        let second_byte_addr: T::ByteAddr = (og_addr.wrapping_add(&T::sgn_one())).into();
-        let upper_byte: T::Signed =
-            <T::RegData>::sign_ext_from_byte(mem.get_byte(second_byte_addr)).into();
-        let lower_byte: T::Signed = <T::RegData>::zero_pad_from_byte(mem.get_byte(addr)).into();
+    fn eval(
+        mem: &Memory<T::DataWidth>,
+        addr: <T::DataWidth as MachineDataWidth>::ByteAddr,
+    ) -> <T::DataWidth as MachineDataWidth>::RegData {
+        let og_addr: <T::DataWidth as MachineDataWidth>::Signed = addr.into();
+        let second_byte_addr: <T::DataWidth as MachineDataWidth>::ByteAddr =
+            (og_addr.wrapping_add(&<T::DataWidth as MachineDataWidth>::sgn_one())).into();
+        let upper_byte: <T::DataWidth as MachineDataWidth>::Signed =
+            <<T::DataWidth as MachineDataWidth>::RegData>::sign_ext_from_byte(
+                mem.get_byte(second_byte_addr),
+            )
+            .into();
+        let lower_byte: <T::DataWidth as MachineDataWidth>::Signed =
+            <<T::DataWidth as MachineDataWidth>::RegData>::zero_pad_from_byte(mem.get_byte(addr))
+                .into();
         ((upper_byte << 8) | lower_byte).into()
     }
 }
 
 #[derive(ITypeLoad)]
 pub struct Lhu;
-impl<T: MachineDataWidth> ITypeLoad<T> for Lhu {
+impl<T: RiscV> ITypeLoad<T> for Lhu {
     fn inst_fields() -> IInstFields {
         IInstFields {
             opcode: I_OPCODE_LOAD,
@@ -325,18 +370,27 @@ impl<T: MachineDataWidth> ITypeLoad<T> for Lhu {
     }
 
     // TODO define alignment behavior
-    fn eval(mem: &Memory<T>, addr: T::ByteAddr) -> T::RegData {
-        let og_addr: T::Signed = addr.into();
-        let second_byte_addr: T::ByteAddr = (og_addr.wrapping_add(&T::sgn_one())).into();
-        let upper_byte: T::Signed =
-            <T::RegData>::zero_pad_from_byte(mem.get_byte(second_byte_addr)).into();
-        let lower_byte: T::Signed = <T::RegData>::zero_pad_from_byte(mem.get_byte(addr)).into();
+    fn eval(
+        mem: &Memory<T::DataWidth>,
+        addr: <T::DataWidth as MachineDataWidth>::ByteAddr,
+    ) -> <T::DataWidth as MachineDataWidth>::RegData {
+        let og_addr: <T::DataWidth as MachineDataWidth>::Signed = addr.into();
+        let second_byte_addr: <T::DataWidth as MachineDataWidth>::ByteAddr =
+            (og_addr.wrapping_add(&<T::DataWidth as MachineDataWidth>::sgn_one())).into();
+        let upper_byte: <T::DataWidth as MachineDataWidth>::Signed =
+            <<T::DataWidth as MachineDataWidth>::RegData>::zero_pad_from_byte(
+                mem.get_byte(second_byte_addr),
+            )
+            .into();
+        let lower_byte: <T::DataWidth as MachineDataWidth>::Signed =
+            <<T::DataWidth as MachineDataWidth>::RegData>::zero_pad_from_byte(mem.get_byte(addr))
+                .into();
         ((upper_byte << 8) | lower_byte).into()
     }
 }
 
 pub struct Lui;
-impl<T: MachineDataWidth> UType<T> for Lui {
+impl<T: RiscV> UType<T> for Lui {
     fn inst_fields() -> UInstFields {
         UInstFields {
             opcode: BitStr32::new(0b011_0111, 7),
@@ -344,18 +398,18 @@ impl<T: MachineDataWidth> UType<T> for Lui {
     }
 
     fn eval(
-        state: &UserProgState<RiscVRegister, T>,
+        state: &UserProgState<RiscVRegister, T::DataWidth>,
         rd: RiscVRegister,
         imm: BitStr32,
-    ) -> UserDiff<RiscVRegister, T> {
-        let imm_val: T::Signed = imm.zero_pad_lsb().into();
+    ) -> UserDiff<RiscVRegister, T::DataWidth> {
+        let imm_val: <T::DataWidth as MachineDataWidth>::Signed = imm.zero_pad_lsb().into();
         UserDiff::reg_write_pc_p4(state, rd, imm_val.into())
     }
 }
 
 #[derive(ITypeLoad)]
 pub struct Lw;
-impl<T: MachineDataWidth> ITypeLoad<T> for Lw {
+impl<T: RiscV> ITypeLoad<T> for Lw {
     fn inst_fields() -> IInstFields {
         IInstFields {
             opcode: I_OPCODE_LOAD,
@@ -364,13 +418,18 @@ impl<T: MachineDataWidth> ITypeLoad<T> for Lw {
     }
 
     // TODO define alignment behavior
-    fn eval(mem: &Memory<T>, addr: T::ByteAddr) -> T::RegData {
-        <T::RegData>::sign_ext_from_word(mem.get_word(addr.to_word_address()))
+    fn eval(
+        mem: &Memory<T::DataWidth>,
+        addr: <T::DataWidth as MachineDataWidth>::ByteAddr,
+    ) -> <T::DataWidth as MachineDataWidth>::RegData {
+        <<T::DataWidth as MachineDataWidth>::RegData>::sign_ext_from_word(
+            mem.get_word(addr.to_word_address()),
+        )
     }
 }
 
 pub struct Sb;
-impl<T: MachineDataWidth> SType<T> for Sb {
+impl<T: RiscV> SType<T> for Sb {
     fn inst_fields() -> SInstFields {
         SInstFields {
             funct3: f3(0b000),
@@ -379,14 +438,15 @@ impl<T: MachineDataWidth> SType<T> for Sb {
     }
 
     fn eval(
-        state: &UserProgState<RiscVRegister, T>,
+        state: &UserProgState<RiscVRegister, T::DataWidth>,
         rs1: RiscVRegister,
         rs2: RiscVRegister,
         imm: BitStr32,
-    ) -> UserDiff<RiscVRegister, T> {
+    ) -> UserDiff<RiscVRegister, T::DataWidth> {
         // TODO implement more granular diffs
-        let base_addr: T::Signed = state.regfile.read(rs1).into();
-        let byte_addr: T::ByteAddr = (base_addr.wrapping_add(&imm.into())).into();
+        let base_addr: <T::DataWidth as MachineDataWidth>::Signed = state.regfile.read(rs1).into();
+        let byte_addr: <T::DataWidth as MachineDataWidth>::ByteAddr =
+            (base_addr.wrapping_add(&imm.into())).into();
         let new_word = state.memory.get_word(byte_addr.to_word_address()).set_byte(
             byte_addr.get_word_offset(),
             state.regfile.read(rs2).get_byte(0),
@@ -396,7 +456,7 @@ impl<T: MachineDataWidth> SType<T> for Sb {
 }
 
 pub struct Sh;
-impl<T: MachineDataWidth> SType<T> for Sh {
+impl<T: RiscV> SType<T> for Sh {
     fn inst_fields() -> SInstFields {
         SInstFields {
             funct3: f3(0b001),
@@ -405,14 +465,15 @@ impl<T: MachineDataWidth> SType<T> for Sh {
     }
 
     fn eval(
-        state: &UserProgState<RiscVRegister, T>,
+        state: &UserProgState<RiscVRegister, T::DataWidth>,
         rs1: RiscVRegister,
         rs2: RiscVRegister,
         imm: BitStr32,
-    ) -> UserDiff<RiscVRegister, T> {
+    ) -> UserDiff<RiscVRegister, T::DataWidth> {
         // TODO implement more granular diffs
-        let base_addr: T::Signed = state.regfile.read(rs1).into();
-        let byte_addr: T::ByteAddr = (base_addr.wrapping_add(&imm.into())).into();
+        let base_addr: <T::DataWidth as MachineDataWidth>::Signed = state.regfile.read(rs1).into();
+        let byte_addr: <T::DataWidth as MachineDataWidth>::ByteAddr =
+            (base_addr.wrapping_add(&imm.into())).into();
         let new_word = state
             .memory
             .get_word(byte_addr.to_word_address())
@@ -430,7 +491,7 @@ impl<T: MachineDataWidth> SType<T> for Sh {
 }
 
 pub struct Sw;
-impl<T: MachineDataWidth> SType<T> for Sw {
+impl<T: RiscV> SType<T> for Sw {
     fn inst_fields() -> SInstFields {
         SInstFields {
             funct3: f3(0b010),
@@ -439,13 +500,14 @@ impl<T: MachineDataWidth> SType<T> for Sw {
     }
 
     fn eval(
-        state: &UserProgState<RiscVRegister, T>,
+        state: &UserProgState<RiscVRegister, T::DataWidth>,
         rs1: RiscVRegister,
         rs2: RiscVRegister,
         imm: BitStr32,
-    ) -> UserDiff<RiscVRegister, T> {
-        let base_addr: T::Signed = state.regfile.read(rs1).into();
-        let byte_addr: T::ByteAddr = (base_addr.wrapping_add(&imm.into())).into();
+    ) -> UserDiff<RiscVRegister, T::DataWidth> {
+        let base_addr: <T::DataWidth as MachineDataWidth>::Signed = state.regfile.read(rs1).into();
+        let byte_addr: <T::DataWidth as MachineDataWidth>::ByteAddr =
+            (base_addr.wrapping_add(&imm.into())).into();
         UserDiff::mem_write_op(
             state,
             byte_addr.to_word_address(),
@@ -456,6 +518,7 @@ impl<T: MachineDataWidth> SType<T> for Sw {
 
 #[cfg(test)]
 mod test {
+    use super::super::arch::RV32;
     use super::*;
 
     use crate::program_state::Syscall;
@@ -470,7 +533,7 @@ mod test {
     const RS2_POS: RiscVRegister = T1;
     const RS2_NEG: RiscVRegister = S1;
 
-    fn get_init_state() -> ProgramState<RiscV<Width32b>, Width32b> {
+    fn get_init_state() -> ProgramState<RV32> {
         let mut state = ProgramState::new();
         state.regfile_set(RS1, DataWord::from(RS1_VAL));
         state.regfile_set(RS2_POS, DataWord::from(RS2_VAL_POS));
@@ -480,7 +543,7 @@ mod test {
 
     #[test]
     fn test_write_x0() {
-        let mut state = ProgramState::<RiscV<Width32b>, Width32b>::new();
+        let mut state = ProgramState::<RV32>::new();
         state.apply_inst(&Addi::new(ZERO, ZERO, DataWord::from(0x100)));
         assert_eq!(i32::from(state.regfile_read(ZERO)), 0);
     }
@@ -492,10 +555,7 @@ mod test {
 
     /// Tests an R type instruction. Assumes that the registers being read
     /// are independent of the registers being written.
-    fn test_r_type<T: RType<Width32b>>(
-        state: &mut ProgramState<RiscV<Width32b>, Width32b>,
-        args: Vec<RTestData>,
-    ) {
+    fn test_r_type<T: RType<RV32>>(state: &mut ProgramState<RV32>, args: Vec<RTestData>) {
         for RTestData { rs2, result } in args {
             state.apply_inst(&T::new(RD, RS1, rs2));
             assert_eq!(i32::from(state.regfile_read(RD)), result);
@@ -509,8 +569,8 @@ mod test {
 
     /// Tests an I type arithmetic instruction. Assumes that the registers being read
     /// are independent of the registers being written.
-    fn test_i_type_arith<T: ITypeArith<Width32b>>(
-        state: &mut ProgramState<RiscV<Width32b>, Width32b>,
+    fn test_i_type_arith<T: ITypeArith<RV32>>(
+        state: &mut ProgramState<RV32>,
         args: Vec<IArithTestData>,
     ) {
         for IArithTestData { imm, result } in args {
@@ -525,27 +585,27 @@ mod test {
     fn test_to_machine_code() {
         // add s0, s1, s2
         const ADD_HEX: u32 = 0x0124_8433;
-        let add_inst: RiscVInst<Width32b> = Add::new(RiscVRegister::S0, S1, S2);
+        let add_inst: RiscVInst<RV32> = Add::new(RiscVRegister::S0, S1, S2);
         assert_eq!(add_inst.to_machine_code(), ADD_HEX);
         // addi T1, T1, -1075
         const ADDI_HEX: u32 = 0xBCD3_0313;
-        let addi_inst: RiscVInst<Width32b> = Addi::new(T1, T1, DataWord::from(-1075));
+        let addi_inst: RiscVInst<RV32> = Addi::new(T1, T1, DataWord::from(-1075));
         assert_eq!(addi_inst.to_machine_code(), ADDI_HEX);
         // auipc s1, 10
         const AUIPC_HEX: u32 = 0x0000_A497;
-        let auipc_inst: RiscVInst<Width32b> = Auipc::new(S1, DataWord::from(10));
+        let auipc_inst: RiscVInst<RV32> = Auipc::new(S1, DataWord::from(10));
         assert_eq!(auipc_inst.to_machine_code(), AUIPC_HEX);
         // bne s1, s2, 4
         const BNE_HEX: u32 = 0x0124_9263;
-        let bne_inst: RiscVInst<Width32b> = Bne::new(S1, S2, DataWord::from(4));
+        let bne_inst: RiscVInst<RV32> = Bne::new(S1, S2, DataWord::from(4));
         assert_eq!(bne_inst.to_machine_code(), BNE_HEX);
         // ecall
         const ECALL_HEX: u32 = 0x0000_0073;
-        let ecall_inst: RiscVInst<Width32b> = Ecall::new();
+        let ecall_inst: RiscVInst<RV32> = Ecall::new();
         assert_eq!(ecall_inst.to_machine_code(), ECALL_HEX);
         // jal ra, 16
         const JAL_HEX: u32 = 0x0100_00EF;
-        let jal_inst: RiscVInst<Width32b> = Jal::new(RA, DataWord::from(16));
+        let jal_inst: RiscVInst<RV32> = Jal::new(RA, DataWord::from(16));
         assert_eq!(jal_inst.to_machine_code(), JAL_HEX);
     }
 
@@ -661,10 +721,7 @@ mod test {
     }
 
     /// Tests a branch instruction. Taken jumps move forward by 0x100, or backwards by 0x100.
-    fn test_b_type<T: BType<Width32b>>(
-        state: &mut ProgramState<RiscV<Width32b>, Width32b>,
-        args: Vec<BTestData>,
-    ) {
+    fn test_b_type<T: BType<RV32>>(state: &mut ProgramState<RV32>, args: Vec<BTestData>) {
         for &dist in &[0x100, -0x100] {
             let offs = DataWord::from(dist);
             for &BTestData {
@@ -799,7 +856,6 @@ mod test {
         );
     }
 
-    #[test]
     fn test_ecall() {
         let mut state = get_init_state();
         let addr = ByteAddr32::from(state.regfile_read(SP));

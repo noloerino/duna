@@ -6,10 +6,9 @@ use crate::assembler::SectionStore;
 use crate::instruction::ConcreteInst;
 use std::collections::HashMap;
 
-pub trait Program<S, T>
+pub trait Program<S>
 where
-    S: Architecture<T>,
-    T: MachineDataWidth,
+    S: Architecture,
 {
     fn new(insts: Vec<S::Instruction>, sections: SectionStore) -> Self;
     /// Prints out all the instructions that this program contains.
@@ -21,15 +20,15 @@ where
     fn get_inst_vec(&self) -> &[S::Instruction];
 
     /// Returns the current state of this program.
-    fn get_state(self) -> ProgramState<S, T>;
+    fn get_state(self) -> ProgramState<S>;
 }
 
-pub struct ProgramState<S: Architecture<T>, T: MachineDataWidth> {
+pub struct ProgramState<S: Architecture> {
     pub(crate) priv_state: PrivProgState,
-    pub(crate) user_state: UserProgState<S::Register, T>,
+    pub(crate) user_state: UserProgState<S::Register, S::DataWidth>,
 }
 
-impl<S: Architecture<T>, T: MachineDataWidth> Default for ProgramState<S, T> {
+impl<S: Architecture> Default for ProgramState<S> {
     fn default() -> Self {
         ProgramState::new()
     }
@@ -42,40 +41,47 @@ impl<S: Architecture<T>, T: MachineDataWidth> Default for ProgramState<S, T> {
 /// See [Syscall] for syscall codes.
 /// TODO put custom types for syscall args
 /// TODO put errno on user state at a thread-local statically known location
-impl<S: Architecture<T>, T: MachineDataWidth> ProgramState<S, T> {
+impl<S: Architecture> ProgramState<S> {
     pub fn get_stdout(&self) -> &[u8] {
         self.priv_state.stdout.as_slice()
     }
 
-    pub fn get_user_pc(&self) -> T::ByteAddr {
+    pub fn get_user_pc(&self) -> <S::DataWidth as MachineDataWidth>::ByteAddr {
         self.user_state.pc
     }
 
-    pub fn set_user_pc(&mut self, addr: T::ByteAddr) {
+    pub fn set_user_pc(&mut self, addr: <S::DataWidth as MachineDataWidth>::ByteAddr) {
         self.user_state.pc = addr
     }
 
-    pub fn regfile_read(&self, reg: S::Register) -> T::RegData {
+    pub fn regfile_read(&self, reg: S::Register) -> <S::DataWidth as MachineDataWidth>::RegData {
         self.user_state.regfile.read(reg)
     }
 
-    pub fn regfile_set(&mut self, reg: S::Register, val: T::RegData) {
+    pub fn regfile_set(
+        &mut self,
+        reg: S::Register,
+        val: <S::DataWidth as MachineDataWidth>::RegData,
+    ) {
         self.user_state.regfile.set(reg, val);
     }
 
-    pub fn memory_get_word(&self, addr: <T::ByteAddr as ByteAddress>::WordAddress) -> DataWord {
+    pub fn memory_get_word(
+        &self,
+        addr: <<S::DataWidth as MachineDataWidth>::ByteAddr as ByteAddress>::WordAddress,
+    ) -> DataWord {
         self.user_state.memory.get_word(addr)
     }
 
     pub fn memory_set_word(
         &mut self,
-        addr: <T::ByteAddr as ByteAddress>::WordAddress,
+        addr: <<S::DataWidth as MachineDataWidth>::ByteAddr as ByteAddress>::WordAddress,
         val: DataWord,
     ) {
         self.user_state.memory.set_word(addr, val);
     }
 
-    pub fn handle_trap(&self, trap_kind: &TrapKind) -> PrivStateChange<T> {
+    pub fn handle_trap(&self, trap_kind: &TrapKind) -> PrivStateChange<S::DataWidth> {
         use TrapKind::*;
         match trap_kind {
             Ecall => self.dispatch_syscall(),
@@ -83,7 +89,7 @@ impl<S: Architecture<T>, T: MachineDataWidth> ProgramState<S, T> {
         }
     }
 
-    pub fn dispatch_syscall(&self) -> PrivStateChange<T> {
+    pub fn dispatch_syscall(&self) -> PrivStateChange<S::DataWidth> {
         unimplemented!();
         // TODO abstract calling conventions
         // use IRegister::*;
@@ -108,19 +114,19 @@ impl<S: Architecture<T>, T: MachineDataWidth> ProgramState<S, T> {
     /// * a2 - the number of bytes to write
     fn syscall_write(
         &self,
-        fd: T::RegData,
-        buf: T::ByteAddr,
-        len: T::RegData,
-    ) -> PrivStateChange<T> {
+        fd: <S::DataWidth as MachineDataWidth>::RegData,
+        buf: <S::DataWidth as MachineDataWidth>::ByteAddr,
+        len: <S::DataWidth as MachineDataWidth>::RegData,
+    ) -> PrivStateChange<S::DataWidth> {
         PrivStateChange::FileWrite { fd, buf, len }
     }
 
     /// Handles an unknown syscall.
-    fn syscall_unknown(&self) -> PrivStateChange<T> {
+    fn syscall_unknown(&self) -> PrivStateChange<S::DataWidth> {
         panic!("Unknown syscall")
     }
 
-    pub fn new() -> ProgramState<S, T> {
+    pub fn new() -> ProgramState<S> {
         ProgramState {
             priv_state: PrivProgState::new(),
             user_state: UserProgState::new(),
@@ -133,7 +139,7 @@ impl<S: Architecture<T>, T: MachineDataWidth> ProgramState<S, T> {
 
     /// Performs the described operation.
     /// The privileged operation is applied first, followed by the user operation.
-    pub fn apply_diff(&mut self, diff: &InstResult<S::Register, T>) {
+    pub fn apply_diff(&mut self, diff: &InstResult<S::Register, S::DataWidth>) {
         match diff {
             InstResult::Trap(trap_kind) => {
                 let priv_diff = &self.handle_trap(trap_kind);
@@ -148,7 +154,7 @@ impl<S: Architecture<T>, T: MachineDataWidth> ProgramState<S, T> {
     /// Since the privileged diff is applied first during execution, the user diff should
     /// be applied first during a revert.
     /// TODO figure out how to implement that...
-    pub fn revert_diff(&mut self, diff: &ProgramDiff<S::Register, T>) {
+    pub fn revert_diff(&mut self, diff: &ProgramDiff<S::Register, S::DataWidth>) {
         match diff {
             ProgramDiff::UserOnly(user_only) => self.user_state.revert_diff(user_only),
             ProgramDiff::PrivOnly(priv_only) => {

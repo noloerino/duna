@@ -26,7 +26,7 @@ fn main() {
     for file in file_names {
         linker = linker.with_file(file);
     }
-    let link_result = linker.link::<RiscV<Width32b>, Width32b>();
+    let link_result = linker.link::<RiscV<Width32b>>();
     let mut program = match link_result {
         Ok(p) => p,
         Err(errs) => {

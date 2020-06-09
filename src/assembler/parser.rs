@@ -38,15 +38,14 @@ impl LabelDef {
     }
 }
 
-pub type ParsedInstStream<S, T> = Vec<PartialInst<S, T>>;
-pub type LineParseResult<S, T> = Result<ParsedInstStream<S, T>, ParseError>;
-pub struct ParseResult<S, T>
+pub type ParsedInstStream<S> = Vec<PartialInst<S>>;
+pub type LineParseResult<S> = Result<ParsedInstStream<S>, ParseError>;
+pub struct ParseResult<S>
 where
-    S: Architecture<T>,
-    T: MachineDataWidth,
+    S: Architecture,
 {
     pub file_id: FileId,
-    pub insts: ParsedInstStream<S, T>,
+    pub insts: ParsedInstStream<S>,
     pub sections: SectionStore,
     pub declared_globals: HashSet<String>,
     pub reporter: ParseErrorReporter,
@@ -76,14 +75,13 @@ impl ParseState {
 
 pub type TokenIter = Peekable<IntoIter<Token>>;
 
-pub trait Parser<S, T>
+pub trait Parser<S>
 where
-    S: Architecture<T>,
-    T: MachineDataWidth,
+    S: Architecture,
 {
-    fn parse_str(file_id: FileId, contents: &str) -> ParseResult<S, T> {
+    fn parse_str(file_id: FileId, contents: &str) -> ParseResult<S> {
         Self::parse_lex_result(Lexer::lex_str(file_id, contents))
     }
 
-    fn parse_lex_result(lex_result: LexResult) -> ParseResult<S, T>;
+    fn parse_lex_result(lex_result: LexResult) -> ParseResult<S>;
 }

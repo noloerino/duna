@@ -8,13 +8,13 @@ use num_traits::ops::wrapping;
 use num_traits::sign;
 use std::fmt;
 
-/// Represents an architecture, parameterized on bitwidth, e.g. "x86" or "riscv".
-// TODO make generic over bit width
-pub trait Architecture<T: MachineDataWidth>: Sized {
+/// Represents an architecture including bitwidth, e.g. "x86-64" or "riscv-32".
+pub trait Architecture: Sized {
+    type DataWidth: MachineDataWidth;
     type Register: IRegister;
-    type Instruction: ConcreteInst<Self, T>;
-    type Program: Program<Self, T>;
-    type Parser: Parser<Self, T>;
+    type Instruction: ConcreteInst<Self>;
+    type Program: Program<Self>;
+    type Parser: Parser<Self>;
 }
 
 /// Represents a data type that can be used to hold data in a register.

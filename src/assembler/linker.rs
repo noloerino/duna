@@ -63,16 +63,14 @@ impl Linker {
     }
 
     /// Attempts to link the provided programs together into a single executable.
-    pub fn link<S: Architecture<T>, T: MachineDataWidth>(
-        self,
-    ) -> Result<S::Program, ParseErrorReport> {
+    pub fn link<S: Architecture>(self) -> Result<S::Program, ParseErrorReport> {
         assert!(
             !self.file_map.is_empty(),
             "Linker is missing a main program"
         );
         let mut reporter = ParseErrorReporter::new();
         // Link other programs' local labels
-        let mut programs: Vec<UnlinkedProgram<S, T>> = Vec::new();
+        let mut programs: Vec<UnlinkedProgram<S>> = Vec::new();
         for (i, FileData { content, .. }) in self.file_map.iter().enumerate() {
             let (prog, new_reporter) = Assembler::assemble_str(i, &content);
             programs.push(prog);

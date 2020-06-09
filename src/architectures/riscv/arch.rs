@@ -3,15 +3,18 @@ use super::parser::RiscVParser;
 use super::program::*;
 use super::registers::RiscVRegister;
 use crate::arch::*;
-use std::marker::PhantomData;
 
-pub struct RiscV<T: MachineDataWidth> {
-    _phantom: PhantomData<T>,
-}
+/// Marker trait that allows us to make data structures applicable to both 32 and 64-bit RISCV.
+pub trait RiscV: Architecture + Clone {}
 
-impl<T: MachineDataWidth> Architecture<T> for RiscV<T> {
+#[derive(Clone)]
+pub struct RV32;
+
+impl RiscV for RV32 {}
+impl Architecture for RV32 {
+    type DataWidth = Width32b;
     type Register = RiscVRegister;
-    type Instruction = RiscVInst<T>;
-    type Program = RiscVProgram<T>;
-    type Parser = RiscVParser<T>;
+    type Instruction = RiscVInst<Self>;
+    type Program = RiscVProgram<Self>;
+    type Parser = RiscVParser<Self>;
 }
