@@ -481,7 +481,7 @@ mod test {
 
     #[test]
     fn test_write_x0() {
-        let mut state = ProgramState::<RV32>::new();
+        let mut state = ProgramState::<RiscVRegister, Width32b>::new();
         state.apply_inst(&Addi::new(ZERO, ZERO, DataWord::from(0x100)));
         assert_eq!(i32::from(state.regfile_read(ZERO)), 0);
     }

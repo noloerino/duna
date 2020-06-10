@@ -84,9 +84,10 @@ impl Ret {
 mod tests {
     use super::super::arch::RV32;
     use super::*;
+    use crate::arch::Width32b;
     use crate::program_state::DataWord;
 
-    type Expanded = Vec<RiscVInst<RV32>>;
+    type Expanded = Vec<RiscVInst<Width32b>>;
 
     #[test]
     fn test_li() {

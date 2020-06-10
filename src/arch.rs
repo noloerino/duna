@@ -43,11 +43,6 @@ pub trait RegSize: Copy + Clone + PartialEq + fmt::Display + From<BitStr32> + Fr
     fn sign_ext_from_word(value: DataWord) -> Self;
 }
 
-pub enum BitWidthEnum {
-    BitWidth32,
-    BitWidth64,
-}
-
 /// Encodes the difference between a 32-bit and 64-bit system.
 pub trait MachineDataWidth: Clone + Copy {
     type Signed: From<BitStr32>
@@ -77,8 +72,6 @@ pub trait MachineDataWidth: Clone + Copy {
     type RegData: RegSize + From<Self::Signed> + From<Self::Unsigned> + From<Self::ByteAddr>;
     type ByteAddr: ByteAddress + From<Self::Signed> + From<Self::Unsigned> + From<Self::RegData>;
 
-    fn get_enum() -> BitWidthEnum;
-
     fn sgn_zero() -> Self::Signed;
     fn sgn_one() -> Self::Signed;
     fn sgn_to_isize(n: Self::Signed) -> isize;
@@ -95,10 +88,6 @@ impl MachineDataWidth for Width32b {
     type Unsigned = u32;
     type RegData = DataWord;
     type ByteAddr = ByteAddr32;
-
-    fn get_enum() -> BitWidthEnum {
-        BitWidthEnum::BitWidth32
-    }
 
     fn sgn_zero() -> Self::Signed {
         0i32
@@ -133,10 +122,6 @@ impl MachineDataWidth for Width64b {
     type Unsigned = u64;
     type RegData = DataDword;
     type ByteAddr = ByteAddr64;
-
-    fn get_enum() -> BitWidthEnum {
-        BitWidthEnum::BitWidth64
-    }
 
     fn sgn_zero() -> Self::Signed {
         0i64
