@@ -35,11 +35,6 @@ impl<R: IRegister, T: MachineDataWidth> Default for ProgramState<R, T> {
     }
 }
 
-/// Implements functions that require OS privileges to perform, such as reading/writing files.
-/// Per the RISCV calling convention (see http://man7.org/linux/man-pages/man2/syscall.2.html),
-/// the a7 register determines which syscall is being performed, and the arguments are stored
-/// in the argument registers of user space.
-/// See [Syscall] for syscall codes.
 /// TODO put custom types for syscall args
 /// TODO put errno on user state at a thread-local statically known location
 impl<R: IRegister, T: MachineDataWidth> ProgramState<R, T> {

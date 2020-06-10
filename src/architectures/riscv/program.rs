@@ -121,6 +121,11 @@ lazy_static! {
 
 pub struct RV32SyscallConvention {}
 
+/// Implements functions that require OS privileges to perform, such as reading/writing files.
+/// Per the RISCV calling convention (see http://man7.org/linux/man-pages/man2/syscall.2.html),
+/// the a7 register determines which syscall is being performed, and the arguments are stored
+/// in the argument registers of user space.
+/// See [Syscall] for syscall codes.
 impl SyscallConvention<RV32> for RV32SyscallConvention {
     fn number_to_syscall(n: i32) -> Option<Syscall> {
         RISCV_SYSCALL_TABLE.get(&(n as isize)).cloned()
@@ -132,7 +137,7 @@ impl SyscallConvention<RV32> for RV32SyscallConvention {
 
     fn syscall_arg_regs() -> Vec<RiscVRegister> {
         use RiscVRegister::*;
-        vec![A0, A1, A2, A3, A4, A5, A6, A7]
+        vec![A0, A1, A2, A3, A4, A5, A6]
     }
 
     fn syscall_return_regs() -> Vec<RiscVRegister> {
