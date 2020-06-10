@@ -4,7 +4,6 @@ use super::registers::{IRegister, RegFile};
 use crate::arch::*;
 use crate::assembler::SectionStore;
 use crate::instruction::ConcreteInst;
-use std::collections::HashMap;
 
 pub trait Program<R, S, T>
 where
@@ -85,9 +84,7 @@ impl<R: IRegister, T: MachineDataWidth> ProgramState<R, T> {
     }
 
     pub fn dispatch_syscall(&self) -> PrivStateChange<T> {
-        unimplemented!();
-        // TODO abstract calling conventions
-        // use IRegister::*;
+        unimplemented!()
         // let rf = &self.user_state.regfile;
         // let a0 = rf.read(A0);
         // let a1 = rf.read(A1);
@@ -104,14 +101,14 @@ impl<R: IRegister, T: MachineDataWidth> ProgramState<R, T> {
 
     /// Writes contents to a specified file descriptor.
     /// TODO for now, this is hardcoded to print to stdout regardless of the provided FD.
-    /// * a0 - file descriptor
-    /// * a1 - pointer to the buffer to be written
-    /// * a2 - the number of bytes to write
+    /// * fd - file descriptor
+    /// * buf - pointer to the buffer to be written
+    /// * len - the number of bytes to write
     fn syscall_write(
         &self,
-        fd: <T>::RegData,
-        buf: <T>::ByteAddr,
-        len: <T>::RegData,
+        fd: T::RegData,
+        buf: T::ByteAddr,
+        len: T::RegData,
     ) -> PrivStateChange<T> {
         PrivStateChange::FileWrite { fd, buf, len }
     }
@@ -158,47 +155,20 @@ impl<R: IRegister, T: MachineDataWidth> ProgramState<R, T> {
         }
     }
 }
+
+pub trait SyscallTable<T: Architecture> {
+    /// Returns the syscall identified by number N, or none if no such syscall exists.
+    fn number_to_syscall(n: <T::DataWidth as MachineDataWidth>::Signed) -> Option<Syscall>;
+    /// Returns the number corresponding to the syscall, or -1 if it is unimplemented.
+    fn syscall_to_number(syscall: Syscall) -> <T::DataWidth as MachineDataWidth>::RegData;
+}
+
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub enum Syscall {
     Read,
     Write,
     Open,
     Close,
-}
-
-lazy_static! {
-    /// Syscall numbers for RV32.
-    /// See https://github.com/hrw/syscalls-table/blob/master/tables/syscalls-riscv32.
-    /// See https://fedora.juszkiewicz.com.pl/syscalls.html for other ISAs
-    static ref RISCV_SYSCALL_TABLE: HashMap<isize, Syscall> = {
-        use Syscall::*;
-        [
-            (63, Read),
-            (64, Write),
-            (53, Open),
-            (57, Close)
-        ]
-        .iter()
-        .cloned()
-        .collect()
-    };
-    static ref RISCV_SYSCALL_NUMBERS: HashMap<Syscall, isize> =
-        RISCV_SYSCALL_TABLE
-        .iter()
-        .map(|(n, syscall)| {(*syscall, *n)})
-        .collect();
-}
-
-impl Syscall {
-    /// Returns the syscall identified by number N, or none if no such syscall exists.
-    pub fn from_number<T: MachineDataWidth>(n: T::Signed) -> Option<Syscall> {
-        RISCV_SYSCALL_TABLE.get(&T::sgn_to_isize(n)).cloned()
-    }
-
-    /// Returns the number corresponding to the syscall, or -1 if it is unimplemented.
-    pub fn to_number<T: MachineDataWidth>(self) -> T::RegData {
-        T::isize_to_sgn(RISCV_SYSCALL_NUMBERS.get(&self).copied().unwrap_or(-1)).into()
-    }
 }
 
 /// Contains program state that is visited only to privileged entities, i.e. a kernel thread.

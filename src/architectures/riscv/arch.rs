@@ -17,4 +17,14 @@ impl Architecture for RV32 {
     type Instruction = RiscVInst<Width32b>;
     type Program = RiscVProgram<Width32b>;
     type Parser = RiscVParser<Width32b>;
+
+    fn syscall_arg_regs() -> Vec<RiscVRegister> {
+        use RiscVRegister::*;
+        vec![A0, A1, A2, A3, A4, A5, A6, A7]
+    }
+
+    fn syscall_return_regs() -> Vec<RiscVRegister> {
+        use RiscVRegister::*;
+        vec![A0, A1]
+    }
 }

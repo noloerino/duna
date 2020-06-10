@@ -15,6 +15,9 @@ pub trait Architecture: Sized {
     type Instruction: ConcreteInst<Self::Register, Self::DataWidth>;
     type Program: Program<Self::Register, Self::Instruction, Self::DataWidth>;
     type Parser: Parser<Self::Register, Self::Instruction, Self::DataWidth>;
+
+    fn syscall_arg_regs() -> Vec<Self::Register>;
+    fn syscall_return_regs() -> Vec<Self::Register>;
 }
 
 /// Represents a data type that can be used to hold data in a register.

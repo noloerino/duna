@@ -5,6 +5,7 @@ use crate::arch::*;
 use crate::assembler::{Linker, ParseErrorReport, SectionStore};
 use crate::instruction::*;
 use crate::program_state::*;
+use std::collections::HashMap;
 use std::str;
 
 pub struct RiscVProgram<T: MachineDataWidth> {
@@ -92,5 +93,40 @@ impl str::FromStr for RiscVProgram<Width32b> {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Linker::with_main_str(s).link::<RV32>()
+    }
+}
+
+lazy_static! {
+    /// Syscall numbers for RV32.
+    /// See https://github.com/hrw/syscalls-table/blob/master/tables/syscalls-riscv32.
+    /// See https://fedora.juszkiewicz.com.pl/syscalls.html for other ISAs
+    static ref RISCV_SYSCALL_TABLE: HashMap<isize, Syscall> = {
+        use Syscall::*;
+        [
+            (63, Read),
+            (64, Write),
+            (53, Open),
+            (57, Close)
+        ]
+        .iter()
+        .cloned()
+        .collect()
+    };
+    static ref RISCV_SYSCALL_NUMBERS: HashMap<Syscall, isize> =
+        RISCV_SYSCALL_TABLE
+        .iter()
+        .map(|(n, syscall)| {(*syscall, *n)})
+        .collect();
+}
+
+pub struct RV32SyscallTable {}
+
+impl SyscallTable<RV32> for RV32SyscallTable {
+    fn number_to_syscall(n: i32) -> Option<Syscall> {
+        RISCV_SYSCALL_TABLE.get(&(n as isize)).cloned()
+    }
+
+    fn syscall_to_number(syscall: Syscall) -> DataWord {
+        (RISCV_SYSCALL_NUMBERS.get(&syscall).copied().unwrap_or(-1) as i32).into()
     }
 }

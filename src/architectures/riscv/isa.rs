@@ -455,6 +455,7 @@ impl<T: MachineDataWidth> SType<T> for Sw {
 
 #[cfg(test)]
 mod test {
+    use super::super::program::RV32SyscallTable;
     use super::*;
     use crate::instruction::*;
     use crate::program_state::Syscall;
@@ -803,8 +804,7 @@ mod test {
         let addr = ByteAddr32::from(state.regfile_read(SP));
         state.memory_set_word(addr.to_word_address(), DataWord::from(0xDEAD_BEEFu32));
         // Set ecall code
-        state.regfile_set(A7, Syscall::Write.to_number::<Width32b>());
-        // We're writing 4 bytes to stdout, which has fd 1
+        state.regfile_set(A7, RV32SyscallTable::syscall_to_number(Syscall::Write)); // We're writing 4 bytes to stdout, which has fd 1
         state.regfile_set(A0, DataWord::from(1));
         state.regfile_set(A1, DataWord::from(addr));
         state.regfile_set(A2, DataWord::from(4));
