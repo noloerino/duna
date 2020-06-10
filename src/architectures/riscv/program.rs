@@ -1,8 +1,7 @@
 use super::arch::*;
 use super::instruction::RiscVInst;
 use super::registers::RiscVRegister;
-use crate::arch::MachineDataWidth;
-use crate::arch::Width32b;
+use crate::arch::*;
 use crate::assembler::{Linker, ParseErrorReport, SectionStore};
 use crate::instruction::*;
 use crate::program_state::*;
@@ -51,7 +50,7 @@ impl Program<RiscVRegister, RiscVInst<Width32b>, Width32b> for RiscVProgram<Widt
         }
         // store data
         let all_data = sections.data.into_iter().chain(sections.rodata.into_iter());
-        for (offs, byte) in all_data.enumerate() {
+        for (_offs, byte) in all_data.enumerate() {
             user_state
                 .memory
                 .set_byte(RiscVProgram::DATA_START_32.into(), byte.into())

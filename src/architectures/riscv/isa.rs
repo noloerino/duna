@@ -1,8 +1,7 @@
-use super::arch::RiscV;
 use super::instruction::*;
 use super::registers::RiscVRegister;
 use crate::arch::*;
-use crate::instruction::*;
+
 use crate::program_state::*;
 use duna_macro::*;
 use num_traits::ops::wrapping::WrappingAdd;
@@ -456,9 +455,8 @@ impl<T: MachineDataWidth> SType<T> for Sw {
 
 #[cfg(test)]
 mod test {
-    use super::super::arch::RV32;
     use super::*;
-
+    use crate::instruction::*;
     use crate::program_state::Syscall;
     use RiscVRegister::*;
 

@@ -82,7 +82,6 @@ impl Ret {
 
 #[cfg(test)]
 mod tests {
-    use super::super::arch::RV32;
     use super::*;
     use crate::arch::Width32b;
     use crate::program_state::DataWord;

@@ -1,6 +1,5 @@
 use crate::arch::*;
-use crate::program_state::IRegister;
-use crate::program_state::{InstResult, ProgramState};
+use crate::program_state::{IRegister, InstResult, ProgramState};
 
 pub trait ConcreteInst<R, T>
 where

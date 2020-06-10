@@ -1,4 +1,3 @@
-use crate::program_state::IRegister;
 use crate::program_state::*;
 use std::fmt;
 

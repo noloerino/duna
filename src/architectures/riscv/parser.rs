@@ -1,16 +1,12 @@
-use super::arch::{RiscV, RV32};
 use super::instruction::*;
 use super::isa;
-use super::isa::*;
 use super::pseudo_inst;
 use super::pseudo_inst::*;
 use super::registers::RiscVRegister;
-use crate::arch::MachineDataWidth;
 use crate::arch::*;
 use crate::assembler::lexer::*;
 use crate::assembler::parser::*;
 use crate::assembler::*;
-use crate::instruction::*;
 use crate::program_state::DataWidth;
 use std::collections::HashMap;
 use std::iter::Peekable;
@@ -1051,6 +1047,7 @@ mod tests {
     use super::super::isa::*;
     use super::super::registers::RiscVRegister::*;
     use super::*;
+    use crate::instruction::ConcreteInst;
     use crate::program_state::DataWord;
 
     /// Lexes a program. Asserts that the lex has no errors.
