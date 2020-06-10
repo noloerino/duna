@@ -156,11 +156,15 @@ impl<R: IRegister, T: MachineDataWidth> ProgramState<R, T> {
     }
 }
 
-pub trait SyscallTable<T: Architecture> {
+pub trait SyscallConvention<T: Architecture> {
     /// Returns the syscall identified by number N, or none if no such syscall exists.
     fn number_to_syscall(n: <T::DataWidth as MachineDataWidth>::Signed) -> Option<Syscall>;
     /// Returns the number corresponding to the syscall, or -1 if it is unimplemented.
     fn syscall_to_number(syscall: Syscall) -> <T::DataWidth as MachineDataWidth>::RegData;
+    /// Returns which registers are used to pass arguments to syscalls.
+    fn syscall_arg_regs() -> Vec<T::Register>;
+    /// Returns which registers are used to return arguments from syscalls.
+    fn syscall_return_regs() -> Vec<T::Register>;
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]

@@ -119,14 +119,24 @@ lazy_static! {
         .collect();
 }
 
-pub struct RV32SyscallTable {}
+pub struct RV32SyscallConvention {}
 
-impl SyscallTable<RV32> for RV32SyscallTable {
+impl SyscallConvention<RV32> for RV32SyscallConvention {
     fn number_to_syscall(n: i32) -> Option<Syscall> {
         RISCV_SYSCALL_TABLE.get(&(n as isize)).cloned()
     }
 
     fn syscall_to_number(syscall: Syscall) -> DataWord {
         (RISCV_SYSCALL_NUMBERS.get(&syscall).copied().unwrap_or(-1) as i32).into()
+    }
+
+    fn syscall_arg_regs() -> Vec<RiscVRegister> {
+        use RiscVRegister::*;
+        vec![A0, A1, A2, A3, A4, A5, A6, A7]
+    }
+
+    fn syscall_return_regs() -> Vec<RiscVRegister> {
+        use RiscVRegister::*;
+        vec![A0, A1]
     }
 }
