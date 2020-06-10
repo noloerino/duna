@@ -14,7 +14,7 @@ impl RiscV for RV32 {}
 impl Architecture for RV32 {
     type DataWidth = Width32b;
     type Register = RiscVRegister;
-    type Instruction = RiscVInst<Self>;
-    type Program = RiscVProgram<Self>;
-    type Parser = RiscVParser<Self>;
+    type Instruction = RiscVInst<Width32b>;
+    type Program = RiscVProgram<Width32b>;
+    type Parser = RiscVParser<Width32b>;
 }

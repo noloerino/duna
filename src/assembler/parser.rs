@@ -4,6 +4,8 @@ use super::lexer::*;
 use super::parse_error::{ParseError, ParseErrorReporter};
 use super::partial_inst::PartialInst;
 use crate::arch::*;
+use crate::instruction::ConcreteInst;
+use crate::program_state::IRegister;
 use std::collections::HashSet;
 use std::iter::Peekable;
 use std::vec::IntoIter;
@@ -38,14 +40,16 @@ impl LabelDef {
     }
 }
 
-pub type ParsedInstStream<S> = Vec<PartialInst<S>>;
-pub type LineParseResult<S> = Result<ParsedInstStream<S>, ParseError>;
-pub struct ParseResult<S>
+pub type ParsedInstStream<R, S, T> = Vec<PartialInst<R, S, T>>;
+pub type LineParseResult<R, S, T> = Result<ParsedInstStream<R, S, T>, ParseError>;
+pub struct ParseResult<R, S, T>
 where
-    S: Architecture,
+    R: IRegister,
+    S: ConcreteInst<R, T>,
+    T: MachineDataWidth,
 {
     pub file_id: FileId,
-    pub insts: ParsedInstStream<S>,
+    pub insts: ParsedInstStream<R, S, T>,
     pub sections: SectionStore,
     pub declared_globals: HashSet<String>,
     pub reporter: ParseErrorReporter,
@@ -75,13 +79,15 @@ impl ParseState {
 
 pub type TokenIter = Peekable<IntoIter<Token>>;
 
-pub trait Parser<S>
+pub trait Parser<R, S, T>
 where
-    S: Architecture,
+    R: IRegister,
+    S: ConcreteInst<R, T>,
+    T: MachineDataWidth,
 {
-    fn parse_str(file_id: FileId, contents: &str) -> ParseResult<S> {
+    fn parse_str(file_id: FileId, contents: &str) -> ParseResult<R, S, T> {
         Self::parse_lex_result(Lexer::lex_str(file_id, contents))
     }
 
-    fn parse_lex_result(lex_result: LexResult) -> ParseResult<S>;
+    fn parse_lex_result(lex_result: LexResult) -> ParseResult<R, S, T>;
 }

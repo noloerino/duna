@@ -12,9 +12,9 @@ use std::fmt;
 pub trait Architecture: Sized {
     type DataWidth: MachineDataWidth;
     type Register: IRegister;
-    type Instruction: ConcreteInst<Self>;
-    type Program: Program<Self>;
-    type Parser: Parser<Self>;
+    type Instruction: ConcreteInst<Self::Register, Self::DataWidth>;
+    type Program: Program<Self::Register, Self::Instruction, Self::DataWidth>;
+    type Parser: Parser<Self::Register, Self::Instruction, Self::DataWidth>;
 }
 
 /// Represents a data type that can be used to hold data in a register.

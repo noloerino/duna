@@ -117,7 +117,7 @@ impl Linker {
         }
         if reporter.is_empty() {
             let (linked, errs) =
-                UnlinkedProgram::new(all_insts, combined_sections, Default::default());
+                UnlinkedProgram::<S>::new(all_insts, combined_sections, Default::default());
             if errs.is_empty() {
                 // handles errantly undefined labels, although they should've already been caught
                 linked

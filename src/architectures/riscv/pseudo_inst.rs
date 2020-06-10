@@ -1,4 +1,3 @@
-use super::arch::RiscV;
 use super::instruction::*;
 use super::isa::*;
 use super::registers::RiscVRegister;
@@ -8,12 +7,8 @@ use RiscVRegister::*;
 
 pub struct Nop;
 impl Nop {
-    pub fn expand<T: RiscV>() -> RiscVInst<T> {
-        Addi::new(
-            ZERO,
-            ZERO,
-            <<T::DataWidth as MachineDataWidth>::RegData>::zero(),
-        )
+    pub fn expand<T: MachineDataWidth>() -> RiscVInst<T> {
+        Addi::new(ZERO, ZERO, <T::RegData>::zero())
     }
 }
 
@@ -21,10 +16,7 @@ impl Nop {
 // and li is emmitted as lui + ld
 pub struct Li;
 impl Li {
-    pub fn expand<T: RiscV>(
-        reg: RiscVRegister,
-        data: <T::DataWidth as MachineDataWidth>::RegData,
-    ) -> Vec<RiscVInst<T>> {
+    pub fn expand<T: MachineDataWidth>(reg: RiscVRegister, data: T::RegData) -> Vec<RiscVInst<T>> {
         let imm = data.to_bit_str(32);
         let mut upper = imm.slice(32, 12);
         let lower = imm.slice(11, 0);
@@ -48,59 +40,43 @@ impl Li {
 
 pub struct Mv;
 impl Mv {
-    pub fn expand<T: RiscV>(rd: RiscVRegister, rs: RiscVRegister) -> RiscVInst<T> {
-        Addi::new(
-            rd,
-            rs,
-            <<T::DataWidth as MachineDataWidth>::RegData>::zero(),
-        )
+    pub fn expand<T: MachineDataWidth>(rd: RiscVRegister, rs: RiscVRegister) -> RiscVInst<T> {
+        Addi::new(rd, rs, <T::RegData>::zero())
     }
 }
 
 pub struct JalPseudo;
 impl JalPseudo {
-    pub fn expand<T: RiscV>(offs: <T::DataWidth as MachineDataWidth>::RegData) -> RiscVInst<T> {
+    pub fn expand<T: MachineDataWidth>(offs: T::RegData) -> RiscVInst<T> {
         Jal::new(RA, offs)
     }
 }
 
 pub struct JalrPseudo;
 impl JalrPseudo {
-    pub fn expand<T: RiscV>(rs: RiscVRegister) -> RiscVInst<T> {
-        Jalr::new(
-            RA,
-            rs,
-            <<T::DataWidth as MachineDataWidth>::RegData>::zero(),
-        )
+    pub fn expand<T: MachineDataWidth>(rs: RiscVRegister) -> RiscVInst<T> {
+        Jalr::new(RA, rs, <T::RegData>::zero())
     }
 }
 
 pub struct J;
 impl J {
-    pub fn expand<T: RiscV>(offs: <T::DataWidth as MachineDataWidth>::RegData) -> RiscVInst<T> {
+    pub fn expand<T: MachineDataWidth>(offs: T::RegData) -> RiscVInst<T> {
         Jal::new(ZERO, offs)
     }
 }
 
 pub struct Jr;
 impl Jr {
-    pub fn expand<T: RiscV>(rs: RiscVRegister) -> RiscVInst<T> {
-        Jalr::new(
-            ZERO,
-            rs,
-            <<T::DataWidth as MachineDataWidth>::RegData>::zero(),
-        )
+    pub fn expand<T: MachineDataWidth>(rs: RiscVRegister) -> RiscVInst<T> {
+        Jalr::new(ZERO, rs, <T::RegData>::zero())
     }
 }
 
 pub struct Ret;
 impl Ret {
-    pub fn expand<T: RiscV>() -> RiscVInst<T> {
-        Jalr::new(
-            ZERO,
-            RA,
-            <<T::DataWidth as MachineDataWidth>::RegData>::zero(),
-        )
+    pub fn expand<T: MachineDataWidth>() -> RiscVInst<T> {
+        Jalr::new(ZERO, RA, <T::RegData>::zero())
     }
 }
 

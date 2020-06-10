@@ -20,58 +20,34 @@ use std::vec::IntoIter;
 #[derive(Copy, Clone)]
 /// Describes the arguments needed for a type of function.
 /// Due to their unique parsing rules, Jal, Jalr, and Li are hardcoded.
-enum ParseType<T: RiscV> {
+enum ParseType<T: MachineDataWidth> {
     // Base ISA
     R(fn(RiscVRegister, RiscVRegister, RiscVRegister) -> RiscVInst<T>),
-    Arith(
-        fn(
-            RiscVRegister,
-            RiscVRegister,
-            <T::DataWidth as MachineDataWidth>::RegData,
-        ) -> RiscVInst<T>,
-    ),
+    Arith(fn(RiscVRegister, RiscVRegister, T::RegData) -> RiscVInst<T>),
     Env(fn() -> RiscVInst<T>),
-    MemL(
-        fn(
-            RiscVRegister,
-            RiscVRegister,
-            <T::DataWidth as MachineDataWidth>::RegData,
-        ) -> RiscVInst<T>,
-    ),
-    MemS(
-        fn(
-            RiscVRegister,
-            RiscVRegister,
-            <T::DataWidth as MachineDataWidth>::RegData,
-        ) -> RiscVInst<T>,
-    ),
-    B(
-        fn(
-            RiscVRegister,
-            RiscVRegister,
-            <T::DataWidth as MachineDataWidth>::RegData,
-        ) -> RiscVInst<T>,
-    ),
+    MemL(fn(RiscVRegister, RiscVRegister, T::RegData) -> RiscVInst<T>),
+    MemS(fn(RiscVRegister, RiscVRegister, T::RegData) -> RiscVInst<T>),
+    B(fn(RiscVRegister, RiscVRegister, T::RegData) -> RiscVInst<T>),
     // Covers "jal ra, label", "jal label", "jal -4" etc.
     Jal,
     // Covers "jalr ra, 0(x1)", "jalr x1", etc.
     Jalr,
-    U(fn(RiscVRegister, <T::DataWidth as MachineDataWidth>::RegData) -> RiscVInst<T>),
+    U(fn(RiscVRegister, T::RegData) -> RiscVInst<T>),
     // Pseudo-instructions
     Li,
     RegReg(fn(RiscVRegister, RiscVRegister) -> RiscVInst<T>),
     NoArgs(fn() -> RiscVInst<T>),
     OneReg(fn(RiscVRegister) -> RiscVInst<T>),
     // Covers "j label", "j -4", etc.
-    LikeJ(fn(<T::DataWidth as MachineDataWidth>::RegData) -> RiscVInst<T>),
+    LikeJ(fn(T::RegData) -> RiscVInst<T>),
 }
 
-struct ParserData<'a, T: RiscV> {
+struct ParserData<'a, T: MachineDataWidth> {
     inst_expansion_table: &'a HashMap<String, ParseType<T>>,
     reg_expansion_table: &'a HashMap<String, RiscVRegister>,
 }
 
-pub struct RiscVParser<T: RiscV> {
+pub struct RiscVParser<T: MachineDataWidth> {
     file_id: FileId,
     lines: LineTokenStream,
     reporter: ParseErrorReporter,
@@ -82,7 +58,7 @@ pub struct RiscVParser<T: RiscV> {
 type TokenIter = Peekable<IntoIter<Token>>;
 
 lazy_static! {
-    static ref RV32_INST_EXPANSION_TABLE: HashMap<String, ParseType<RV32>> = {
+    static ref RV32_INST_EXPANSION_TABLE: HashMap<String, ParseType<Width32b>> = {
         use super::isa::*;
         use ParseType::*;
         [
@@ -151,8 +127,10 @@ lazy_static! {
     };
 }
 
-impl Parser<RV32> for RiscVParser<RV32> {
-    fn parse_lex_result(lex_result: LexResult) -> ParseResult<RV32> {
+impl Parser<RiscVRegister, RiscVInst<Width32b>, Width32b> for RiscVParser<Width32b> {
+    fn parse_lex_result(
+        lex_result: LexResult,
+    ) -> ParseResult<RiscVRegister, RiscVInst<Width32b>, Width32b> {
         RiscVParser {
             file_id: lex_result.file_id,
             lines: lex_result.lines,
@@ -164,11 +142,11 @@ impl Parser<RV32> for RiscVParser<RV32> {
     }
 }
 
-impl RiscVParser<RV32> {
-    fn parse(mut self) -> ParseResult<RV32> {
-        let mut insts = Vec::<PartialInst<RV32>>::new();
+impl RiscVParser<Width32b> {
+    fn parse(mut self) -> ParseResult<RiscVRegister, RiscVInst<Width32b>, Width32b> {
+        let mut insts = Vec::<PartialInst<RiscVRegister, RiscVInst<Width32b>, Width32b>>::new();
         let mut last_label: Option<LabelDef> = None;
-        let parser_data: &ParserData<RV32> = &ParserData {
+        let parser_data: &ParserData<Width32b> = &ParserData {
             inst_expansion_table: &RV32_INST_EXPANSION_TABLE,
             reg_expansion_table: &REG_EXPANSION_TABLE,
         };
@@ -220,17 +198,23 @@ enum ImmOrLabelRef<T: RegSize> {
 }
 
 /// Convenience method to stuff a PartialInst into a Vec<PartialInst>
-fn ok_vec<T: RiscV>(inst: PartialInst<T>) -> LineParseResult<T> {
+fn ok_vec<T: MachineDataWidth>(
+    inst: PartialInst<RiscVRegister, RiscVInst<T>, T>,
+) -> LineParseResult<RiscVRegister, RiscVInst<T>, T> {
     Ok(vec![inst])
 }
 
 /// Convenience method to stuff a RiscVInst into Ok(vec![PartialInst(...)])
-fn ok_wrap_concr<T: RiscV>(inst: RiscVInst<T>) -> LineParseResult<T> {
+fn ok_wrap_concr<T: MachineDataWidth>(
+    inst: RiscVInst<T>,
+) -> LineParseResult<RiscVRegister, RiscVInst<T>, T> {
     ok_vec(PartialInst::new_complete(inst))
 }
 
 /// Convenience method to turn a Vec<RiscVInst<T>> into Ok(Vec<PartialInst>)
-fn ok_wrap_expanded<T: RiscV>(inst: Vec<RiscVInst<T>>) -> LineParseResult<T> {
+fn ok_wrap_expanded<T: MachineDataWidth>(
+    inst: Vec<RiscVInst<T>>,
+) -> LineParseResult<RiscVRegister, RiscVInst<T>, T> {
     Ok(inst.into_iter().map(PartialInst::new_complete).collect())
 }
 
@@ -350,14 +334,14 @@ fn consume_unbounded_commasep_args(iter: &mut TokenIter) -> Result<Vec<Token>, P
 }
 
 /// Responsible for parsing a line with an instruction
-struct InstParser<'a, T: RiscV> {
+struct InstParser<'a, T: MachineDataWidth> {
     data: &'a ParserData<'a, T>,
     iter: TokenIter,
     head_loc: &'a Location,
     inst_name: &'a str,
 }
 
-impl<'a, T: RiscV> InstParser<'a, T> {
+impl<'a, T: MachineDataWidth> InstParser<'a, T> {
     fn new(
         data: &'a ParserData<T>,
         iter: TokenIter,
@@ -433,9 +417,7 @@ impl<'a, T: RiscV> InstParser<'a, T> {
     /// Consumes tokens for arguments for a memory operation.
     /// These are either of the form "inst reg, imm, reg)" e.g. "lw x1 -4 x2"
     /// or "inst reg, (imm)reg" e.g "lw x1, 4(x2)" (commas optional in both cases)
-    fn consume_mem_args(
-        &mut self,
-    ) -> Result<MemArgs<<T::DataWidth as MachineDataWidth>::RegData>, ParseError> {
+    fn consume_mem_args(&mut self) -> Result<MemArgs<T::RegData>, ParseError> {
         // first consumed token must be register name
         let first_tok = self.try_next_tok(3, 0)?;
         let first_reg = self.try_parse_reg(first_tok)?;
@@ -526,11 +508,7 @@ impl<'a, T: RiscV> InstParser<'a, T> {
 
     /// Parses an immediate that is required to be at most n bits.
     /// If the provided immediate is a negative, then the upper (64 - n + 1) bits must all be 1.
-    fn try_parse_imm(
-        &self,
-        n: u8,
-        token: Token,
-    ) -> Result<<T::DataWidth as MachineDataWidth>::RegData, ParseError> {
+    fn try_parse_imm(&self, n: u8, token: Token) -> Result<T::RegData, ParseError> {
         try_parse_imm(n, token).map(|res_i64| res_i64.into())
     }
 
@@ -539,7 +517,7 @@ impl<'a, T: RiscV> InstParser<'a, T> {
         &self,
         max_imm_len: u8,
         token: Token,
-    ) -> Result<ImmOrLabelRef<<T::DataWidth as MachineDataWidth>::RegData>, ParseError> {
+    ) -> Result<ImmOrLabelRef<T::RegData>, ParseError> {
         if let TokenType::Name(name) = &token.data {
             // label case
             Ok(ImmOrLabelRef::LabelRef(LabelRef::new(
@@ -556,7 +534,7 @@ impl<'a, T: RiscV> InstParser<'a, T> {
     fn try_expand_found_inst(
         &mut self,
         parse_type: &ParseType<T>,
-    ) -> Result<ParsedInstStream<T>, ParseError> {
+    ) -> Result<ParsedInstStream<RiscVRegister, RiscVInst<T>, T>, ParseError> {
         use ParseType::*;
         match parse_type {
             R(inst_new) => {
@@ -719,7 +697,7 @@ impl<'a, T: RiscV> InstParser<'a, T> {
         }
     }
 
-    fn try_expand_inst(&mut self) -> LineParseResult<T> {
+    fn try_expand_inst(&mut self) -> LineParseResult<RiscVRegister, RiscVInst<T>, T> {
         if let Some(parse_type) = self.data.inst_expansion_table.get(self.inst_name) {
             self.try_expand_found_inst(parse_type)
         } else {
@@ -966,14 +944,14 @@ impl<'a> DirectiveParser<'a> {
 }
 
 /// Responsible for parsing a line.
-struct LineParser<'a, T: RiscV> {
+struct LineParser<'a, T: MachineDataWidth> {
     data: &'a ParserData<'a, T>,
     iter: TokenIter,
     label: Option<LabelDef>,
     state: &'a mut ParseState,
 }
 
-impl<'a, T: RiscV> LineParser<'a, T> {
+impl<'a, T: MachineDataWidth> LineParser<'a, T> {
     /// Creates a LineParser, with a label possibly inherited from the previous line.
     fn new(
         data: &'a ParserData<T>,
@@ -1011,7 +989,12 @@ impl<'a, T: RiscV> LineParser<'a, T> {
         }
     }
 
-    fn parse(mut self) -> (Option<LabelDef>, LineParseResult<T>) {
+    fn parse(
+        mut self,
+    ) -> (
+        Option<LabelDef>,
+        LineParseResult<RiscVRegister, RiscVInst<T>, T>,
+    ) {
         (
             self.label,
             if let Some(head_tok) = self.iter.next() {
@@ -1079,7 +1062,7 @@ mod tests {
 
     /// Parses and lexes the provided string, assuming that there are no errors in either phase.
     /// Assumes that there were no lex errors.
-    fn parse_and_lex(prog: &str) -> Vec<PartialInst<RV32>> {
+    fn parse_and_lex(prog: &str) -> Vec<PartialInst<RiscVRegister, RiscVInst<Width32b>, Width32b>> {
         let ParseResult {
             insts, reporter, ..
         } = RiscVParser::parse_lex_result(lex(prog));
@@ -1088,7 +1071,7 @@ mod tests {
     }
 
     /// Parses and lexes a string assuming it contains instructions that don't need expanding.
-    fn parse_and_lex_concr(prog: &str) -> Vec<RiscVInst<RV32>> {
+    fn parse_and_lex_concr(prog: &str) -> Vec<RiscVInst<Width32b>> {
         parse_and_lex(prog)
             .into_iter()
             .map(|inst| inst.try_into_concrete_inst())
@@ -1104,7 +1087,7 @@ mod tests {
             sections,
             insts,
             ..
-        } = RiscVParser::<RV32>::parse_str(0, prog);
+        } = RiscVParser::<Width32b>::parse_str(0, prog);
         assert!(reporter.is_empty(), insts.is_empty());
         assert_eq!(sections.data, vec![0x12, 0xef, 0xbe, 0xad, 0xde]);
     }
@@ -1116,7 +1099,7 @@ mod tests {
             ".section .data\n.byte 0x123", // immediate too large
         ];
         for prog in &programs {
-            let ParseResult { reporter, .. } = RiscVParser::<RV32>::parse_str(0, prog);
+            let ParseResult { reporter, .. } = RiscVParser::<Width32b>::parse_str(0, prog);
             assert!(!reporter.is_empty());
         }
     }
@@ -1178,7 +1161,7 @@ mod tests {
             "add x1,,x2, x3",
         ];
         for inst in bad_insts {
-            let ParseResult { reporter, .. } = RiscVParser::<RV32>::parse_str(0, inst);
+            let ParseResult { reporter, .. } = RiscVParser::<Width32b>::parse_str(0, inst);
             assert!(!reporter.is_empty());
         }
     }
@@ -1210,7 +1193,7 @@ mod tests {
         // immediates for instructions like addi can only be 12 bits long
         let ParseResult {
             insts, reporter, ..
-        } = RiscVParser::<RV32>::parse_str(0, "addi sp sp 0xF000");
+        } = RiscVParser::<Width32b>::parse_str(0, "addi sp sp 0xF000");
         assert!(!reporter.is_empty());
         assert!(insts.is_empty());
     }

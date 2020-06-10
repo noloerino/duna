@@ -1,4 +1,3 @@
-use super::arch::RiscV;
 use super::registers::RiscVRegister;
 use crate::arch::*;
 use crate::instruction::ConcreteInst;
@@ -29,8 +28,8 @@ pub struct JInstFields {
     pub opcode: BitStr32,
 }
 
-pub struct RiscVInst<T: RiscV> {
-    pub eval: Box<dyn Fn(&ProgramState<T>) -> InstResult<RiscVRegister, T::DataWidth>>,
+pub struct RiscVInst<T: MachineDataWidth> {
+    pub eval: Box<dyn Fn(&ProgramState<RiscVRegister, T>) -> InstResult<RiscVRegister, T>>,
     data: RiscVInstData,
 }
 
@@ -71,7 +70,7 @@ enum RiscVInstData {
     },
 }
 
-impl<T: RiscV> ConcreteInst<T> for RiscVInst<T> {
+impl<T: MachineDataWidth> ConcreteInst<RiscVRegister, T> for RiscVInst<T> {
     fn to_machine_code(&self) -> u32 {
         match self.data {
             RiscVInstData::R {
@@ -144,24 +143,24 @@ impl<T: RiscV> ConcreteInst<T> for RiscVInst<T> {
         .as_u32()
     }
 
-    fn apply(&self, state: &ProgramState<T>) -> InstResult<RiscVRegister, T::DataWidth> {
+    fn apply(&self, state: &ProgramState<RiscVRegister, T>) -> InstResult<RiscVRegister, T> {
         (*self.eval)(state)
     }
 }
 
-impl<T: RiscV> PartialEq<RiscVInst<T>> for RiscVInst<T> {
+impl<T: MachineDataWidth> PartialEq<RiscVInst<T>> for RiscVInst<T> {
     fn eq(&self, other: &RiscVInst<T>) -> bool {
         self.to_machine_code() == other.to_machine_code()
     }
 }
 
-impl<T: RiscV> fmt::Debug for RiscVInst<T> {
+impl<T: MachineDataWidth> fmt::Debug for RiscVInst<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:#010X}", self.to_machine_code())
     }
 }
 
-impl<T: RiscV> fmt::Display for RiscVInst<T> {
+impl<T: MachineDataWidth> fmt::Display for RiscVInst<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use RiscVInstData::*;
         let args = match self.data {
@@ -180,7 +179,7 @@ impl<T: RiscV> fmt::Display for RiscVInst<T> {
     }
 }
 
-pub trait RType<T: RiscV> {
+pub trait RType<T: MachineDataWidth> {
     fn new(rd: RiscVRegister, rs1: RiscVRegister, rs2: RiscVRegister) -> RiscVInst<T> {
         RiscVInst {
             eval: Box::new(move |state| {
@@ -202,17 +201,17 @@ pub trait RType<T: RiscV> {
 
     /// Calculates the new value of rd given values of rs1 and rs2.
     fn eval(
-        rs1_val: <T::DataWidth as MachineDataWidth>::RegData,
-        rs2_val: <T::DataWidth as MachineDataWidth>::RegData,
-    ) -> <T::DataWidth as MachineDataWidth>::RegData;
+        rs1_val: <T as MachineDataWidth>::RegData,
+        rs2_val: <T as MachineDataWidth>::RegData,
+    ) -> <T as MachineDataWidth>::RegData;
 }
 
-pub trait IType<T: RiscV> {
+pub trait IType<T: MachineDataWidth> {
     /// Creates an instance of the IType istruction.
     fn new(
         rd: RiscVRegister,
         rs1: RiscVRegister,
-        imm: <T::DataWidth as MachineDataWidth>::RegData,
+        imm: <T as MachineDataWidth>::RegData,
     ) -> RiscVInst<T> {
         let imm_vec = imm.to_bit_str(12);
         RiscVInst {
@@ -235,30 +234,30 @@ pub trait IType<T: RiscV> {
     }
     fn inst_fields() -> IInstFields;
     fn eval(
-        state: &UserProgState<RiscVRegister, T::DataWidth>,
+        state: &UserProgState<RiscVRegister, T>,
         rd: RiscVRegister,
         rs1: RiscVRegister,
         imm: BitStr32,
-    ) -> UserDiff<RiscVRegister, T::DataWidth>;
+    ) -> UserDiff<RiscVRegister, T>;
 }
 
-pub(crate) trait ITypeArith<T: RiscV>: IType<T> {
+pub(crate) trait ITypeArith<T: MachineDataWidth>: IType<T> {
     fn inst_fields() -> IInstFields;
     fn eval(
-        rs1_val: <T::DataWidth as MachineDataWidth>::RegData,
+        rs1_val: <T as MachineDataWidth>::RegData,
         imm: BitStr32,
-    ) -> <T::DataWidth as MachineDataWidth>::RegData;
+    ) -> <T as MachineDataWidth>::RegData;
 }
 
-pub(crate) trait ITypeLoad<T: RiscV>: IType<T> {
+pub(crate) trait ITypeLoad<T: MachineDataWidth>: IType<T> {
     fn inst_fields() -> IInstFields;
     fn eval(
-        mem: &Memory<T::DataWidth>,
-        addr: <T::DataWidth as MachineDataWidth>::ByteAddr,
-    ) -> <T::DataWidth as MachineDataWidth>::RegData;
+        mem: &Memory<T>,
+        addr: <T as MachineDataWidth>::ByteAddr,
+    ) -> <T as MachineDataWidth>::RegData;
 }
 
-pub trait EnvironInst<T: RiscV> {
+pub trait EnvironInst<T: MachineDataWidth> {
     fn new() -> RiscVInst<T> {
         RiscVInst {
             eval: Box::new(|state| InstResult::Trap(Self::eval(state))),
@@ -272,14 +271,14 @@ pub trait EnvironInst<T: RiscV> {
     }
     fn funct12() -> BitStr32;
     fn inst_fields() -> IInstFields;
-    fn eval(state: &ProgramState<T>) -> TrapKind;
+    fn eval(state: &ProgramState<RiscVRegister, T>) -> TrapKind;
 }
 
-pub trait SType<T: RiscV> {
+pub trait SType<T: MachineDataWidth> {
     fn new(
         rs1: RiscVRegister,
         rs2: RiscVRegister,
-        imm: <T::DataWidth as MachineDataWidth>::RegData,
+        imm: <T as MachineDataWidth>::RegData,
     ) -> RiscVInst<T> {
         let imm_vec = imm.to_bit_str(12);
         RiscVInst {
@@ -296,27 +295,27 @@ pub trait SType<T: RiscV> {
     }
     fn inst_fields() -> SInstFields;
     fn eval(
-        state: &UserProgState<RiscVRegister, T::DataWidth>,
+        state: &UserProgState<RiscVRegister, T>,
         rs1: RiscVRegister,
         rs2: RiscVRegister,
         imm: BitStr32,
-    ) -> UserDiff<RiscVRegister, T::DataWidth>;
+    ) -> UserDiff<RiscVRegister, T>;
 }
 
-pub trait BType<T: RiscV> {
+pub trait BType<T: MachineDataWidth> {
     fn new(
         rs1: RiscVRegister,
         rs2: RiscVRegister,
-        imm: <T::DataWidth as MachineDataWidth>::RegData,
+        imm: <T as MachineDataWidth>::RegData,
     ) -> RiscVInst<T> {
         let imm_vec = imm.to_bit_str(13);
         RiscVInst {
             eval: Box::new(move |state| {
                 let user_state = &state.user_state;
                 if Self::eval(user_state.regfile.read(rs1), user_state.regfile.read(rs2)) {
-                    let pc: <T::DataWidth as MachineDataWidth>::Signed = user_state.pc.into();
-                    let offs: <T::DataWidth as MachineDataWidth>::Signed = imm_vec.into();
-                    let new_pc: <T::DataWidth as MachineDataWidth>::Signed = pc + offs;
+                    let pc: <T as MachineDataWidth>::Signed = user_state.pc.into();
+                    let offs: <T as MachineDataWidth>::Signed = imm_vec.into();
+                    let new_pc: <T as MachineDataWidth>::Signed = pc + offs;
                     UserDiff::pc_update_op(user_state, new_pc.into())
                 } else {
                     UserDiff::noop(user_state)
@@ -336,13 +335,13 @@ pub trait BType<T: RiscV> {
 
     /// Returns true if the branch should be taken.
     fn eval(
-        rs1_val: <T::DataWidth as MachineDataWidth>::RegData,
-        rs2_val: <T::DataWidth as MachineDataWidth>::RegData,
+        rs1_val: <T as MachineDataWidth>::RegData,
+        rs2_val: <T as MachineDataWidth>::RegData,
     ) -> bool;
 }
 
-pub trait UType<T: RiscV> {
-    fn new(rd: RiscVRegister, imm: <T::DataWidth as MachineDataWidth>::RegData) -> RiscVInst<T> {
+pub trait UType<T: MachineDataWidth> {
+    fn new(rd: RiscVRegister, imm: <T as MachineDataWidth>::RegData) -> RiscVInst<T> {
         let imm_vec = imm.to_bit_str(20);
         RiscVInst {
             eval: Box::new(move |state| {
@@ -358,14 +357,14 @@ pub trait UType<T: RiscV> {
 
     fn inst_fields() -> UInstFields;
     fn eval(
-        state: &UserProgState<RiscVRegister, T::DataWidth>,
+        state: &UserProgState<RiscVRegister, T>,
         rd: RiscVRegister,
         imm: BitStr32,
-    ) -> UserDiff<RiscVRegister, T::DataWidth>;
+    ) -> UserDiff<RiscVRegister, T>;
 }
 
-pub trait JType<T: RiscV> {
-    fn new(rd: RiscVRegister, imm: <T::DataWidth as MachineDataWidth>::RegData) -> RiscVInst<T> {
+pub trait JType<T: MachineDataWidth> {
+    fn new(rd: RiscVRegister, imm: <T as MachineDataWidth>::RegData) -> RiscVInst<T> {
         let imm_vec = imm.to_bit_str(20);
         RiscVInst {
             eval: Box::new(move |state| {
@@ -380,8 +379,8 @@ pub trait JType<T: RiscV> {
     }
     fn inst_fields() -> JInstFields;
     fn eval(
-        state: &UserProgState<RiscVRegister, T::DataWidth>,
+        state: &UserProgState<RiscVRegister, T>,
         rd: RiscVRegister,
         imm: BitStr32,
-    ) -> UserDiff<RiscVRegister, T::DataWidth>;
+    ) -> UserDiff<RiscVRegister, T>;
 }

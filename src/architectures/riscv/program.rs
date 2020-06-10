@@ -1,23 +1,25 @@
 use super::arch::*;
 use super::instruction::RiscVInst;
 use super::registers::RiscVRegister;
+use crate::arch::MachineDataWidth;
+use crate::arch::Width32b;
 use crate::assembler::{Linker, ParseErrorReport, SectionStore};
 use crate::instruction::*;
 use crate::program_state::*;
 use std::str;
 
-pub struct RiscVProgram<T: RiscV> {
+pub struct RiscVProgram<T: MachineDataWidth> {
     pub insts: Vec<RiscVInst<T>>,
-    pub state: ProgramState<T>,
+    pub state: ProgramState<RiscVRegister, T>,
 }
 
-impl RiscVProgram<RV32> {
+impl RiscVProgram<Width32b> {
     pub const TEXT_START_32: u32 = 0x1000_0000;
     pub const STACK_START_32: u32 = 0x7FFF_FFF0;
     pub const DATA_START_32: u32 = 0x2000_0000;
 }
 
-impl Program<RV32> for RiscVProgram<RV32> {
+impl Program<RiscVRegister, RiscVInst<Width32b>, Width32b> for RiscVProgram<Width32b> {
     /// Initializes a new program instance from the provided instructions.
     ///
     /// The instructions are loaded into memory at the start of the instruction section,
@@ -29,7 +31,7 @@ impl Program<RV32> for RiscVProgram<RV32> {
     ///
     /// Until paged memory is implemented, rodata is placed sequentially with data, and
     /// no guarantees on read-onliness are enforced.
-    fn new(insts: Vec<RiscVInst<RV32>>, sections: SectionStore) -> RiscVProgram<RV32> {
+    fn new(insts: Vec<RiscVInst<Width32b>>, sections: SectionStore) -> RiscVProgram<Width32b> {
         let mut state = ProgramState::new();
         let mut user_state = &mut state.user_state;
         let text_start: ByteAddr32 = RiscVProgram::TEXT_START_32.into();
@@ -78,15 +80,15 @@ impl Program<RV32> for RiscVProgram<RV32> {
         }
         self.state.user_state.regfile.read(RiscVRegister::A0).into()
     }
-    fn get_inst_vec(&self) -> &[RiscVInst<RV32>] {
+    fn get_inst_vec(&self) -> &[RiscVInst<Width32b>] {
         self.insts.as_slice()
     }
-    fn get_state(self) -> ProgramState<RV32> {
+    fn get_state(self) -> ProgramState<RiscVRegister, Width32b> {
         self.state
     }
 }
 
-impl str::FromStr for RiscVProgram<RV32> {
+impl str::FromStr for RiscVProgram<Width32b> {
     type Err = ParseErrorReport;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
