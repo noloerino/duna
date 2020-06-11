@@ -202,6 +202,7 @@ impl<S: Architecture> UnlinkedProgram<S> {
         )
     }
 
+    /// Produces a program, or an error report if some instructions are still missing labels.
     pub fn into_program(self) -> Result<S::Program, ParseErrorReporter> {
         let mut reporter = ParseErrorReporter::new();
         let insts = self
@@ -224,7 +225,7 @@ impl<S: Architecture> UnlinkedProgram<S> {
         }
     }
 
-    /// Attempts to produce an instance of RiscVProgram. Panics if some labels are needed
+    /// Attempts to produce an instance of the program. Panics if some labels are needed
     /// but not found within the body of this program.
     pub fn try_into_program(self) -> S::Program {
         <S::Program>::new(

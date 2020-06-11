@@ -126,11 +126,9 @@ pub struct RiscVSyscallConvention<T: MachineDataWidth> {
     _phantom: PhantomData<T>,
 }
 
-/// Implements functions that require OS privileges to perform, such as reading/writing files.
 /// Per the RISCV calling convention (see http://man7.org/linux/man-pages/man2/syscall.2.html),
 /// the a7 register determines which syscall is being performed, and the arguments are stored
 /// in the argument registers of user space.
-/// See [Syscall] for syscall codes.
 impl<T: MachineDataWidth> SyscallConvention<RiscV<T>, T> for RiscVSyscallConvention<T> {
     fn number_to_syscall(n: T::Signed) -> Option<Syscall> {
         RISCV_SYSCALL_TABLE.get(&T::sgn_to_isize(n)).cloned()
