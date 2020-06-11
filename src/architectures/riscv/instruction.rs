@@ -29,8 +29,10 @@ pub struct JInstFields {
     pub opcode: BitStr32,
 }
 
+pub type InstApplyFn<T> = dyn Fn(&ProgramState<RiscV<T>, T>) -> InstResult<RiscV<T>, T>;
+
 pub struct RiscVInst<T: MachineDataWidth> {
-    pub eval: Box<dyn Fn(&ProgramState<RiscV<T>, T>) -> InstResult<RiscV<T>, T>>,
+    pub eval: Box<InstApplyFn<T>>,
     data: RiscVInstData,
 }
 

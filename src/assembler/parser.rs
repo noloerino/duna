@@ -4,8 +4,7 @@ use super::lexer::*;
 use super::parse_error::{ParseError, ParseErrorReporter};
 use super::partial_inst::PartialInst;
 use crate::arch::*;
-use crate::instruction::ConcreteInst;
-use crate::program_state::IRegister;
+
 use std::collections::HashSet;
 use std::iter::Peekable;
 use std::vec::IntoIter;
@@ -40,8 +39,8 @@ impl LabelDef {
     }
 }
 
-pub type ParsedInstStream<F: ArchFamily<T>, T> = Vec<PartialInst<F, T>>;
-pub type LineParseResult<F: ArchFamily<T>, T> = Result<ParsedInstStream<F, T>, ParseError>;
+pub type ParsedInstStream<F, T> = Vec<PartialInst<F, T>>;
+pub type LineParseResult<F, T> = Result<ParsedInstStream<F, T>, ParseError>;
 pub struct ParseResult<F, T>
 where
     F: ArchFamily<T>,
@@ -73,6 +72,12 @@ impl ParseState {
             sections: SectionStore::new(),
             declared_globals: HashSet::new(),
         }
+    }
+}
+
+impl Default for ParseState {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

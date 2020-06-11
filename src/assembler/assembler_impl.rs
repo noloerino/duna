@@ -107,12 +107,17 @@ impl Default for SectionStore {
     }
 }
 
+pub type FileIdAndInst<S> = (
+    FileId,
+    PartialInst<<S as Architecture>::Family, <S as Architecture>::DataWidth>,
+);
+
 /// The parser must perform two passes in order to locate/process labels.
 /// This struct encodes data for a program that still needs to be passed to the assembler.
 pub struct UnlinkedProgram<S: Architecture> {
     /// A list of (source file id, instruction), which will be placed in the text segment in the
     /// order in which they appear.
-    pub(super) insts: Vec<(FileId, PartialInst<S::Family, S::DataWidth>)>,
+    pub(super) insts: Vec<FileIdAndInst<S>>,
     // a potential optimization is to store generated labels and needed labels in independent vecs
     // instead of a hashmap, another vec can be used to lookup the corresponding PartialInst
     // TODO put labels in sections
@@ -130,7 +135,7 @@ impl<S: Architecture> UnlinkedProgram<S> {
     /// A ParseErrorReporter is also returned to allow the linker to proceed with partial information
     /// in the event of a non-fatal error in this program.
     pub(super) fn new(
-        mut insts: Vec<(FileId, PartialInst<S::Family, S::DataWidth>)>,
+        mut insts: Vec<FileIdAndInst<S>>,
         sections: SectionStore,
         declared_globals: HashSet<String>,
     ) -> (UnlinkedProgram<S>, ParseErrorReporter) {
