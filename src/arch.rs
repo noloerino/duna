@@ -8,13 +8,18 @@ use num_traits::ops::wrapping;
 use num_traits::sign;
 use std::fmt;
 
-/// Represents an architecture including bitwidth, e.g. "x86-64" or "riscv-32".
+/// Represents an architecture including word size, e.g. "x86-64" or "riscv-32".
 pub trait Architecture: Sized {
     type DataWidth: MachineDataWidth;
+    type Family: ArchFamily<Self::DataWidth>;
+    type Program: Program<Self::Family, Self::DataWidth>;
+    type Parser: Parser<Self::Family, Self::DataWidth>;
+}
+
+/// Represents an architecture family parametrized over a word size, e.g. "x86" or "riscv".
+pub trait ArchFamily<T: MachineDataWidth>: Sized {
     type Register: IRegister;
-    type Instruction: ConcreteInst<Self::Register, Self::DataWidth>;
-    type Program: Program<Self::Register, Self::Instruction, Self::DataWidth>;
-    type Parser: Parser<Self::Register, Self::Instruction, Self::DataWidth>;
+    type Instruction: ConcreteInst<Self, T>;
 }
 
 /// Represents a data type that can be used to hold data in a register.

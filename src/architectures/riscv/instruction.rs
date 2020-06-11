@@ -1,3 +1,4 @@
+use super::arch::*;
 use super::registers::RiscVRegister;
 use crate::arch::*;
 use crate::instruction::ConcreteInst;
@@ -29,7 +30,7 @@ pub struct JInstFields {
 }
 
 pub struct RiscVInst<T: MachineDataWidth> {
-    pub eval: Box<dyn Fn(&ProgramState<RiscVRegister, T>) -> InstResult<RiscVRegister, T>>,
+    pub eval: Box<dyn Fn(&ProgramState<RiscV<T>, T>) -> InstResult<RiscV<T>, T>>,
     data: RiscVInstData,
 }
 
@@ -70,7 +71,7 @@ enum RiscVInstData {
     },
 }
 
-impl<T: MachineDataWidth> ConcreteInst<RiscVRegister, T> for RiscVInst<T> {
+impl<T: MachineDataWidth> ConcreteInst<RiscV<T>, T> for RiscVInst<T> {
     fn to_machine_code(&self) -> u32 {
         match self.data {
             RiscVInstData::R {
@@ -143,7 +144,7 @@ impl<T: MachineDataWidth> ConcreteInst<RiscVRegister, T> for RiscVInst<T> {
         .as_u32()
     }
 
-    fn apply(&self, state: &ProgramState<RiscVRegister, T>) -> InstResult<RiscVRegister, T> {
+    fn apply(&self, state: &ProgramState<RiscV<T>, T>) -> InstResult<RiscV<T>, T> {
         (*self.eval)(state)
     }
 }
@@ -234,11 +235,11 @@ pub trait IType<T: MachineDataWidth> {
     }
     fn inst_fields() -> IInstFields;
     fn eval(
-        state: &UserProgState<RiscVRegister, T>,
+        state: &UserProgState<RiscV<T>, T>,
         rd: RiscVRegister,
         rs1: RiscVRegister,
         imm: BitStr32,
-    ) -> UserDiff<RiscVRegister, T>;
+    ) -> UserDiff<RiscV<T>, T>;
 }
 
 pub(crate) trait ITypeArith<T: MachineDataWidth>: IType<T> {
@@ -271,7 +272,7 @@ pub trait EnvironInst<T: MachineDataWidth> {
     }
     fn funct12() -> BitStr32;
     fn inst_fields() -> IInstFields;
-    fn eval(state: &ProgramState<RiscVRegister, T>) -> TrapKind;
+    fn eval(state: &ProgramState<RiscV<T>, T>) -> TrapKind;
 }
 
 pub trait SType<T: MachineDataWidth> {
@@ -295,11 +296,11 @@ pub trait SType<T: MachineDataWidth> {
     }
     fn inst_fields() -> SInstFields;
     fn eval(
-        state: &UserProgState<RiscVRegister, T>,
+        state: &UserProgState<RiscV<T>, T>,
         rs1: RiscVRegister,
         rs2: RiscVRegister,
         imm: BitStr32,
-    ) -> UserDiff<RiscVRegister, T>;
+    ) -> UserDiff<RiscV<T>, T>;
 }
 
 pub trait BType<T: MachineDataWidth> {
@@ -357,10 +358,10 @@ pub trait UType<T: MachineDataWidth> {
 
     fn inst_fields() -> UInstFields;
     fn eval(
-        state: &UserProgState<RiscVRegister, T>,
+        state: &UserProgState<RiscV<T>, T>,
         rd: RiscVRegister,
         imm: BitStr32,
-    ) -> UserDiff<RiscVRegister, T>;
+    ) -> UserDiff<RiscV<T>, T>;
 }
 
 pub trait JType<T: MachineDataWidth> {
@@ -379,8 +380,8 @@ pub trait JType<T: MachineDataWidth> {
     }
     fn inst_fields() -> JInstFields;
     fn eval(
-        state: &UserProgState<RiscVRegister, T>,
+        state: &UserProgState<RiscV<T>, T>,
         rd: RiscVRegister,
         imm: BitStr32,
-    ) -> UserDiff<RiscVRegister, T>;
+    ) -> UserDiff<RiscV<T>, T>;
 }

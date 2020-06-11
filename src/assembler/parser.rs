@@ -40,16 +40,15 @@ impl LabelDef {
     }
 }
 
-pub type ParsedInstStream<R, S, T> = Vec<PartialInst<R, S, T>>;
-pub type LineParseResult<R, S, T> = Result<ParsedInstStream<R, S, T>, ParseError>;
-pub struct ParseResult<R, S, T>
+pub type ParsedInstStream<F: ArchFamily<T>, T> = Vec<PartialInst<F, T>>;
+pub type LineParseResult<F: ArchFamily<T>, T> = Result<ParsedInstStream<F, T>, ParseError>;
+pub struct ParseResult<F, T>
 where
-    R: IRegister,
-    S: ConcreteInst<R, T>,
+    F: ArchFamily<T>,
     T: MachineDataWidth,
 {
     pub file_id: FileId,
-    pub insts: ParsedInstStream<R, S, T>,
+    pub insts: ParsedInstStream<F, T>,
     pub sections: SectionStore,
     pub declared_globals: HashSet<String>,
     pub reporter: ParseErrorReporter,
@@ -79,15 +78,14 @@ impl ParseState {
 
 pub type TokenIter = Peekable<IntoIter<Token>>;
 
-pub trait Parser<R, S, T>
+pub trait Parser<F: ArchFamily<T>, T>
 where
-    R: IRegister,
-    S: ConcreteInst<R, T>,
+    F: ArchFamily<T>,
     T: MachineDataWidth,
 {
-    fn parse_str(file_id: FileId, contents: &str) -> ParseResult<R, S, T> {
+    fn parse_str(file_id: FileId, contents: &str) -> ParseResult<F, T> {
         Self::parse_lex_result(Lexer::lex_str(file_id, contents))
     }
 
-    fn parse_lex_result(lex_result: LexResult) -> ParseResult<R, S, T>;
+    fn parse_lex_result(lex_result: LexResult) -> ParseResult<F, T>;
 }

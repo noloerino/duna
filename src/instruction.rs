@@ -1,11 +1,11 @@
 use crate::arch::*;
 use crate::program_state::{IRegister, InstResult, ProgramState};
 
-pub trait ConcreteInst<R, T>
+pub trait ConcreteInst<F, T>
 where
-    R: IRegister,
+    F: ArchFamily<T>,
     T: MachineDataWidth,
 {
     fn to_machine_code(&self) -> u32;
-    fn apply(&self, state: &ProgramState<R, T>) -> InstResult<R, T>;
+    fn apply(&self, state: &ProgramState<F, T>) -> InstResult<F, T>;
 }

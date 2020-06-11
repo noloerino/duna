@@ -1,3 +1,4 @@
+use super::arch::*;
 use super::instruction::*;
 use super::isa;
 use super::pseudo_inst;
@@ -123,10 +124,8 @@ lazy_static! {
     };
 }
 
-impl Parser<RiscVRegister, RiscVInst<Width32b>, Width32b> for RiscVParser<Width32b> {
-    fn parse_lex_result(
-        lex_result: LexResult,
-    ) -> ParseResult<RiscVRegister, RiscVInst<Width32b>, Width32b> {
+impl Parser<RiscV<Width32b>, Width32b> for RiscVParser<Width32b> {
+    fn parse_lex_result(lex_result: LexResult) -> ParseResult<RiscV<Width32b>, Width32b> {
         RiscVParser {
             file_id: lex_result.file_id,
             lines: lex_result.lines,
@@ -139,8 +138,8 @@ impl Parser<RiscVRegister, RiscVInst<Width32b>, Width32b> for RiscVParser<Width3
 }
 
 impl RiscVParser<Width32b> {
-    fn parse(mut self) -> ParseResult<RiscVRegister, RiscVInst<Width32b>, Width32b> {
-        let mut insts = Vec::<PartialInst<RiscVRegister, RiscVInst<Width32b>, Width32b>>::new();
+    fn parse(mut self) -> ParseResult<RiscV<Width32b>, Width32b> {
+        let mut insts = Vec::<PartialInst<RiscV<Width32b>, Width32b>>::new();
         let mut last_label: Option<LabelDef> = None;
         let parser_data: &ParserData<Width32b> = &ParserData {
             inst_expansion_table: &RV32_INST_EXPANSION_TABLE,
@@ -194,23 +193,17 @@ enum ImmOrLabelRef<T: RegSize> {
 }
 
 /// Convenience method to stuff a PartialInst into a Vec<PartialInst>
-fn ok_vec<T: MachineDataWidth>(
-    inst: PartialInst<RiscVRegister, RiscVInst<T>, T>,
-) -> LineParseResult<RiscVRegister, RiscVInst<T>, T> {
+fn ok_vec<T: MachineDataWidth>(inst: PartialInst<RiscV<T>, T>) -> LineParseResult<RiscV<T>, T> {
     Ok(vec![inst])
 }
 
 /// Convenience method to stuff a RiscVInst into Ok(vec![PartialInst(...)])
-fn ok_wrap_concr<T: MachineDataWidth>(
-    inst: RiscVInst<T>,
-) -> LineParseResult<RiscVRegister, RiscVInst<T>, T> {
+fn ok_wrap_concr<T: MachineDataWidth>(inst: RiscVInst<T>) -> LineParseResult<RiscV<T>, T> {
     ok_vec(PartialInst::new_complete(inst))
 }
 
 /// Convenience method to turn a Vec<RiscVInst<T>> into Ok(Vec<PartialInst>)
-fn ok_wrap_expanded<T: MachineDataWidth>(
-    inst: Vec<RiscVInst<T>>,
-) -> LineParseResult<RiscVRegister, RiscVInst<T>, T> {
+fn ok_wrap_expanded<T: MachineDataWidth>(inst: Vec<RiscVInst<T>>) -> LineParseResult<RiscV<T>, T> {
     Ok(inst.into_iter().map(PartialInst::new_complete).collect())
 }
 
@@ -530,7 +523,7 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
     fn try_expand_found_inst(
         &mut self,
         parse_type: &ParseType<T>,
-    ) -> Result<ParsedInstStream<RiscVRegister, RiscVInst<T>, T>, ParseError> {
+    ) -> Result<ParsedInstStream<RiscV<T>, T>, ParseError> {
         use ParseType::*;
         match parse_type {
             R(inst_new) => {
@@ -693,7 +686,7 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
         }
     }
 
-    fn try_expand_inst(&mut self) -> LineParseResult<RiscVRegister, RiscVInst<T>, T> {
+    fn try_expand_inst(&mut self) -> LineParseResult<RiscV<T>, T> {
         if let Some(parse_type) = self.data.inst_expansion_table.get(self.inst_name) {
             self.try_expand_found_inst(parse_type)
         } else {
@@ -985,12 +978,7 @@ impl<'a, T: MachineDataWidth> LineParser<'a, T> {
         }
     }
 
-    fn parse(
-        mut self,
-    ) -> (
-        Option<LabelDef>,
-        LineParseResult<RiscVRegister, RiscVInst<T>, T>,
-    ) {
+    fn parse(mut self) -> (Option<LabelDef>, LineParseResult<RiscV<T>, T>) {
         (
             self.label,
             if let Some(head_tok) = self.iter.next() {
@@ -1059,7 +1047,7 @@ mod tests {
 
     /// Parses and lexes the provided string, assuming that there are no errors in either phase.
     /// Assumes that there were no lex errors.
-    fn parse_and_lex(prog: &str) -> Vec<PartialInst<RiscVRegister, RiscVInst<Width32b>, Width32b>> {
+    fn parse_and_lex(prog: &str) -> Vec<PartialInst<RiscV<Width32b>, Width32b>> {
         let ParseResult {
             insts, reporter, ..
         } = RiscVParser::parse_lex_result(lex(prog));
