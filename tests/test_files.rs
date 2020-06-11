@@ -1,6 +1,5 @@
 use duna::arch::*;
-use duna::architectures::riscv::arch::RV32;
-use duna::architectures::riscv::program::RiscVProgram;
+use duna::architectures::riscv::{RiscVProgram, RV32};
 use duna::assembler::{Linker, ParseErrorReport};
 use duna::program_state::Program;
 use std::path::Path;

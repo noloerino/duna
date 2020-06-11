@@ -1,6 +1,6 @@
 // #![allow(dead_code)]
 use clap::{App, Arg};
-use duna::architectures::riscv::arch::RV32;
+use duna::architectures::riscv::RV32;
 use duna::assembler::Linker;
 use duna::program_state::Program;
 use std::process;

@@ -1,3 +1,6 @@
+//! Contains definitions for RISCV pseudo-instructions.
+//! These definitions are reexported by the isa module.
+
 use super::instruction::*;
 use super::isa::*;
 use super::registers::RiscVRegister;

@@ -1,5 +1,6 @@
 use super::arch::*;
 use super::instruction::*;
+pub use super::pseudo_inst::*;
 use super::registers::RiscVRegister;
 use crate::arch::*;
 use crate::program_state::*;

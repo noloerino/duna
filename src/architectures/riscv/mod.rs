@@ -1,7 +1,14 @@
-pub mod arch;
-pub mod instruction;
+mod arch;
+mod instruction;
 pub mod isa;
-pub mod parser;
-pub mod program;
-pub mod pseudo_inst;
+mod parser;
+mod program;
+mod pseudo_inst;
 pub mod registers;
+
+pub use arch::{RiscV, RV32};
+pub use instruction::RiscVInst;
+pub use program::*;
+
+#[cfg(test)]
+pub(crate) use parser::RiscVParser;
