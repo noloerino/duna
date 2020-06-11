@@ -1,4 +1,5 @@
 use super::datatypes::*;
+use crate::arch::*;
 use std::collections::HashMap;
 
 pub struct Memory<T: MachineDataWidth> {

@@ -1,11 +1,13 @@
-use crate::instruction::*;
-use crate::isa::*;
-use crate::program_state::{BitStr32, IRegister, MachineDataWidth, RegSize};
-use IRegister::*;
+use super::instruction::*;
+use super::isa::*;
+use super::registers::RiscVRegister;
+use crate::arch::*;
+use crate::program_state::BitStr32;
+use RiscVRegister::*;
 
 pub struct Nop;
 impl Nop {
-    pub fn expand<T: MachineDataWidth>() -> ConcreteInst<T> {
+    pub fn expand<T: MachineDataWidth>() -> RiscVInst<T> {
         Addi::new(ZERO, ZERO, <T::RegData>::zero())
     }
 }
@@ -14,7 +16,7 @@ impl Nop {
 // and li is emmitted as lui + ld
 pub struct Li;
 impl Li {
-    pub fn expand<T: MachineDataWidth>(reg: IRegister, data: T::RegData) -> Vec<ConcreteInst<T>> {
+    pub fn expand<T: MachineDataWidth>(reg: RiscVRegister, data: T::RegData) -> Vec<RiscVInst<T>> {
         let imm = data.to_bit_str(32);
         let mut upper = imm.slice(32, 12);
         let lower = imm.slice(11, 0);
@@ -38,42 +40,42 @@ impl Li {
 
 pub struct Mv;
 impl Mv {
-    pub fn expand<T: MachineDataWidth>(rd: IRegister, rs: IRegister) -> ConcreteInst<T> {
+    pub fn expand<T: MachineDataWidth>(rd: RiscVRegister, rs: RiscVRegister) -> RiscVInst<T> {
         Addi::new(rd, rs, <T::RegData>::zero())
     }
 }
 
 pub struct JalPseudo;
 impl JalPseudo {
-    pub fn expand<T: MachineDataWidth>(offs: T::RegData) -> ConcreteInst<T> {
+    pub fn expand<T: MachineDataWidth>(offs: T::RegData) -> RiscVInst<T> {
         Jal::new(RA, offs)
     }
 }
 
 pub struct JalrPseudo;
 impl JalrPseudo {
-    pub fn expand<T: MachineDataWidth>(rs: IRegister) -> ConcreteInst<T> {
+    pub fn expand<T: MachineDataWidth>(rs: RiscVRegister) -> RiscVInst<T> {
         Jalr::new(RA, rs, <T::RegData>::zero())
     }
 }
 
 pub struct J;
 impl J {
-    pub fn expand<T: MachineDataWidth>(offs: T::RegData) -> ConcreteInst<T> {
+    pub fn expand<T: MachineDataWidth>(offs: T::RegData) -> RiscVInst<T> {
         Jal::new(ZERO, offs)
     }
 }
 
 pub struct Jr;
 impl Jr {
-    pub fn expand<T: MachineDataWidth>(rs: IRegister) -> ConcreteInst<T> {
+    pub fn expand<T: MachineDataWidth>(rs: RiscVRegister) -> RiscVInst<T> {
         Jalr::new(ZERO, rs, <T::RegData>::zero())
     }
 }
 
 pub struct Ret;
 impl Ret {
-    pub fn expand<T: MachineDataWidth>() -> ConcreteInst<T> {
+    pub fn expand<T: MachineDataWidth>() -> RiscVInst<T> {
         Jalr::new(ZERO, RA, <T::RegData>::zero())
     }
 }
@@ -81,10 +83,10 @@ impl Ret {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::instruction::ConcreteInst;
-    use crate::program_state::{DataWord, Width32b};
+    use crate::arch::Width32b;
+    use crate::program_state::DataWord;
 
-    type Expanded = Vec<ConcreteInst<Width32b>>;
+    type Expanded = Vec<RiscVInst<Width32b>>;
 
     #[test]
     fn test_li() {

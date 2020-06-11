@@ -1,6 +1,8 @@
 // #![allow(dead_code)]
 use clap::{App, Arg};
+use duna::architectures::riscv::arch::RV32;
 use duna::assembler::Linker;
+use duna::program_state::Program;
 use std::process;
 
 fn main() {
@@ -23,7 +25,7 @@ fn main() {
     for file in file_names {
         linker = linker.with_file(file);
     }
-    let link_result = linker.link();
+    let link_result = linker.link::<RV32>();
     let mut program = match link_result {
         Ok(p) => p,
         Err(errs) => {

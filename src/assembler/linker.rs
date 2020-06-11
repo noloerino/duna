@@ -2,7 +2,7 @@ use super::assembler_impl::{Assembler, SectionStore, UnlinkedProgram};
 use super::datatypes::*;
 use super::parse_error::{ParseError, ParseErrorReport, ParseErrorReporter};
 use super::parser::{Label, LabelDef};
-use crate::program_state::{RiscVProgram, Width32b};
+use crate::arch::*;
 use std::collections::HashMap;
 use std::fs;
 
@@ -63,14 +63,14 @@ impl Linker {
     }
 
     /// Attempts to link the provided programs together into a single executable.
-    pub fn link(self) -> Result<RiscVProgram<Width32b>, ParseErrorReport> {
+    pub fn link<S: Architecture>(self) -> Result<S::Program, ParseErrorReport> {
         assert!(
             !self.file_map.is_empty(),
             "Linker is missing a main program"
         );
         let mut reporter = ParseErrorReporter::new();
         // Link other programs' local labels
-        let mut programs: Vec<UnlinkedProgram<Width32b>> = Vec::new();
+        let mut programs: Vec<UnlinkedProgram<S>> = Vec::new();
         for (i, FileData { content, .. }) in self.file_map.iter().enumerate() {
             let (prog, new_reporter) = Assembler::assemble_str(i, &content);
             programs.push(prog);
@@ -117,7 +117,7 @@ impl Linker {
         }
         if reporter.is_empty() {
             let (linked, errs) =
-                UnlinkedProgram::new(all_insts, combined_sections, Default::default());
+                UnlinkedProgram::<S>::new(all_insts, combined_sections, Default::default());
             if errs.is_empty() {
                 // handles errantly undefined labels, although they should've already been caught
                 linked
