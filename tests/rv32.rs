@@ -5,7 +5,7 @@ use duna::program_state::Program;
 use std::path::Path;
 
 fn get_full_test_path(relative_path: &str) -> String {
-    Path::new("tests/asm_files")
+    Path::new("tests/rv32_asm")
         .join(relative_path)
         .to_str()
         .unwrap()
@@ -95,7 +95,7 @@ fn test_local_labels() {
 #[test]
 /// Tests linking two files that have no label dependencies.
 fn test_basic_link() {
-    let mut program = Linker::with_main("tests/asm_files/local_labels.s")
+    let mut program = Linker::with_main(&get_full_test_path("local_labels.s"))
         .link::<RV32>()
         .unwrap();
     program.dump_insts();
@@ -105,8 +105,8 @@ fn test_basic_link() {
 #[test]
 /// Tests linking files that require global symbols.
 fn test_global_link() {
-    let mut program = Linker::with_main("tests/asm_files/global_link_0.s")
-        .with_file("tests/asm_files/global_link_1.s")
+    let mut program = Linker::with_main(&get_full_test_path("global_link_0.s"))
+        .with_file(&get_full_test_path("global_link_1.s"))
         .link::<RV32>()
         .unwrap();
     program.dump_insts();
