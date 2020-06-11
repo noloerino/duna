@@ -20,6 +20,7 @@ pub trait Architecture: Sized {
 pub trait ArchFamily<T: MachineDataWidth>: Sized {
     type Register: IRegister;
     type Instruction: ConcreteInst<Self, T>;
+    type Syscalls: SyscallConvention<Self, T>;
 }
 
 /// Represents a data type that can be used to hold data in a register.

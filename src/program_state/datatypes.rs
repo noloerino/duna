@@ -352,8 +352,7 @@ impl From<DataByte> for i8 {
     }
 }
 
-/// TODO From<u64> is a temporary hack
-pub trait ByteAddress: Clone + Copy + From<u64> {
+pub trait ByteAddress: Clone + Copy {
     type WordAddress: PrimInt + ToPrimitive + Hash;
 
     fn to_word_address(self) -> Self::WordAddress;

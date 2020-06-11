@@ -455,6 +455,7 @@ impl<T: MachineDataWidth> SType<T> for Sw {
 
 #[cfg(test)]
 mod test {
+    use super::super::program::RiscVSyscallConvention;
     use super::*;
     use crate::instruction::*;
     use crate::program_state::Syscall;
@@ -798,13 +799,16 @@ mod test {
         );
     }
 
-    /* TODO bring this back
+    #[test]
     fn test_ecall() {
         let mut state = get_init_state();
         let addr = ByteAddr32::from(state.regfile_read(SP));
         state.memory_set_word(addr.to_word_address(), DataWord::from(0xDEAD_BEEFu32));
         // Set ecall code
-        state.regfile_set(A7, RV32SyscallTable::syscall_to_number(Syscall::Write)); // We're writing 4 bytes to stdout, which has fd 1
+        state.regfile_set(
+            A7,
+            RiscVSyscallConvention::<Width32b>::syscall_to_number(Syscall::Write),
+        ); // We're writing 4 bytes to stdout, which has fd 1
         state.regfile_set(A0, DataWord::from(1));
         state.regfile_set(A1, DataWord::from(addr));
         state.regfile_set(A2, DataWord::from(4));
@@ -813,7 +817,6 @@ mod test {
         // beware of endianness
         assert_eq!(state.get_stdout(), &[0xEF, 0xBE, 0xAD, 0xDE]);
     }
-    */
 
     #[test]
     fn test_jal() {

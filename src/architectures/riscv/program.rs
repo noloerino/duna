@@ -5,7 +5,9 @@ use crate::arch::*;
 use crate::assembler::{Linker, ParseErrorReport, SectionStore};
 use crate::instruction::*;
 use crate::program_state::*;
+use num_traits::cast::{FromPrimitive, ToPrimitive};
 use std::collections::HashMap;
+use std::marker::PhantomData;
 use std::str;
 
 pub struct RiscVProgram<T: MachineDataWidth> {
@@ -121,20 +123,28 @@ lazy_static! {
         .collect();
 }
 
-pub struct RV32SyscallConvention {}
+pub struct RiscVSyscallConvention<T: MachineDataWidth> {
+    _phantom: PhantomData<T>,
+}
 
 /// Implements functions that require OS privileges to perform, such as reading/writing files.
 /// Per the RISCV calling convention (see http://man7.org/linux/man-pages/man2/syscall.2.html),
 /// the a7 register determines which syscall is being performed, and the arguments are stored
 /// in the argument registers of user space.
 /// See [Syscall] for syscall codes.
-impl SyscallConvention<RV32> for RV32SyscallConvention {
-    fn number_to_syscall(n: i32) -> Option<Syscall> {
-        RISCV_SYSCALL_TABLE.get(&(n as isize)).cloned()
+impl<T: MachineDataWidth> SyscallConvention<RiscV<T>, T> for RiscVSyscallConvention<T> {
+    fn number_to_syscall(n: T::Signed) -> Option<Syscall> {
+        RISCV_SYSCALL_TABLE.get(&n.to_isize().unwrap()).cloned()
     }
 
-    fn syscall_to_number(syscall: Syscall) -> DataWord {
-        (RISCV_SYSCALL_NUMBERS.get(&syscall).copied().unwrap_or(-1) as i32).into()
+    fn syscall_to_number(syscall: Syscall) -> T::RegData {
+        <T::Signed>::from_isize(RISCV_SYSCALL_NUMBERS.get(&syscall).copied().unwrap_or(-1))
+            .unwrap()
+            .into()
+    }
+
+    fn syscall_number_reg() -> RiscVRegister {
+        RiscVRegister::A7
     }
 
     fn syscall_arg_regs() -> Vec<RiscVRegister> {

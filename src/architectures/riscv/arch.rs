@@ -12,6 +12,7 @@ pub struct RiscV<T: MachineDataWidth> {
 impl<T: MachineDataWidth> ArchFamily<T> for RiscV<T> {
     type Register = RiscVRegister;
     type Instruction = RiscVInst<T>;
+    type Syscalls = RiscVSyscallConvention<T>;
 }
 
 pub struct RV32;

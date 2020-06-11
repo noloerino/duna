@@ -78,19 +78,22 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
     }
 
     pub fn dispatch_syscall(&self) -> PrivStateChange<T> {
-        unimplemented!()
-        // let rf = &self.user_state.regfile;
-        // let a0 = rf.read(A0);
-        // let a1 = rf.read(A1);
-        // let a2 = rf.read(A2);
-        // if let Some(nr) = Syscall::from_number::<T>(self.user_state.regfile.read(A7).into()) {
-        //     match nr {
-        //         Syscall::Write => self.syscall_write(a0, a1.into(), a2),
-        //         _ => self.syscall_unknown(),
-        //     }
-        // } else {
-        //     self.syscall_unknown()
-        // }
+        let rf = &self.user_state.regfile;
+        let syscall_number_reg = <F::Syscalls as SyscallConvention<F, T>>::syscall_number_reg();
+        let arg_regs = <F::Syscalls as SyscallConvention<F, T>>::syscall_arg_regs();
+        let a0 = rf.read(arg_regs[0]);
+        let a1 = rf.read(arg_regs[1]);
+        let a2 = rf.read(arg_regs[2]);
+        if let Some(nr) = <F::Syscalls as SyscallConvention<F, T>>::number_to_syscall(
+            self.user_state.regfile.read(syscall_number_reg).into(),
+        ) {
+            match nr {
+                Syscall::Write => self.syscall_write(a0, a1.into(), a2),
+                _ => self.syscall_unknown(),
+            }
+        } else {
+            self.syscall_unknown()
+        }
     }
 
     /// Writes contents to a specified file descriptor.
@@ -150,15 +153,17 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
     }
 }
 
-pub trait SyscallConvention<T: Architecture> {
+pub trait SyscallConvention<F: ArchFamily<T>, T: MachineDataWidth> {
     /// Returns the syscall identified by number N, or none if no such syscall exists.
-    fn number_to_syscall(n: <T::DataWidth as MachineDataWidth>::Signed) -> Option<Syscall>;
+    fn number_to_syscall(n: T::Signed) -> Option<Syscall>;
     /// Returns the number corresponding to the syscall, or -1 if it is unimplemented.
-    fn syscall_to_number(syscall: Syscall) -> <T::DataWidth as MachineDataWidth>::RegData;
+    fn syscall_to_number(syscall: Syscall) -> T::RegData;
+    /// Returns which register is used to pass the syscall number.
+    fn syscall_number_reg() -> F::Register;
     /// Returns which registers are used to pass arguments to syscalls.
-    fn syscall_arg_regs() -> Vec<<T::Family as ArchFamily<T::DataWidth>>::Register>;
+    fn syscall_arg_regs() -> Vec<F::Register>;
     /// Returns which registers are used to return arguments from syscalls.
-    fn syscall_return_regs() -> Vec<<T::Family as ArchFamily<T::DataWidth>>::Register>;
+    fn syscall_return_regs() -> Vec<F::Register>;
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
@@ -208,8 +213,8 @@ impl PrivProgState {
                 print!("{}", String::from_utf8_lossy(&bytes));
                 self.stdout.extend(bytes);
                 // TODO parameterize priv state over R as well
-                // UserDiff::reg_write_pc_p4(user_state, IRegister::A0, *len)
-                UserDiff::noop(user_state)
+                let ret_reg = <F::Syscalls as SyscallConvention<F, T>>::syscall_return_regs()[0];
+                UserDiff::reg_write_pc_p4(user_state, ret_reg, *len)
             }
             Exit => unimplemented!(),
         }
