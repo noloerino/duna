@@ -5,7 +5,6 @@ use crate::arch::*;
 use crate::assembler::{Linker, ParseErrorReport, SectionStore};
 use crate::instruction::*;
 use crate::program_state::*;
-use num_traits::cast::{FromPrimitive, ToPrimitive};
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::str;
@@ -134,13 +133,11 @@ pub struct RiscVSyscallConvention<T: MachineDataWidth> {
 /// See [Syscall] for syscall codes.
 impl<T: MachineDataWidth> SyscallConvention<RiscV<T>, T> for RiscVSyscallConvention<T> {
     fn number_to_syscall(n: T::Signed) -> Option<Syscall> {
-        RISCV_SYSCALL_TABLE.get(&n.to_isize().unwrap()).cloned()
+        RISCV_SYSCALL_TABLE.get(&T::sgn_to_isize(n)).cloned()
     }
 
     fn syscall_to_number(syscall: Syscall) -> T::RegData {
-        <T::Signed>::from_isize(RISCV_SYSCALL_NUMBERS.get(&syscall).copied().unwrap_or(-1))
-            .unwrap()
-            .into()
+        T::isize_to_sgn(RISCV_SYSCALL_NUMBERS.get(&syscall).copied().unwrap_or(-1)).into()
     }
 
     fn syscall_number_reg() -> RiscVRegister {

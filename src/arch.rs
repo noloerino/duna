@@ -2,7 +2,6 @@
 use crate::assembler::parser::Parser;
 use crate::instruction::ConcreteInst;
 use crate::program_state::*;
-use num_traits::cast;
 use num_traits::int;
 use num_traits::ops::wrapping;
 use num_traits::sign;
@@ -56,8 +55,6 @@ pub trait MachineDataWidth: Clone + Copy {
         + From<Self::ByteAddr>
         + Eq
         + Ord
-        + cast::FromPrimitive
-        + cast::ToPrimitive
         + int::PrimInt
         + sign::Signed
         + wrapping::WrappingAdd
@@ -67,8 +64,6 @@ pub trait MachineDataWidth: Clone + Copy {
         + From<Self::ByteAddr>
         + Eq
         + Ord
-        + cast::FromPrimitive
-        + cast::ToPrimitive
         + int::PrimInt
         + sign::Unsigned
         + wrapping::WrappingAdd
