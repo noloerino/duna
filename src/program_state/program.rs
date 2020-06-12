@@ -451,7 +451,7 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> UserDiff<F, T> {
         state: &UserProgState<F, T>,
         addr: T::ByteAddr,
         val: DataEnum,
-    ) -> Result<Self, PageFault<T::ByteAddr>> {
+    ) -> Result<Self, MemFault<T::ByteAddr>> {
         Ok(UserDiff::new_pc_p4(
             state,
             None,

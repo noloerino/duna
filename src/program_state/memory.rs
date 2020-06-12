@@ -4,15 +4,51 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 
 #[derive(Debug)]
-pub struct PageFault<T: ByteAddress> {
+pub struct MemFault<T: ByteAddress> {
     user_vaddr: T,
+    cause: MemFaultCause,
 }
 
-impl<T: ByteAddress> PageFault<T> {
-    /// Indicates a pagefault at the provided address.
-    pub fn at_addr(user_vaddr: T) -> Self {
-        PageFault { user_vaddr }
+impl<T: ByteAddress> MemFault<T> {
+    /// Indicates a page fault at the provided address.
+    pub fn pagefault_at_addr(user_vaddr: T) -> Self {
+        MemFault {
+            user_vaddr,
+            cause: MemFaultCause::PageFault,
+        }
     }
+
+    /// Indicates a segfault at the provided address.
+    pub fn segfault_at_addr(user_vaddr: T) -> Self {
+        MemFault {
+            user_vaddr,
+            cause: MemFaultCause::SegFault,
+        }
+    }
+
+    /// Indicates a bus error at the provided address.
+    pub fn buserror_at_addr(user_vaddr: T) -> Self {
+        MemFault {
+            user_vaddr,
+            cause: MemFaultCause::BusError,
+        }
+    }
+
+    /// Checks that the provided address matches the desired alignment, raising a BusError if not.
+    pub fn check_aligned(user_vaddr: T, width: DataWidth) -> Result<(), Self> {
+        if !user_vaddr.is_aligned_to(width) {
+            Err(Self::buserror_at_addr(user_vaddr))
+        } else {
+            Ok(())
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum MemFaultCause {
+    PageFault,
+    SegFault,
+    BusError,
 }
 
 /// Trait to define a virtual memory abstraction.
@@ -23,42 +59,44 @@ impl<T: ByteAddress> PageFault<T> {
 /// Read/write operations should not directly map pages; they should instead produce a pagefault,
 /// and the OS should perform the mapping independently.
 ///
-/// Read operations will return either the requested data or a PageFault.
-/// Write operations will return a result with an empty value or a PageFault.
+/// Read operations will return either the requested data or a MemFault.
+/// Write operations will return a result with an empty value or a MemFault.
 pub trait Memory<T: ByteAddress> {
     /// Checks whether the provided virtual address is mapped.
     fn is_mapped(&self, addr: T) -> bool;
 
-    /// Faults if the page is unmapped.
-    fn fault_if_unmapped(&self, addr: T) -> Result<(), PageFault<T>> {
+    /// Raises a page fault if the page is unmapped.
+    fn fault_if_unmapped(&self, addr: T) -> Result<(), MemFault<T>> {
         if self.is_mapped(addr) {
             Ok(())
         } else {
-            Err(PageFault::at_addr(addr))
+            Err(MemFault::pagefault_at_addr(addr))
         }
     }
 
-    /// Maps a page to physical memory if it is not already mapped. Returns a reference to the page.
-    fn map_page(&mut self, vpn: VirtPN);
+    /// Maps a page containing the provided address to physical memory if it is not already mapped.
+    /// If the page cannot be mapped, then a TermCause is returned.
+    /// If the page was successfully mapped or already mapped, then Ok(()) is returned.
+    fn map_page(&mut self, addr: T) -> Result<(), MemFault<T>>;
 
     /// Stores an 8-bit byte to memory.
-    fn set_byte(&mut self, addr: T, value: DataByte) -> Result<(), PageFault<T>>;
+    fn set_byte(&mut self, addr: T, value: DataByte) -> Result<(), MemFault<T>>;
     /// Reads an 8-bit byte from memory.
-    fn get_byte(&self, addr: T) -> Result<DataByte, PageFault<T>>;
+    fn get_byte(&self, addr: T) -> Result<DataByte, MemFault<T>>;
     /// Stores a 16-bit halfword to memory.
-    fn set_half(&mut self, addr: T, value: DataHalf) -> Result<(), PageFault<T>>;
+    fn set_half(&mut self, addr: T, value: DataHalf) -> Result<(), MemFault<T>>;
     /// Reads a 16-bit halfword from memory.
-    fn get_half(&self, addr: T) -> Result<DataHalf, PageFault<T>>;
+    fn get_half(&self, addr: T) -> Result<DataHalf, MemFault<T>>;
     /// Stores a 32-bit word to memory.
-    fn set_word(&mut self, addr: T, value: DataWord) -> Result<(), PageFault<T>>;
+    fn set_word(&mut self, addr: T, value: DataWord) -> Result<(), MemFault<T>>;
     /// Reads a 32-bit word from memory.
-    fn get_word(&self, addr: T) -> Result<DataWord, PageFault<T>>;
+    fn get_word(&self, addr: T) -> Result<DataWord, MemFault<T>>;
     /// Stores a double word to memory.
-    fn set_doubleword(&mut self, addr: T, value: DataDword) -> Result<(), PageFault<T>>;
+    fn set_doubleword(&mut self, addr: T, value: DataDword) -> Result<(), MemFault<T>>;
     /// Reads a double word from memory.
-    fn get_doubleword(&self, addr: T) -> Result<DataDword, PageFault<T>>;
+    fn get_doubleword(&self, addr: T) -> Result<DataDword, MemFault<T>>;
 
-    fn set(&mut self, addr: T, value: DataEnum) -> Result<(), PageFault<T>> {
+    fn set(&mut self, addr: T, value: DataEnum) -> Result<(), MemFault<T>> {
         match value {
             DataEnum::Byte(v) => self.set_byte(addr, v),
             DataEnum::Half(v) => self.set_half(addr, v),
@@ -67,7 +105,7 @@ pub trait Memory<T: ByteAddress> {
         }
     }
 
-    fn get(&self, addr: T, w: DataWidth) -> Result<DataEnum, PageFault<T>> {
+    fn get(&self, addr: T, w: DataWidth) -> Result<DataEnum, MemFault<T>> {
         Ok(match w {
             DataWidth::Byte => DataEnum::Byte(self.get_byte(addr)?),
             DataWidth::Half => DataEnum::Half(self.get_half(addr)?),
@@ -77,8 +115,10 @@ pub trait Memory<T: ByteAddress> {
     }
 }
 
-/// A simple memory backed by a word-addressed hashmap.
-/// Never pagefaults. Reads to uninitialized addresses always return 0.
+/// A simple memory backed by a word-addressed hashmap; all addresses except the null address are
+/// considered to be paged in.
+/// Reads to uninitialized addresses always return 0.
+/// Faults occur on
 pub struct SimpleMemory<T: ByteAddress> {
     store: HashMap<<T as ByteAddress>::WordAddress, DataWord>,
 }
@@ -96,9 +136,16 @@ impl<T: ByteAddress> Memory<T> for SimpleMemory<T> {
         addr.bits() != 0
     }
 
-    fn map_page(&mut self, _vpn: VirtPN) {}
+    fn map_page(&mut self, addr: T) -> Result<(), MemFault<T>> {
+        if addr.bits() == 0 {
+            Err(MemFault::<T>::segfault_at_addr(addr))
+        } else {
+            Ok(())
+        }
+    }
 
-    fn set_byte(&mut self, addr: T, value: DataByte) -> Result<(), PageFault<T>> {
+    fn set_byte(&mut self, addr: T, value: DataByte) -> Result<(), MemFault<T>> {
+        MemFault::<T>::check_aligned(addr, DataWidth::Byte)?;
         let offs = addr.get_word_offset();
         let word_val = self
             .store
@@ -108,19 +155,22 @@ impl<T: ByteAddress> Memory<T> for SimpleMemory<T> {
         self.set_word(addr, word_val.set_byte(offs, value))
     }
 
-    fn get_byte(&self, addr: T) -> Result<DataByte, PageFault<T>> {
+    fn get_byte(&self, addr: T) -> Result<DataByte, MemFault<T>> {
+        MemFault::<T>::check_aligned(addr, DataWidth::Byte)?;
         let offs = addr.get_word_offset();
         Ok(self.get_word(addr)?.get_byte(offs))
     }
 
-    fn set_half(&mut self, addr: T, value: DataHalf) -> Result<(), PageFault<T>> {
+    fn set_half(&mut self, addr: T, value: DataHalf) -> Result<(), MemFault<T>> {
+        MemFault::<T>::check_aligned(addr, DataWidth::Half)?;
         let n: u16 = value.into();
         self.set_byte(addr, (n as u8).into())?;
         self.set_byte(addr.plus_1(), ((n >> 8) as u8).into())?;
         Ok(())
     }
 
-    fn get_half(&self, addr: T) -> Result<DataHalf, PageFault<T>> {
+    fn get_half(&self, addr: T) -> Result<DataHalf, MemFault<T>> {
+        MemFault::<T>::check_aligned(addr, DataWidth::Half)?;
         let lower: u8 = self.get_byte(addr)?.into();
         let upper: u8 = self.get_byte(addr.plus_1())?.into();
         Ok(DataHalf::from(
@@ -128,12 +178,14 @@ impl<T: ByteAddress> Memory<T> for SimpleMemory<T> {
         ))
     }
 
-    fn set_word(&mut self, addr: T, value: DataWord) -> Result<(), PageFault<T>> {
+    fn set_word(&mut self, addr: T, value: DataWord) -> Result<(), MemFault<T>> {
+        MemFault::<T>::check_aligned(addr, DataWidth::Word)?;
         self.store.insert(addr.to_word_address(), value);
         Ok(())
     }
 
-    fn get_word(&self, addr: T) -> Result<DataWord, PageFault<T>> {
+    fn get_word(&self, addr: T) -> Result<DataWord, MemFault<T>> {
+        MemFault::<T>::check_aligned(addr, DataWidth::Word)?;
         Ok(self
             .store
             .get(&addr.to_word_address())
@@ -141,7 +193,8 @@ impl<T: ByteAddress> Memory<T> for SimpleMemory<T> {
             .unwrap_or(DataWord::zero()))
     }
 
-    fn set_doubleword(&mut self, addr: T, value: DataDword) -> Result<(), PageFault<T>> {
+    fn set_doubleword(&mut self, addr: T, value: DataDword) -> Result<(), MemFault<T>> {
+        MemFault::<T>::check_aligned(addr, DataWidth::DoubleWord)?;
         let lower_word_addr = addr.to_word_address();
         let upper_word_addr = addr.plus_4().to_word_address();
         let upper_value = value.get_upper_word();
@@ -151,7 +204,8 @@ impl<T: ByteAddress> Memory<T> for SimpleMemory<T> {
         Ok(())
     }
 
-    fn get_doubleword(&self, addr: T) -> Result<DataDword, PageFault<T>> {
+    fn get_doubleword(&self, addr: T) -> Result<DataDword, MemFault<T>> {
+        MemFault::<T>::check_aligned(addr, DataWidth::DoubleWord)?;
         let lower_word_addr = addr.to_word_address();
         let upper_word_addr = addr.plus_4().to_word_address();
         let upper_value = self
@@ -211,7 +265,8 @@ impl MemPage {
     }
 }
 
-/// A memory backed by a fully associative LRU linear page table.
+/// A memory with a fully associative LRU linear page table.
+/// The zero page is never considered mapped, and all accesses must be aligned.
 pub struct LinearPagedMemory<T: ByteAddress> {
     page_offs_len: usize,
     page_count: usize,
@@ -291,59 +346,71 @@ impl<T: ByteAddress> Memory<T> for LinearPagedMemory<T> {
     /// Maps a page to memory if it is not already mapped, evicting other pages if necessary.
     /// Since we're following an LRU policy, this page is placed at the front of the vec, which
     /// we couldn't do if we were an actual OS but we're not so who cares.
-    /// Returns the page, or None on failure.
-    fn map_page(&mut self, vpn: VirtPN) {
+    ///
+    /// The 0 page cannot be mapped, and any attempt to do so will cause a segfault.
+    fn map_page(&mut self, addr: T) -> Result<(), MemFault<T>> {
+        let (vpn, _) = self.split_addr(addr);
+        if vpn == 0 {
+            return Err(MemFault::<T>::segfault_at_addr(addr));
+        }
         // get a new ppn
         let ppn = self.lowest_free_ppn().unwrap();
         let page_table = &mut self.page_table;
-        if let Some(idx) = page_table.iter().position(|&e| e.vpn == vpn) {
-            // check if page already mapped
-            // remove and move to front of vec
-            let e = page_table.remove(idx);
-            page_table.insert(0, e);
-        } else {
-            // create new entry
-            // check if eviction is needed
-            if page_table.len() == self.page_count {
-                let evicted = page_table.pop().unwrap();
-                self.paged_out
-                    .insert(evicted.vpn, self.phys_mem.remove(&evicted.ppn).unwrap());
-            }
-            // check if entry was previously paged out
-            let page = self.paged_out.remove(&vpn).unwrap_or(MemPage::new());
-            let e = PTEntry { vpn, ppn };
-            page_table.insert(0, e);
-            self.phys_mem.insert(ppn, page);
-        }
+        Ok(
+            if let Some(idx) = page_table.iter().position(|&e| e.vpn == vpn) {
+                // check if page already mapped
+                // remove and move to front of vec
+                let e = page_table.remove(idx);
+                page_table.insert(0, e);
+            } else {
+                // create new entry
+                // check if eviction is needed
+                if page_table.len() == self.page_count {
+                    let evicted = page_table.pop().unwrap();
+                    self.paged_out
+                        .insert(evicted.vpn, self.phys_mem.remove(&evicted.ppn).unwrap());
+                }
+                // check if entry was previously paged out
+                let page = self.paged_out.remove(&vpn).unwrap_or(MemPage::new());
+                let e = PTEntry { vpn, ppn };
+                page_table.insert(0, e);
+                self.phys_mem.insert(ppn, page);
+            },
+        )
     }
 
-    fn set_byte(&mut self, addr: T, value: DataByte) -> Result<(), PageFault<T>> {
+    fn set_byte(&mut self, addr: T, value: DataByte) -> Result<(), MemFault<T>> {
+        MemFault::<T>::check_aligned(addr, DataWidth::Byte)?;
         self.fault_if_unmapped(addr)?;
         let (vpn, offs) = self.split_addr(addr);
         self.get_mut_page(vpn).unwrap().set_byte(offs, value);
         Ok(())
     }
 
-    fn get_byte(&self, addr: T) -> Result<DataByte, PageFault<T>> {
+    fn get_byte(&self, addr: T) -> Result<DataByte, MemFault<T>> {
+        MemFault::<T>::check_aligned(addr, DataWidth::Byte)?;
         self.fault_if_unmapped(addr)?;
         let (vpn, offs) = self.split_addr(addr);
         Ok(self.get_page(vpn).unwrap().get_byte(offs))
     }
 
-    fn set_half(&mut self, addr: T, value: DataHalf) -> Result<(), PageFault<T>> {
+    fn set_half(&mut self, addr: T, value: DataHalf) -> Result<(), MemFault<T>> {
+        MemFault::<T>::check_aligned(addr, DataWidth::Half)?;
         // set lsb, then msb
         self.set_byte(addr, (u16::from(value) as u8).into())?;
         self.set_byte(addr.plus_1(), ((u16::from(value) >> 8) as u8).into())
     }
 
-    fn get_half(&self, addr: T) -> Result<DataHalf, PageFault<T>> {
+    fn get_half(&self, addr: T) -> Result<DataHalf, MemFault<T>> {
+        MemFault::<T>::check_aligned(addr, DataWidth::Half)?;
         let lsb: u8 = self.get_byte(addr)?.into();
         let msb: u8 = self.get_byte(addr.plus_1())?.into();
         let full = ((msb as u16) << 8) | (lsb as u16);
         Ok(DataHalf::from(full))
     }
 
-    fn set_word(&mut self, addr: T, value: DataWord) -> Result<(), PageFault<T>> {
+    fn set_word(&mut self, addr: T, value: DataWord) -> Result<(), MemFault<T>> {
+        MemFault::<T>::check_aligned(addr, DataWidth::Word)?;
         self.set_half(addr, (u32::from(value) as u16).into())?;
         self.set_half(
             addr.plus_1().plus_1(),
@@ -351,19 +418,22 @@ impl<T: ByteAddress> Memory<T> for LinearPagedMemory<T> {
         )
     }
 
-    fn get_word(&self, addr: T) -> Result<DataWord, PageFault<T>> {
+    fn get_word(&self, addr: T) -> Result<DataWord, MemFault<T>> {
+        MemFault::<T>::check_aligned(addr, DataWidth::Word)?;
         let lsb: u16 = self.get_half(addr)?.into();
         let msb: u16 = self.get_half(addr.plus_1().plus_1())?.into();
         let full = ((msb as u32) << 16) | (lsb as u32);
         Ok(DataWord::from(full))
     }
 
-    fn set_doubleword(&mut self, addr: T, value: DataDword) -> Result<(), PageFault<T>> {
+    fn set_doubleword(&mut self, addr: T, value: DataDword) -> Result<(), MemFault<T>> {
+        MemFault::<T>::check_aligned(addr, DataWidth::DoubleWord)?;
         self.set_word(addr, (u64::from(value) as u32).into())?;
         self.set_word(addr.plus_4(), ((u64::from(value) >> 32) as u32).into())
     }
 
-    fn get_doubleword(&self, addr: T) -> Result<DataDword, PageFault<T>> {
+    fn get_doubleword(&self, addr: T) -> Result<DataDword, MemFault<T>> {
+        MemFault::<T>::check_aligned(addr, DataWidth::DoubleWord)?;
         let lsb: u32 = self.get_word(addr)?.into();
         let msb: u32 = self.get_word(addr.plus_4())?.into();
         let full = ((msb as u64) << 32) | (lsb as u64);

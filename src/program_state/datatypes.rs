@@ -441,6 +441,17 @@ pub trait ByteAddress: Clone + Copy + Sized + fmt::Debug + 'static {
     fn plus_4(self) -> Self;
 
     fn plus_1(self) -> Self;
+
+    /// Checks the alignment of the address.
+    fn is_aligned_to(self, width: DataWidth) -> bool {
+        let bits = self.bits();
+        match width {
+            DataWidth::Byte => true,
+            DataWidth::Half => bits & 0b1 == 0,
+            DataWidth::Word => bits & 0b11 == 0,
+            DataWidth::DoubleWord => bits & 0b111 == 0,
+        }
+    }
 }
 
 #[derive(Eq, PartialEq, Debug, Copy, Clone, ConvertInt64)]
