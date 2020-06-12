@@ -3,7 +3,7 @@ use super::parse_error::{ParseError, ParseErrorReporter};
 use super::parser::{Label, LabelRef, ParseResult, Parser};
 use super::partial_inst::{PartialInst, PartialInstType};
 use crate::arch::*;
-use crate::program_state::Program;
+use crate::program_state::{Program, SimpleMemory};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 
@@ -218,8 +218,13 @@ impl<S: Architecture> UnlinkedProgram<S> {
                 },
             )
             .collect();
+        // TODO expose memory configuration
         if reporter.is_empty() {
-            Ok(<S::Program>::new(insts, self.sections))
+            Ok(<S::Program>::new(
+                insts,
+                self.sections,
+                Box::new(SimpleMemory::new()),
+            ))
         } else {
             Err(reporter)
         }
@@ -234,6 +239,7 @@ impl<S: Architecture> UnlinkedProgram<S> {
                 .map(|(_, partial_inst)| partial_inst.try_into_concrete_inst())
                 .collect(),
             self.sections,
+            Box::new(SimpleMemory::new()),
         )
     }
 }

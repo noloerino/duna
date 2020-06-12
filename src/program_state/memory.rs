@@ -28,7 +28,7 @@ pub trait Memory<T: ByteAddress> {
     /// Faults if the page is unmapped.
     fn fault_if_unmapped(&self, addr: T) -> Result<(), PageFault<T>>;
     /// Maps a page to physical memory if it is not already mapped. Returns a reference to the page.
-    fn map_page(&self, vpn: VirtPN) -> Option<&MemPage>;
+    fn map_page(&mut self, vpn: VirtPN) -> Option<&mut MemPage>;
 
     /// Stores an 8-bit byte to memory.
     fn set_byte(&mut self, addr: T, value: DataByte) -> Result<(), PageFault<T>>;
@@ -46,6 +46,24 @@ pub trait Memory<T: ByteAddress> {
     fn set_doubleword(&mut self, addr: T, value: DataDword) -> Result<(), PageFault<T>>;
     /// Reads a double word from memory.
     fn get_doubleword(&self, addr: T) -> Result<DataDword, PageFault<T>>;
+
+    fn set(&mut self, addr: T, value: DataEnum) -> Result<(), PageFault<T>> {
+        match value {
+            DataEnum::Byte(v) => self.set_byte(addr, v),
+            DataEnum::Half(v) => self.set_half(addr, v),
+            DataEnum::Word(v) => self.set_word(addr, v),
+            DataEnum::DoubleWord(v) => self.set_doubleword(addr, v),
+        }
+    }
+
+    fn get(&self, addr: T, w: DataWidth) -> Result<DataEnum, PageFault<T>> {
+        Ok(match w {
+            DataWidth::Byte => DataEnum::Byte(self.get_byte(addr)?),
+            DataWidth::Half => DataEnum::Half(self.get_half(addr)?),
+            DataWidth::Word => DataEnum::Word(self.get_word(addr)?),
+            DataWidth::DoubleWord => DataEnum::DoubleWord(self.get_doubleword(addr)?),
+        })
+    }
 }
 
 /// A simple memory backed by a word-addressed hashmap.
@@ -63,25 +81,25 @@ impl<T: ByteAddress> SimpleMemory<T> {
 }
 
 impl<T: ByteAddress> Memory<T> for SimpleMemory<T> {
-    fn is_mapped(&self, addr: T) -> bool {
+    fn is_mapped(&self, _addr: T) -> bool {
         true
     }
 
-    fn fault_if_unmapped(&self, addr: T) -> Result<(), PageFault<T>> {
+    fn fault_if_unmapped(&self, _addr: T) -> Result<(), PageFault<T>> {
         Ok(())
     }
 
-    fn map_page(&self, vpn: VirtPN) -> Option<&MemPage> {
+    fn map_page(&mut self, _vpn: VirtPN) -> Option<&mut MemPage> {
         None
     }
 
     fn set_byte(&mut self, addr: T, value: DataByte) -> Result<(), PageFault<T>> {
         let offs = addr.get_word_offset();
-        let word_val = if let Some(&old_val) = self.store.get(&addr.to_word_address()) {
-            old_val
-        } else {
-            DataWord::zero()
-        };
+        let word_val = self
+            .store
+            .get(&addr.to_word_address())
+            .map(Clone::clone)
+            .unwrap_or(DataWord::zero());
         self.set_word(addr, word_val.set_byte(offs, value))
     }
 
@@ -111,11 +129,11 @@ impl<T: ByteAddress> Memory<T> for SimpleMemory<T> {
     }
 
     fn get_word(&self, addr: T) -> Result<DataWord, PageFault<T>> {
-        Ok(if let Some(&v) = self.store.get(&addr.to_word_address()) {
-            v
-        } else {
-            DataWord::zero()
-        })
+        Ok(self
+            .store
+            .get(&addr.to_word_address())
+            .map(Clone::clone)
+            .unwrap_or(DataWord::zero()))
     }
 
     fn set_doubleword(&mut self, addr: T, value: DataDword) -> Result<(), PageFault<T>> {
@@ -134,12 +152,14 @@ impl<T: ByteAddress> Memory<T> for SimpleMemory<T> {
         let upper_value = self
             .store
             .get(&upper_word_addr)
-            .unwrap_or(&DataWord::from(0));
+            .map(Clone::clone)
+            .unwrap_or(DataWord::from(0));
         let lower_value = self
             .store
             .get(&lower_word_addr)
-            .unwrap_or(&DataWord::from(0));
-        Ok(DataDword::from_words(*lower_value, *upper_value))
+            .map(Clone::clone)
+            .unwrap_or(DataWord::from(0));
+        Ok(DataDword::from_words(lower_value, upper_value))
     }
 }
 
@@ -148,6 +168,7 @@ type PhysPN = usize;
 type PageOffset = usize;
 
 /// Maps a virtual page to a physical one.
+#[derive(Copy, Clone)]
 struct PTEntry {
     /// The virtual page number.
     pub vpn: VirtPN,
@@ -157,7 +178,7 @@ struct PTEntry {
 
 /// Represents a page of memory.
 /// TODO implement default value
-struct MemPage {
+pub struct MemPage {
     /// To ensure the simulator doesn't waste space allocating the full size of the page,
     /// this backing store allocates bytes lazily.
     /// TODO do something more efficient like a u64
@@ -180,7 +201,6 @@ impl MemPage {
             *v
         } else {
             let default_value = DataByte::from(0u8);
-            self.backing.insert(offs, default_value);
             default_value
         }
     }
@@ -237,6 +257,15 @@ impl<T: ByteAddress> LinearPagedMemory<T> {
         }
         None
     }
+
+    fn get_page(&self, vpn: VirtPN) -> Option<&MemPage> {
+        if let Some(idx) = self.page_table.iter().position(|&e| e.vpn == vpn) {
+            let e = self.page_table.get(idx).unwrap();
+            self.phys_mem.get(&e.ppn)
+        } else {
+            None
+        }
+    }
 }
 
 impl<T: ByteAddress> Memory<T> for LinearPagedMemory<T> {
@@ -258,7 +287,9 @@ impl<T: ByteAddress> Memory<T> for LinearPagedMemory<T> {
     /// Since we're following an LRU policy, this page is placed at the front of the vec, which
     /// we couldn't do if we were an actual OS but we're not so who cares.
     /// Returns the page, or None on failure.
-    fn map_page(&self, vpn: VirtPN) -> Option<&MemPage> {
+    fn map_page(&mut self, vpn: VirtPN) -> Option<&mut MemPage> {
+        // get a new ppn
+        let ppn = self.lowest_free_ppn().unwrap();
         let page_table = &mut self.page_table;
         Some(
             if let Some(idx) = page_table.iter().position(|&e| e.vpn == vpn) {
@@ -266,7 +297,7 @@ impl<T: ByteAddress> Memory<T> for LinearPagedMemory<T> {
                 // remove and move to front of vec
                 let e = page_table.remove(idx);
                 page_table.insert(0, e);
-                self.phys_mem.get(&e.ppn).unwrap()
+                self.phys_mem.get_mut(&e.ppn).unwrap()
             } else {
                 // create new entry
                 // check if eviction is needed
@@ -277,12 +308,10 @@ impl<T: ByteAddress> Memory<T> for LinearPagedMemory<T> {
                 }
                 // check if entry was previously paged out
                 let page = self.paged_out.remove(&vpn).unwrap_or(MemPage::new());
-                // get a new ppn
-                let ppn = self.lowest_free_ppn().unwrap();
                 let e = PTEntry { vpn, ppn };
                 page_table.insert(0, e);
                 self.phys_mem.insert(ppn, page);
-                self.phys_mem.get(&ppn).unwrap()
+                self.phys_mem.get_mut(&ppn).unwrap()
             },
         )
     }
@@ -297,7 +326,7 @@ impl<T: ByteAddress> Memory<T> for LinearPagedMemory<T> {
     fn get_byte(&self, addr: T) -> Result<DataByte, PageFault<T>> {
         self.fault_if_unmapped(addr)?;
         let (vpn, offs) = self.split_addr(addr);
-        Ok(self.map_page(vpn).unwrap().get_byte(offs))
+        Ok(self.get_page(vpn).unwrap().get_byte(offs))
     }
 
     fn set_half(&mut self, addr: T, value: DataHalf) -> Result<(), PageFault<T>> {

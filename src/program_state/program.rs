@@ -62,17 +62,13 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
     }
 
     #[cfg(test)]
-    pub fn memory_get_word(&self, addr: T::ByteAddr) -> Result<DataWord, PageFault<T::ByteAddr>> {
-        self.user_state.memory.get_word(addr)
+    pub fn memory_get_word(&self, addr: T::ByteAddr) -> DataWord {
+        self.user_state.memory.get_word(addr).unwrap()
     }
 
     #[cfg(test)]
-    pub fn memory_set_word(
-        &mut self,
-        addr: T::ByteAddr,
-        val: DataWord,
-    ) -> Result<(), PageFault<T::ByteAddr>> {
-        self.user_state.memory.set_word(addr, val)
+    pub fn memory_set_word(&mut self, addr: T::ByteAddr, val: DataWord) {
+        self.user_state.memory.set_word(addr, val).unwrap()
     }
 
     pub fn handle_trap(&self, trap_kind: &TrapKind) -> PrivStateChange<T> {
@@ -228,7 +224,7 @@ impl PrivProgState {
                 let ret_reg = <F::Syscalls as SyscallConvention<F, T>>::syscall_return_regs()[0];
                 UserDiff::reg_write_pc_p4(user_state, ret_reg, *len)
             }
-            Exit => unimplemented!(),
+            Terminate(_) => unimplemented!(),
         }
     }
 
@@ -285,12 +281,8 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> UserProgState<F, T> {
         {
             self.regfile.set(reg, new_value);
         }
-        if let Some(MemDiff {
-            addr,
-            val: WordChange { new_value, .. },
-        }) = diff.mem
-        {
-            self.memory.set_word(addr, new_value);
+        if let Some(MemDiff { addr, new_val, .. }) = diff.mem {
+            self.memory.set(addr, new_val).unwrap();
         }
     }
 
@@ -303,12 +295,8 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> UserProgState<F, T> {
         {
             self.regfile.set(reg, old_value);
         }
-        if let Some(MemDiff {
-            addr,
-            val: WordChange { old_value, .. },
-        }) = diff.mem
-        {
-            self.memory.set_word(addr, old_value);
+        if let Some(MemDiff { addr, old_val, .. }) = diff.mem {
+            self.memory.set(addr, old_val).unwrap();
         }
     }
 }
@@ -317,12 +305,6 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> UserProgState<F, T> {
 struct RegDataChange<T: MachineDataWidth> {
     old_value: T::RegData,
     new_value: T::RegData,
-}
-
-#[derive(Copy, Clone)]
-struct WordChange {
-    old_value: DataWord,
-    new_value: DataWord,
 }
 
 /// A change to the program counter.
@@ -337,10 +319,11 @@ struct RegDiff<R: IRegister, T: MachineDataWidth> {
     val: RegDataChange<T>,
 }
 
-/// A change to memory.
+/// A change to memory. old_val and new_val must have the same width.
 struct MemDiff<T: MachineDataWidth> {
-    addr: <T::ByteAddr as ByteAddress>::WordAddress,
-    val: WordChange,
+    addr: T::ByteAddr,
+    old_val: DataEnum,
+    new_val: DataEnum,
 }
 
 /// Represents a possible cause for the termination of a program.
@@ -466,19 +449,17 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> UserDiff<F, T> {
     /// This may trap to the OS in the event of exceptional events like a page fault.
     pub fn mem_write_op(
         state: &UserProgState<F, T>,
-        addr: <T::ByteAddr as ByteAddress>::WordAddress,
-        val: DataWord,
-    ) -> Self {
-        UserDiff::new_pc_p4(
+        addr: T::ByteAddr,
+        val: DataEnum,
+    ) -> Result<Self, PageFault<T::ByteAddr>> {
+        Ok(UserDiff::new_pc_p4(
             state,
             None,
             Some(MemDiff {
                 addr,
-                val: WordChange {
-                    old_value: state.memory.get_word(addr),
-                    new_value: val,
-                },
+                old_val: state.memory.get(addr, val.width())?,
+                new_val: val,
             }),
-        )
+        ))
     }
 }

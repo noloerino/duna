@@ -273,8 +273,8 @@ impl<T: MachineDataWidth> ITypeLoad<T> for Lb {
         }
     }
 
-    fn eval(mem: &dyn Memory<T>, addr: T::ByteAddr) -> T::RegData {
-        <T::RegData>::sign_ext_from_byte(mem.get_byte(addr))
+    fn eval(mem: &Box<dyn Memory<T::ByteAddr>>, addr: T::ByteAddr) -> T::RegData {
+        <T::RegData>::sign_ext_from_byte(mem.get_byte(addr).unwrap())
     }
 }
 
@@ -288,8 +288,8 @@ impl<T: MachineDataWidth> ITypeLoad<T> for Lbu {
         }
     }
 
-    fn eval(mem: &dyn Memory<T>, addr: T::ByteAddr) -> T::RegData {
-        <T::RegData>::zero_pad_from_byte(mem.get_byte(addr))
+    fn eval(mem: &Box<dyn Memory<T::ByteAddr>>, addr: T::ByteAddr) -> T::RegData {
+        <T::RegData>::zero_pad_from_byte(mem.get_byte(addr).unwrap())
     }
 }
 
@@ -304,12 +304,13 @@ impl<T: MachineDataWidth> ITypeLoad<T> for Lh {
     }
 
     // TODO define alignment behavior
-    fn eval(mem: &dyn Memory<T>, addr: T::ByteAddr) -> T::RegData {
+    fn eval(mem: &Box<dyn Memory<T::ByteAddr>>, addr: T::ByteAddr) -> T::RegData {
         let og_addr: T::Signed = addr.into();
         let second_byte_addr: T::ByteAddr = (og_addr.wrapping_add(&T::sgn_one())).into();
         let upper_byte: T::Signed =
-            <T::RegData>::sign_ext_from_byte(mem.get_byte(second_byte_addr)).into();
-        let lower_byte: T::Signed = <T::RegData>::zero_pad_from_byte(mem.get_byte(addr)).into();
+            <T::RegData>::sign_ext_from_byte(mem.get_byte(second_byte_addr).unwrap()).into();
+        let lower_byte: T::Signed =
+            <T::RegData>::zero_pad_from_byte(mem.get_byte(addr).unwrap()).into();
         ((upper_byte << 8) | lower_byte).into()
     }
 }
@@ -325,12 +326,13 @@ impl<T: MachineDataWidth> ITypeLoad<T> for Lhu {
     }
 
     // TODO define alignment behavior
-    fn eval(mem: &dyn Memory<T>, addr: T::ByteAddr) -> T::RegData {
+    fn eval(mem: &Box<dyn Memory<T::ByteAddr>>, addr: T::ByteAddr) -> T::RegData {
         let og_addr: T::Signed = addr.into();
         let second_byte_addr: T::ByteAddr = (og_addr.wrapping_add(&T::sgn_one())).into();
         let upper_byte: T::Signed =
-            <T::RegData>::zero_pad_from_byte(mem.get_byte(second_byte_addr)).into();
-        let lower_byte: T::Signed = <T::RegData>::zero_pad_from_byte(mem.get_byte(addr)).into();
+            <T::RegData>::zero_pad_from_byte(mem.get_byte(second_byte_addr).unwrap()).into();
+        let lower_byte: T::Signed =
+            <T::RegData>::zero_pad_from_byte(mem.get_byte(addr).unwrap()).into();
         ((upper_byte << 8) | lower_byte).into()
     }
 }
@@ -364,8 +366,8 @@ impl<T: MachineDataWidth> ITypeLoad<T> for Lw {
     }
 
     // TODO define alignment behavior
-    fn eval(mem: &dyn Memory<T>, addr: T::ByteAddr) -> T::RegData {
-        <T::RegData>::sign_ext_from_word(mem.get_word(addr.to_word_address()))
+    fn eval(mem: &Box<dyn Memory<T::ByteAddr>>, addr: T::ByteAddr) -> T::RegData {
+        <T::RegData>::sign_ext_from_word(mem.get_word(addr).unwrap())
     }
 }
 
@@ -384,14 +386,10 @@ impl<T: MachineDataWidth> SType<T> for Sb {
         rs2: RiscVRegister,
         imm: BitStr32,
     ) -> UserDiff<RiscV<T>, T> {
-        // TODO implement more granular diffs
         let base_addr: T::Signed = state.regfile.read(rs1).into();
         let byte_addr: T::ByteAddr = (base_addr.wrapping_add(&imm.into())).into();
-        let new_word = state.memory.get_word(byte_addr.to_word_address()).set_byte(
-            byte_addr.get_word_offset(),
-            state.regfile.read(rs2).get_byte(0),
-        );
-        UserDiff::mem_write_op(state, byte_addr.to_word_address(), new_word)
+        let new_byte = state.regfile.read(rs2).get_byte(0);
+        UserDiff::mem_write_op(state, byte_addr, DataEnum::Byte(DataByte::from(new_byte))).unwrap()
     }
 }
 
@@ -410,22 +408,12 @@ impl<T: MachineDataWidth> SType<T> for Sh {
         rs2: RiscVRegister,
         imm: BitStr32,
     ) -> UserDiff<RiscV<T>, T> {
-        // TODO implement more granular diffs
         let base_addr: T::Signed = state.regfile.read(rs1).into();
         let byte_addr: T::ByteAddr = (base_addr.wrapping_add(&imm.into())).into();
-        let new_word = state
-            .memory
-            .get_word(byte_addr.to_word_address())
-            .set_byte(
-                byte_addr.get_word_offset(),
-                state.regfile.read(rs2).get_byte(0),
-            )
-            .set_byte(
-                // will panic if not properly aligned, but we don't care yet
-                byte_addr.get_word_offset().wrapping_add(1),
-                state.regfile.read(rs2).get_byte(1),
-            );
-        UserDiff::mem_write_op(state, byte_addr.to_word_address(), new_word)
+        let lower_byte: u8 = state.regfile.read(rs2).get_byte(0).into();
+        let upper_byte: u8 = state.regfile.read(rs2).get_byte(1).into();
+        let full: u16 = ((upper_byte as u16) << 8) | (lower_byte as u16);
+        UserDiff::mem_write_op(state, byte_addr, DataEnum::Half(full.into())).unwrap()
     }
 }
 
@@ -448,9 +436,10 @@ impl<T: MachineDataWidth> SType<T> for Sw {
         let byte_addr: T::ByteAddr = (base_addr.wrapping_add(&imm.into())).into();
         UserDiff::mem_write_op(
             state,
-            byte_addr.to_word_address(),
-            state.regfile.read(rs2).get_lower_word(),
+            byte_addr,
+            DataEnum::Word(state.regfile.read(rs2).get_lower_word()),
         )
+        .unwrap()
     }
 }
 
@@ -472,7 +461,7 @@ mod test {
     const RS2_NEG: RiscVRegister = S1;
 
     fn get_init_state() -> ProgramState<RiscV<Width32b>, Width32b> {
-        let mut state = ProgramState::new();
+        let mut state: ProgramState<RiscV<Width32b>, Width32b> = Default::default();
         state.regfile_set(RS1, DataWord::from(RS1_VAL));
         state.regfile_set(RS2_POS, DataWord::from(RS2_VAL_POS));
         state.regfile_set(RS2_NEG, DataWord::from(RS2_VAL_NEG));
@@ -481,7 +470,7 @@ mod test {
 
     #[test]
     fn test_write_x0() {
-        let mut state = ProgramState::<RiscV<Width32b>, Width32b>::new();
+        let mut state: ProgramState<RiscV<Width32b>, Width32b> = Default::default();
         state.apply_inst(&Addi::new(ZERO, ZERO, DataWord::from(0x100)));
         assert_eq!(i32::from(state.regfile_read(ZERO)), 0);
     }
@@ -687,7 +676,7 @@ mod test {
 
     #[test]
     fn test_b_type_insts() {
-        let mut state = ProgramState::new();
+        let mut state: ProgramState<RiscV<Width32b>, Width32b> = Default::default();
         test_b_type::<Beq>(
             &mut state,
             vec![
@@ -804,7 +793,7 @@ mod test {
     fn test_ecall() {
         let mut state = get_init_state();
         let addr = ByteAddr32::from(state.regfile_read(SP));
-        state.memory_set_word(addr.to_word_address(), DataWord::from(0xDEAD_BEEFu32));
+        state.memory_set_word(addr, DataWord::from(0xDEAD_BEEFu32));
         // Set ecall code
         state.regfile_set(
             A7,
@@ -853,10 +842,7 @@ mod test {
         let mut state = get_init_state();
         let base_addr = 0xFFFF_0004u32;
         let test_data = 0xABCD_EF01u32;
-        state.memory_set_word(
-            ByteAddr32::from(base_addr).to_word_address(),
-            DataWord::from(test_data),
-        );
+        state.memory_set_word(ByteAddr32::from(base_addr), DataWord::from(test_data));
         state.regfile_set(T0, DataWord::from(base_addr));
         // signed loads
         state.apply_inst(&Lb::new(T1, T0, DataWord::from(0)));
@@ -883,10 +869,7 @@ mod test {
         let mut state = get_init_state();
         let base_addr = 0xFFFF_0004u32;
         let test_data = 0x0BCD_EF01u32;
-        state.memory_set_word(
-            ByteAddr32::from(base_addr).to_word_address(),
-            DataWord::from(test_data),
-        );
+        state.memory_set_word(ByteAddr32::from(base_addr), DataWord::from(test_data));
         state.regfile_set(T0, DataWord::from(base_addr));
         // signed loads
         state.apply_inst(&Lh::new(T1, T0, DataWord::from(0)));
@@ -905,10 +888,7 @@ mod test {
         let mut state = get_init_state();
         let base_addr = 0xFFFF_0004u32;
         let test_data = 0xABCD_EF01u32;
-        state.memory_set_word(
-            ByteAddr32::from(base_addr).to_word_address(),
-            DataWord::from(test_data),
-        );
+        state.memory_set_word(ByteAddr32::from(base_addr), DataWord::from(test_data));
         state.regfile_set(T0, DataWord::from(base_addr));
         state.apply_inst(&Lw::new(T1, T0, DataWord::from(0)));
         assert_eq!(state.regfile_read(T1), DataWord::from(test_data));
@@ -931,12 +911,12 @@ mod test {
             state.apply_inst(&Sb::new(RS1, RS2, DataWord::from(i)));
         }
         assert_eq!(
-            state.memory_get_word(ByteAddr32::from(addr).to_word_address()),
+            state.memory_get_word(ByteAddr32::from(addr)),
             DataWord::from(0x00DE_DEDEu32)
         );
         state.apply_inst(&Sb::new(RS1, RS2, DataWord::from(3)));
         assert_eq!(
-            state.memory_get_word(ByteAddr32::from(addr).to_word_address()),
+            state.memory_get_word(ByteAddr32::from(addr)),
             DataWord::from(0xDEDE_DEDEu32)
         );
     }
@@ -955,7 +935,7 @@ mod test {
             state.apply_inst(&Sh::new(RS1, RS2_POS, DataWord::from(offs)));
             state.apply_inst(&Sh::new(RS1, RS2_NEG, DataWord::from(offs + 2)));
             assert_eq!(
-                state.memory_get_word(((addr + offs) >> 2) as u32),
+                state.memory_get_word((addr + offs).into()),
                 DataWord::from(rs2_val)
             );
         }
@@ -972,7 +952,7 @@ mod test {
             state.regfile_set(RS1, DataWord::from(addr));
             state.regfile_set(RS2, rs2_val);
             state.apply_inst(&Sw::new(RS1, RS2, DataWord::from(offs)));
-            assert_eq!(state.memory_get_word(((addr + offs) >> 2) as u32), rs2_val);
+            assert_eq!(state.memory_get_word((addr + offs).into()), rs2_val);
         }
     }
 }

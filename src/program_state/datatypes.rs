@@ -112,9 +112,29 @@ pub enum DataWidth {
     DoubleWord,
 }
 
+#[derive(Copy, Clone, PartialEq, Debug)]
+pub enum DataEnum {
+    Byte(DataByte),
+    Half(DataHalf),
+    Word(DataWord),
+    DoubleWord(DataDword),
+}
+
+impl DataEnum {
+    pub fn width(self) -> DataWidth {
+        match self {
+            DataEnum::Byte(_) => DataWidth::Byte,
+            DataEnum::Half(_) => DataWidth::Half,
+            DataEnum::Word(_) => DataWidth::Word,
+            DataEnum::DoubleWord(_) => DataWidth::DoubleWord,
+        }
+    }
+}
+
 /// Marker trait for different datatypes.
 pub trait Data: Copy + Clone + PartialEq {
-    fn kind(self) -> DataWidth;
+    fn kind(self) -> DataEnum;
+    fn width(self) -> DataWidth;
 }
 
 /// Represents a 64-bit double-word of data.
@@ -124,7 +144,11 @@ pub struct DataDword {
 }
 
 impl Data for DataDword {
-    fn kind(self) -> DataWidth {
+    fn kind(self) -> DataEnum {
+        DataEnum::DoubleWord(self)
+    }
+
+    fn width(self) -> DataWidth {
         DataWidth::DoubleWord
     }
 }
@@ -222,7 +246,11 @@ pub struct DataWord {
 }
 
 impl Data for DataWord {
-    fn kind(self) -> DataWidth {
+    fn kind(self) -> DataEnum {
+        DataEnum::Word(self)
+    }
+
+    fn width(self) -> DataWidth {
         DataWidth::Word
     }
 }
@@ -317,7 +345,11 @@ pub struct DataHalf {
 }
 
 impl Data for DataHalf {
-    fn kind(self) -> DataWidth {
+    fn kind(self) -> DataEnum {
+        DataEnum::Half(self)
+    }
+
+    fn width(self) -> DataWidth {
         DataWidth::Half
     }
 }
@@ -354,7 +386,11 @@ pub struct DataByte {
 }
 
 impl Data for DataByte {
-    fn kind(self) -> DataWidth {
+    fn kind(self) -> DataEnum {
+        DataEnum::Byte(self)
+    }
+
+    fn width(self) -> DataWidth {
         DataWidth::Byte
     }
 }

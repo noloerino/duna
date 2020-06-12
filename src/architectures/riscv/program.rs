@@ -32,8 +32,12 @@ impl Program<RiscV<Width32b>, Width32b> for RiscVProgram<Width32b> {
     ///
     /// Until paged memory is implemented, rodata is placed sequentially with data, and
     /// no guarantees on read-onliness are enforced.
-    fn new(insts: Vec<RiscVInst<Width32b>>, sections: SectionStore) -> RiscVProgram<Width32b> {
-        let mut state = ProgramState::new();
+    fn new(
+        insts: Vec<RiscVInst<Width32b>>,
+        sections: SectionStore,
+        memory: Box<dyn Memory<ByteAddr32>>,
+    ) -> RiscVProgram<Width32b> {
+        let mut state = ProgramState::new(memory);
         let mut user_state = &mut state.user_state;
         let text_start: ByteAddr32 = RiscVProgram::TEXT_START_32.into();
         let stack_start: ByteAddr32 = RiscVProgram::STACK_START_32.into();
@@ -44,10 +48,10 @@ impl Program<RiscV<Width32b>, Width32b> for RiscVProgram<Width32b> {
         // store instructions
         let mut next_addr: ByteAddr32 = user_state.pc;
         for inst in &insts {
-            user_state.memory.set_word(
-                next_addr.to_word_address(),
-                DataWord::from(inst.to_machine_code()),
-            );
+            user_state
+                .memory
+                .set_word(next_addr, DataWord::from(inst.to_machine_code()))
+                .unwrap();
             next_addr = next_addr.plus_4()
         }
         // store data
@@ -56,6 +60,7 @@ impl Program<RiscV<Width32b>, Width32b> for RiscVProgram<Width32b> {
             user_state
                 .memory
                 .set_byte(RiscVProgram::DATA_START_32.into(), byte.into())
+                .unwrap()
         }
         RiscVProgram { insts, state }
     }
