@@ -20,15 +20,26 @@ impl<T: ByteAddress> PageFault<T> {
 /// All direct memory operations are byte-addressed; behavior for unaligned accesses is left up to
 /// the implementor.
 ///
+/// Read/write operations should not directly map pages; they should instead produce a pagefault,
+/// and the OS should perform the mapping independently.
+///
 /// Read operations will return either the requested data or a PageFault.
 /// Write operations will return a result with an empty value or a PageFault.
 pub trait Memory<T: ByteAddress> {
     /// Checks whether the provided virtual address is mapped.
     fn is_mapped(&self, addr: T) -> bool;
+
     /// Faults if the page is unmapped.
-    fn fault_if_unmapped(&self, addr: T) -> Result<(), PageFault<T>>;
+    fn fault_if_unmapped(&self, addr: T) -> Result<(), PageFault<T>> {
+        if self.is_mapped(addr) {
+            Ok(())
+        } else {
+            Err(PageFault::at_addr(addr))
+        }
+    }
+
     /// Maps a page to physical memory if it is not already mapped. Returns a reference to the page.
-    fn map_page(&mut self, vpn: VirtPN) -> Option<&mut MemPage>;
+    fn map_page(&mut self, vpn: VirtPN);
 
     /// Stores an 8-bit byte to memory.
     fn set_byte(&mut self, addr: T, value: DataByte) -> Result<(), PageFault<T>>;
@@ -81,17 +92,11 @@ impl<T: ByteAddress> SimpleMemory<T> {
 }
 
 impl<T: ByteAddress> Memory<T> for SimpleMemory<T> {
-    fn is_mapped(&self, _addr: T) -> bool {
-        true
+    fn is_mapped(&self, addr: T) -> bool {
+        addr.bits() != 0
     }
 
-    fn fault_if_unmapped(&self, _addr: T) -> Result<(), PageFault<T>> {
-        Ok(())
-    }
-
-    fn map_page(&mut self, _vpn: VirtPN) -> Option<&mut MemPage> {
-        None
-    }
+    fn map_page(&mut self, _vpn: VirtPN) {}
 
     fn set_byte(&mut self, addr: T, value: DataByte) -> Result<(), PageFault<T>> {
         let offs = addr.get_word_offset();
@@ -208,7 +213,6 @@ impl MemPage {
 
 /// A memory backed by a fully associative LRU linear page table.
 pub struct LinearPagedMemory<T: ByteAddress> {
-    phys_addr_len: usize,
     page_offs_len: usize,
     page_count: usize,
     page_table: Vec<PTEntry>,
@@ -228,7 +232,6 @@ impl<T: ByteAddress> LinearPagedMemory<T> {
         // TODO add assertions on page table parameters to ensure nothing is invalid
         let page_count = 1 << (phys_addr_len - page_offs_len);
         LinearPagedMemory {
-            phys_addr_len,
             page_offs_len,
             page_count: page_count,
             page_table: Vec::with_capacity(page_count),
@@ -266,60 +269,58 @@ impl<T: ByteAddress> LinearPagedMemory<T> {
             None
         }
     }
+
+    fn get_mut_page(&mut self, vpn: VirtPN) -> Option<&mut MemPage> {
+        if let Some(idx) = self.page_table.iter().position(|&e| e.vpn == vpn) {
+            let e = self.page_table.get(idx).unwrap();
+            self.phys_mem.get_mut(&e.ppn)
+        } else {
+            None
+        }
+    }
 }
 
 impl<T: ByteAddress> Memory<T> for LinearPagedMemory<T> {
     /// Checks whether the provided virtual address is mapped.
+    /// The 0 page is never considered mapped.
     fn is_mapped(&self, addr: T) -> bool {
         let (vpn, _) = self.split_addr(addr);
-        self.page_table.iter().any(|&e| e.vpn == vpn)
-    }
-
-    fn fault_if_unmapped(&self, addr: T) -> Result<(), PageFault<T>> {
-        if self.is_mapped(addr) {
-            Ok(())
-        } else {
-            Err(PageFault::at_addr(addr))
-        }
+        vpn != 0 && self.page_table.iter().any(|&e| e.vpn == vpn)
     }
 
     /// Maps a page to memory if it is not already mapped, evicting other pages if necessary.
     /// Since we're following an LRU policy, this page is placed at the front of the vec, which
     /// we couldn't do if we were an actual OS but we're not so who cares.
     /// Returns the page, or None on failure.
-    fn map_page(&mut self, vpn: VirtPN) -> Option<&mut MemPage> {
+    fn map_page(&mut self, vpn: VirtPN) {
         // get a new ppn
         let ppn = self.lowest_free_ppn().unwrap();
         let page_table = &mut self.page_table;
-        Some(
-            if let Some(idx) = page_table.iter().position(|&e| e.vpn == vpn) {
-                // check if page already mapped
-                // remove and move to front of vec
-                let e = page_table.remove(idx);
-                page_table.insert(0, e);
-                self.phys_mem.get_mut(&e.ppn).unwrap()
-            } else {
-                // create new entry
-                // check if eviction is needed
-                if page_table.len() == self.page_count {
-                    let evicted = page_table.pop().unwrap();
-                    self.paged_out
-                        .insert(evicted.vpn, self.phys_mem.remove(&evicted.ppn).unwrap());
-                }
-                // check if entry was previously paged out
-                let page = self.paged_out.remove(&vpn).unwrap_or(MemPage::new());
-                let e = PTEntry { vpn, ppn };
-                page_table.insert(0, e);
-                self.phys_mem.insert(ppn, page);
-                self.phys_mem.get_mut(&ppn).unwrap()
-            },
-        )
+        if let Some(idx) = page_table.iter().position(|&e| e.vpn == vpn) {
+            // check if page already mapped
+            // remove and move to front of vec
+            let e = page_table.remove(idx);
+            page_table.insert(0, e);
+        } else {
+            // create new entry
+            // check if eviction is needed
+            if page_table.len() == self.page_count {
+                let evicted = page_table.pop().unwrap();
+                self.paged_out
+                    .insert(evicted.vpn, self.phys_mem.remove(&evicted.ppn).unwrap());
+            }
+            // check if entry was previously paged out
+            let page = self.paged_out.remove(&vpn).unwrap_or(MemPage::new());
+            let e = PTEntry { vpn, ppn };
+            page_table.insert(0, e);
+            self.phys_mem.insert(ppn, page);
+        }
     }
 
     fn set_byte(&mut self, addr: T, value: DataByte) -> Result<(), PageFault<T>> {
         self.fault_if_unmapped(addr)?;
         let (vpn, offs) = self.split_addr(addr);
-        self.map_page(vpn).unwrap().set_byte(offs, value);
+        self.get_mut_page(vpn).unwrap().set_byte(offs, value);
         Ok(())
     }
 

@@ -425,7 +425,7 @@ impl From<DataByte> for i8 {
     }
 }
 
-pub trait ByteAddress: Clone + Copy + fmt::Debug + 'static {
+pub trait ByteAddress: Clone + Copy + Sized + fmt::Debug + 'static {
     type WordAddress: Hash + Eq + Copy + Clone;
 
     /// Gets the number of bits in this address type.
@@ -438,13 +438,9 @@ pub trait ByteAddress: Clone + Copy + fmt::Debug + 'static {
 
     fn get_word_offset(self) -> u8;
 
-    fn plus_4(self) -> Self
-    where
-        Self: Sized;
+    fn plus_4(self) -> Self;
 
-    fn plus_1(self) -> Self
-    where
-        Self: Sized;
+    fn plus_1(self) -> Self;
 }
 
 #[derive(Eq, PartialEq, Debug, Copy, Clone, ConvertInt64)]
