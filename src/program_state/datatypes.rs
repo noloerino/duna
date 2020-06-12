@@ -112,15 +112,36 @@ pub enum DataWidth {
     DoubleWord,
 }
 
+/// Marker trait for different datatypes.
+pub trait Data: Copy + Clone + PartialEq {
+    fn kind(self) -> DataWidth;
+}
+
 /// Represents a 64-bit double-word of data.
 #[derive(Debug, Copy, Clone, PartialEq, ConvertInt64)]
 pub struct DataDword {
     value: u64,
 }
 
+impl Data for DataDword {
+    fn kind(self) -> DataWidth {
+        DataWidth::DoubleWord
+    }
+}
+
 impl DataDword {
     fn new(value: u64) -> DataDword {
         DataDword { value }
+    }
+
+    pub fn from_words(lower: DataWord, upper: DataWord) -> DataDword {
+        DataDword {
+            value: ((upper.value as u64) << 32) | (lower.value as u64),
+        }
+    }
+
+    pub fn get_upper_word(self) -> DataWord {
+        DataWord::from((self.value >> 32) as u32)
     }
 }
 
@@ -198,6 +219,12 @@ impl From<BitStr32> for DataDword {
 /// whether desired behavior is that of a signed or unsigned number.
 pub struct DataWord {
     value: u32,
+}
+
+impl Data for DataWord {
+    fn kind(self) -> DataWidth {
+        DataWidth::Word
+    }
 }
 
 impl DataWord {
@@ -289,6 +316,12 @@ pub struct DataHalf {
     value: u16,
 }
 
+impl Data for DataHalf {
+    fn kind(self) -> DataWidth {
+        DataWidth::Half
+    }
+}
+
 impl From<u16> for DataHalf {
     fn from(value: u16) -> DataHalf {
         DataHalf { value }
@@ -318,6 +351,12 @@ impl From<DataHalf> for i16 {
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct DataByte {
     value: u8,
+}
+
+impl Data for DataByte {
+    fn kind(self) -> DataWidth {
+        DataWidth::Byte
+    }
 }
 
 impl DataByte {
@@ -350,14 +389,24 @@ impl From<DataByte> for i8 {
     }
 }
 
-pub trait ByteAddress: Clone + Copy {
+pub trait ByteAddress: Clone + Copy + fmt::Debug + 'static {
     type WordAddress: Hash + Eq + Copy + Clone;
+
+    /// Gets the number of bits in this address type.
+    fn bitlen() -> usize;
+
+    /// Gets the raw bits in this address.
+    fn bits(self) -> u64;
 
     fn to_word_address(self) -> Self::WordAddress;
 
     fn get_word_offset(self) -> u8;
 
     fn plus_4(self) -> Self
+    where
+        Self: Sized;
+
+    fn plus_1(self) -> Self
     where
         Self: Sized;
 }
@@ -376,6 +425,14 @@ impl ByteAddr64 {
 impl ByteAddress for ByteAddr64 {
     type WordAddress = u64;
 
+    fn bitlen() -> usize {
+        64
+    }
+
+    fn bits(self) -> u64 {
+        self.value
+    }
+
     fn to_word_address(self) -> Self::WordAddress {
         self.value >> 2
     }
@@ -386,6 +443,10 @@ impl ByteAddress for ByteAddr64 {
 
     fn plus_4(self) -> ByteAddr64 {
         ByteAddr64::new(self.value.wrapping_add(4))
+    }
+
+    fn plus_1(self) -> ByteAddr64 {
+        ByteAddr64::new(self.value.wrapping_add(1))
     }
 }
 
@@ -409,6 +470,14 @@ impl ByteAddr32 {
 impl ByteAddress for ByteAddr32 {
     type WordAddress = u32;
 
+    fn bitlen() -> usize {
+        32
+    }
+
+    fn bits(self) -> u64 {
+        self.value as u64
+    }
+
     fn to_word_address(self) -> Self::WordAddress {
         self.value >> 2
     }
@@ -419,6 +488,10 @@ impl ByteAddress for ByteAddr32 {
 
     fn plus_4(self) -> ByteAddr32 {
         ByteAddr32::new(self.value.wrapping_add(4))
+    }
+
+    fn plus_1(self) -> ByteAddr32 {
+        ByteAddr32::new(self.value.wrapping_add(1))
     }
 }
 

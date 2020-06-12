@@ -1,5 +1,5 @@
 use super::datatypes::*;
-use super::memory::Memory;
+use super::memory::*;
 use super::registers::{IRegister, RegFile};
 use crate::arch::*;
 use crate::assembler::SectionStore;
@@ -10,7 +10,11 @@ where
     F: ArchFamily<T>,
     T: MachineDataWidth,
 {
-    fn new(insts: Vec<F::Instruction>, sections: SectionStore) -> Self;
+    fn new(
+        insts: Vec<F::Instruction>,
+        sections: SectionStore,
+        memory: Box<dyn Memory<T::ByteAddr>>,
+    ) -> Self;
     /// Prints out all the instructions that this program contains.
     fn dump_insts(&self);
     /// Runs the program to completion, returning an exit code.
@@ -30,7 +34,7 @@ pub struct ProgramState<F: ArchFamily<T>, T: MachineDataWidth> {
 
 impl<F: ArchFamily<T>, T: MachineDataWidth> Default for ProgramState<F, T> {
     fn default() -> Self {
-        ProgramState::new()
+        ProgramState::new(Box::new(SimpleMemory::new()))
     }
 }
 
@@ -57,16 +61,18 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
         self.user_state.regfile.set(reg, val);
     }
 
-    pub fn memory_get_word(&self, addr: <<T>::ByteAddr as ByteAddress>::WordAddress) -> DataWord {
+    #[cfg(test)]
+    pub fn memory_get_word(&self, addr: T::ByteAddr) -> Result<DataWord, PageFault<T::ByteAddr>> {
         self.user_state.memory.get_word(addr)
     }
 
+    #[cfg(test)]
     pub fn memory_set_word(
         &mut self,
-        addr: <<T>::ByteAddr as ByteAddress>::WordAddress,
+        addr: T::ByteAddr,
         val: DataWord,
-    ) {
-        self.user_state.memory.set_word(addr, val);
+    ) -> Result<(), PageFault<T::ByteAddr>> {
+        self.user_state.memory.set_word(addr, val)
     }
 
     pub fn handle_trap(&self, trap_kind: &TrapKind) -> PrivStateChange<T> {
@@ -115,10 +121,10 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
         panic!("Unknown syscall")
     }
 
-    pub fn new() -> ProgramState<F, T> {
+    pub fn new(memory: Box<dyn Memory<T::ByteAddr>>) -> ProgramState<F, T> {
         ProgramState {
             priv_state: PrivProgState::new(),
-            user_state: UserProgState::new(),
+            user_state: UserProgState::new(memory),
         }
     }
 
@@ -207,7 +213,13 @@ impl PrivProgState {
                 let count: usize = T::usgn_to_usize(len_val);
                 let base_addr: T::Unsigned = (*buf).into();
                 let bytes: Vec<u8> = (0..count)
-                    .map(|i| u8::from(memory.get_byte((base_addr + T::usize_to_usgn(i)).into())))
+                    .map(|i| {
+                        u8::from(
+                            memory
+                                .get_byte((base_addr + T::usize_to_usgn(i)).into())
+                                .unwrap(),
+                        )
+                    })
                     .collect();
                 // TODO impl for other files
                 print!("{}", String::from_utf8_lossy(&bytes));
@@ -245,21 +257,22 @@ impl PrivProgState {
 pub struct UserProgState<F: ArchFamily<T>, T: MachineDataWidth> {
     pub pc: T::ByteAddr,
     pub regfile: RegFile<F::Register, T>,
-    pub memory: Memory<T>,
+    pub memory: Box<dyn Memory<T::ByteAddr>>,
 }
 
+#[cfg(test)]
 impl<F: ArchFamily<T>, T: MachineDataWidth> Default for UserProgState<F, T> {
     fn default() -> Self {
-        UserProgState::new()
+        UserProgState::new(Box::new(SimpleMemory::new()))
     }
 }
 
 impl<F: ArchFamily<T>, T: MachineDataWidth> UserProgState<F, T> {
-    pub fn new() -> UserProgState<F, T> {
+    pub fn new(memory: Box<dyn Memory<T::ByteAddr>>) -> UserProgState<F, T> {
         UserProgState {
             pc: T::sgn_zero().into(),
             regfile: RegFile::new(),
-            memory: Memory::new(),
+            memory,
         }
     }
 
@@ -330,6 +343,17 @@ struct MemDiff<T: MachineDataWidth> {
     val: WordChange,
 }
 
+/// Represents a possible cause for the termination of a program.
+#[derive(Copy, Clone)]
+pub enum TermCause {
+    /// The program was terminated by a segmentation fault, i.e. the program attempted to
+    /// access invalid memory.
+    Segfault,
+    /// The program was terminated by a bus error, i.e. the program attempted to access a physically
+    /// invalid address
+    BusError,
+}
+
 /// Represents the type of trap being raised from user mode.
 /// See "Machine Cause Register" in the RISCV privileged spec for details.
 pub enum TrapKind {
@@ -357,8 +381,7 @@ pub enum ProgramDiff<F: ArchFamily<T>, T: MachineDataWidth> {
 /// such as a write to a file.
 pub enum PrivStateChange<T: MachineDataWidth> {
     /// Indicates that the program should terminate.
-    /// TODO implement exit codes
-    Exit,
+    Terminate(TermCause),
     NoChange,
     /// Represents a file write.
     /// * fd: the file descriptor

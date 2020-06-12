@@ -273,7 +273,7 @@ impl<T: MachineDataWidth> ITypeLoad<T> for Lb {
         }
     }
 
-    fn eval(mem: &Memory<T>, addr: T::ByteAddr) -> T::RegData {
+    fn eval(mem: &dyn Memory<T>, addr: T::ByteAddr) -> T::RegData {
         <T::RegData>::sign_ext_from_byte(mem.get_byte(addr))
     }
 }
@@ -288,7 +288,7 @@ impl<T: MachineDataWidth> ITypeLoad<T> for Lbu {
         }
     }
 
-    fn eval(mem: &Memory<T>, addr: T::ByteAddr) -> T::RegData {
+    fn eval(mem: &dyn Memory<T>, addr: T::ByteAddr) -> T::RegData {
         <T::RegData>::zero_pad_from_byte(mem.get_byte(addr))
     }
 }
@@ -304,7 +304,7 @@ impl<T: MachineDataWidth> ITypeLoad<T> for Lh {
     }
 
     // TODO define alignment behavior
-    fn eval(mem: &Memory<T>, addr: T::ByteAddr) -> T::RegData {
+    fn eval(mem: &dyn Memory<T>, addr: T::ByteAddr) -> T::RegData {
         let og_addr: T::Signed = addr.into();
         let second_byte_addr: T::ByteAddr = (og_addr.wrapping_add(&T::sgn_one())).into();
         let upper_byte: T::Signed =
@@ -325,7 +325,7 @@ impl<T: MachineDataWidth> ITypeLoad<T> for Lhu {
     }
 
     // TODO define alignment behavior
-    fn eval(mem: &Memory<T>, addr: T::ByteAddr) -> T::RegData {
+    fn eval(mem: &dyn Memory<T>, addr: T::ByteAddr) -> T::RegData {
         let og_addr: T::Signed = addr.into();
         let second_byte_addr: T::ByteAddr = (og_addr.wrapping_add(&T::sgn_one())).into();
         let upper_byte: T::Signed =
@@ -364,7 +364,7 @@ impl<T: MachineDataWidth> ITypeLoad<T> for Lw {
     }
 
     // TODO define alignment behavior
-    fn eval(mem: &Memory<T>, addr: T::ByteAddr) -> T::RegData {
+    fn eval(mem: &dyn Memory<T>, addr: T::ByteAddr) -> T::RegData {
         <T::RegData>::sign_ext_from_word(mem.get_word(addr.to_word_address()))
     }
 }
