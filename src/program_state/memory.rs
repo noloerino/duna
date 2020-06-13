@@ -9,7 +9,7 @@ type PageOffset = usize;
 
 /// Represents a page of memory.
 /// TODO implement default value
-pub struct MemPage {
+struct MemPage {
     /// To ensure the simulator doesn't waste space allocating the full size of the page,
     /// this backing store allocates doublewords lazily.
     backing: HashMap<PageOffset, DataDword>,
@@ -152,7 +152,7 @@ impl MemPage {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct MemFault<T: ByteAddress> {
     user_vaddr: T,
     cause: MemFaultCause,
@@ -193,7 +193,7 @@ impl<T: ByteAddress> MemFault<T> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum MemFaultCause {
     PageFault,
     SegFault,
@@ -394,15 +394,16 @@ impl<T: ByteAddress> LinearPagedMemory<T> {
         }
     }
 
-    fn split_addr(&self, addr: T) -> (VirtPN, PageOffset) {
+    fn get_vpn(&self, addr: T) -> VirtPN {
+        let bits = addr.bits();
+        (bits >> self.page_offs_len) as usize
+    }
+
+    fn get_page_offs(&self, addr: T) -> PageOffset {
         // the page offset comes from the lower page_offs_len bits
-        // the vpn is the rest
         let bits = addr.bits();
         let lsb_mask = !((-1i64 as u64) << self.page_offs_len);
-        (
-            (bits >> self.page_offs_len) as usize,
-            (bits & lsb_mask) as usize,
-        )
+        (bits & lsb_mask) as usize
     }
 
     fn lowest_free_ppn(&self) -> Option<PhysPN> {
@@ -414,21 +415,33 @@ impl<T: ByteAddress> LinearPagedMemory<T> {
         None
     }
 
-    fn get_page(&self, vpn: VirtPN) -> Option<&MemPage> {
-        if let Some(idx) = self.page_table.iter().position(|&e| e.vpn == vpn) {
-            let e = self.page_table.get(idx).unwrap();
-            self.phys_mem.get(&e.ppn)
+    /// Gets a reference the page in which this address occurs.
+    /// Raises a page fault if it is unmapped.
+    ///
+    /// Note: This should page fault instead of segfaulting on an access to the null page, as the
+    /// OS should make a call to map_page to handle the page fault. Only then should the segfault
+    /// occur.
+    fn get_page(&self, addr: T) -> Result<&MemPage, MemFault<T>> {
+        let vpn = self.get_vpn(addr);
+        if let Some(pte) = self.page_table.iter().find(|&e| e.vpn == vpn) {
+            Ok(self.phys_mem.get(&pte.ppn).unwrap())
         } else {
-            None
+            Err(MemFault::pagefault_at_addr(addr))
         }
     }
 
-    fn get_mut_page(&mut self, vpn: VirtPN) -> Option<&mut MemPage> {
-        if let Some(idx) = self.page_table.iter().position(|&e| e.vpn == vpn) {
-            let e = self.page_table.get(idx).unwrap();
-            self.phys_mem.get_mut(&e.ppn)
+    /// Gets a mutable reference to the page in which this address occurs.
+    /// Raises a page fault if it is unmapped.
+    ///
+    /// Note: This should page fault instead of segfaulting on an access to the null page, as the
+    /// OS should make a call to map_page to handle the page fault. Only then should the segfault
+    /// occur.
+    fn get_mut_page(&mut self, addr: T) -> Result<&mut MemPage, MemFault<T>> {
+        let vpn = self.get_vpn(addr);
+        if let Some(pte) = self.page_table.iter().find(|&e| e.vpn == vpn) {
+            Ok(self.phys_mem.get_mut(&pte.ppn).unwrap())
         } else {
-            None
+            Err(MemFault::pagefault_at_addr(addr))
         }
     }
 }
@@ -437,8 +450,7 @@ impl<T: ByteAddress> Memory<T> for LinearPagedMemory<T> {
     /// Checks whether the provided virtual address is mapped.
     /// The 0 page is never considered mapped.
     fn is_mapped(&self, addr: T) -> bool {
-        let (vpn, _) = self.split_addr(addr);
-        vpn != 0 && self.page_table.iter().any(|&e| e.vpn == vpn)
+        self.get_page(addr).is_ok()
     }
 
     /// Maps a page to memory if it is not already mapped, evicting other pages if necessary.
@@ -447,7 +459,7 @@ impl<T: ByteAddress> Memory<T> for LinearPagedMemory<T> {
     ///
     /// The 0 page cannot be mapped, and any attempt to do so will cause a segfault.
     fn map_page(&mut self, addr: T) -> Result<(), MemFault<T>> {
-        let (vpn, _) = self.split_addr(addr);
+        let vpn = self.get_vpn(addr);
         if vpn == 0 {
             return Err(MemFault::<T>::segfault_at_addr(addr));
         }
@@ -478,62 +490,54 @@ impl<T: ByteAddress> Memory<T> for LinearPagedMemory<T> {
 
     fn set_byte(&mut self, addr: T, value: DataByte) -> Result<(), MemFault<T>> {
         MemFault::<T>::check_aligned(addr, DataWidth::Byte)?;
-        self.fault_if_unmapped(addr)?;
-        let (vpn, offs) = self.split_addr(addr);
-        self.get_mut_page(vpn).unwrap().set_byte(offs, value);
+        let offs = self.get_page_offs(addr);
+        self.get_mut_page(addr)?.set_byte(offs, value);
         Ok(())
     }
 
     fn get_byte(&self, addr: T) -> Result<DataByte, MemFault<T>> {
         MemFault::<T>::check_aligned(addr, DataWidth::Byte)?;
-        self.fault_if_unmapped(addr)?;
-        let (vpn, offs) = self.split_addr(addr);
-        Ok(self.get_page(vpn).unwrap().get_byte(offs))
+        let offs = self.get_page_offs(addr);
+        Ok(self.get_page(addr)?.get_byte(offs))
     }
 
     fn set_half(&mut self, addr: T, value: DataHalf) -> Result<(), MemFault<T>> {
         MemFault::<T>::check_aligned(addr, DataWidth::Half)?;
-        self.fault_if_unmapped(addr)?;
-        let (vpn, offs) = self.split_addr(addr);
-        self.get_mut_page(vpn).unwrap().set_half(offs, value);
+        let offs = self.get_page_offs(addr);
+        self.get_mut_page(addr)?.set_half(offs, value);
         Ok(())
     }
 
     fn get_half(&self, addr: T) -> Result<DataHalf, MemFault<T>> {
         MemFault::<T>::check_aligned(addr, DataWidth::Half)?;
-        self.fault_if_unmapped(addr)?;
-        let (vpn, offs) = self.split_addr(addr);
-        Ok(self.get_page(vpn).unwrap().get_half(offs))
+        let offs = self.get_page_offs(addr);
+        Ok(self.get_page(addr)?.get_half(offs))
     }
 
     fn set_word(&mut self, addr: T, value: DataWord) -> Result<(), MemFault<T>> {
         MemFault::<T>::check_aligned(addr, DataWidth::Word)?;
-        self.fault_if_unmapped(addr)?;
-        let (vpn, offs) = self.split_addr(addr);
-        self.get_mut_page(vpn).unwrap().set_word(offs, value);
+        let offs = self.get_page_offs(addr);
+        self.get_mut_page(addr)?.set_word(offs, value);
         Ok(())
     }
 
     fn get_word(&self, addr: T) -> Result<DataWord, MemFault<T>> {
         MemFault::<T>::check_aligned(addr, DataWidth::Word)?;
-        self.fault_if_unmapped(addr)?;
-        let (vpn, offs) = self.split_addr(addr);
-        Ok(self.get_page(vpn).unwrap().get_word(offs))
+        let offs = self.get_page_offs(addr);
+        Ok(self.get_page(addr)?.get_word(offs))
     }
 
     fn set_doubleword(&mut self, addr: T, value: DataDword) -> Result<(), MemFault<T>> {
         MemFault::<T>::check_aligned(addr, DataWidth::DoubleWord)?;
-        self.fault_if_unmapped(addr)?;
-        let (vpn, offs) = self.split_addr(addr);
-        self.get_mut_page(vpn).unwrap().set_doubleword(offs, value);
+        let offs = self.get_page_offs(addr);
+        self.get_mut_page(addr)?.set_doubleword(offs, value);
         Ok(())
     }
 
     fn get_doubleword(&self, addr: T) -> Result<DataDword, MemFault<T>> {
         MemFault::<T>::check_aligned(addr, DataWidth::DoubleWord)?;
-        self.fault_if_unmapped(addr)?;
-        let (vpn, offs) = self.split_addr(addr);
-        Ok(self.get_page(vpn).unwrap().get_doubleword(offs))
+        let offs = self.get_page_offs(addr);
+        Ok(self.get_page(addr)?.get_doubleword(offs))
     }
 }
 
@@ -563,6 +567,55 @@ mod tests {
         assert_eq!(
             mem.get_doubleword(0xFFFF_FFF8),
             0xEEEE_EEEE_EEEE_EEABu64.into()
+        );
+    }
+
+    /// Tests page faults and basic memory mapping operations.
+    #[test]
+    fn test_linear_pt() {
+        // 4 KiB page size, 1 MiB physical memory
+        let mut mem = LinearPagedMemory::<ByteAddr32>::new(20, 12);
+        let good_addr: ByteAddr32 = 0xFFFF_EF00u32.into();
+        let val: DataDword = 0xDEAD_BEEF_CAFE_0000u64.into();
+        // Should pagefault when it's unmapped
+        assert_eq!(
+            mem.set_doubleword(good_addr, val).unwrap_err(),
+            MemFault::pagefault_at_addr(good_addr)
+        );
+        // Trying to map 0xFFFF_EF00 will give the page starting from 0xFFFF_E000 (chop off the
+        // lower 12 bits)
+        assert!(mem.map_page(good_addr).is_ok());
+        // Memory set should now succeed
+        mem.set_doubleword(good_addr, val).unwrap();
+        assert_eq!(mem.get_doubleword(good_addr).unwrap(), val);
+        // Memory set at page start should succeed as well
+        mem.set_byte(0xFFFF_E000u32.into(), 0xABu8.into()).unwrap();
+        // The page should be zerod when paged in, so only the lowest byte we just set is returned
+        assert_eq!(mem.get_word(0xFFFF_E000u32.into()).unwrap(), 0xAB.into());
+        // Accessing an unaligned address should pagefault
+        assert_eq!(
+            mem.get_word(0xFFFF_E001u32.into()).unwrap_err(),
+            MemFault::buserror_at_addr(0xFFFF_E001u32.into())
+        );
+        // Attempting to access a lower address should still incur a page fault
+        assert_eq!(
+            mem.get_byte(0xFFFF_DFFFu32.into()).unwrap_err(),
+            MemFault::pagefault_at_addr(0xFFFF_DFFFu32.into())
+        );
+        // Attempting to access the next page should also incur a page fault
+        assert_eq!(
+            mem.get_word(0xFFFF_F000u32.into()).unwrap_err(),
+            MemFault::pagefault_at_addr(0xFFFF_F000u32.into())
+        );
+        // Finally, attempting to deref a null pointer is always a pagefault and attempting to map
+        // the zero page is a segfault
+        assert_eq!(
+            mem.get_word(0u32.into()).unwrap_err(),
+            MemFault::pagefault_at_addr(0u32.into())
+        );
+        assert_eq!(
+            mem.map_page(0u32.into()).unwrap_err(),
+            MemFault::segfault_at_addr(0u32.into())
         );
     }
 }
