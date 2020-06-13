@@ -29,7 +29,7 @@ impl MemPage {
             .backing
             .get(&dword_offs)
             .map(Clone::clone)
-            .unwrap_or(DataDword::zero())
+            .unwrap_or_else(DataDword::zero)
             .into();
         // Zero out byte so we can set it
         let shamt = byte_offs * 8;
@@ -46,7 +46,7 @@ impl MemPage {
             .backing
             .get(&dword_offs)
             .map(Clone::clone)
-            .unwrap_or(DataDword::zero())
+            .unwrap_or_else(DataDword::zero)
             .into();
         // Shift and let truncating happen automatically with cast
         DataByte::from((val >> (byte_offs * 8)) as u8)
@@ -89,7 +89,7 @@ impl MemPage {
                 .backing
                 .get(&lower_offs)
                 .map(Clone::clone)
-                .unwrap_or(DataDword::zero())
+                .unwrap_or_else(DataDword::zero)
                 .into();
             let lsb_shamt = (8 - lsb) * 8;
             // Shift to zero upper bytes to be replaced
@@ -105,7 +105,7 @@ impl MemPage {
                 .backing
                 .get(&upper_offs)
                 .map(Clone::clone)
-                .unwrap_or(DataDword::zero())
+                .unwrap_or_else(DataDword::zero)
                 .into();
             let msb_shamt = lsb * 8;
             // Shift to zero lower bytes to be replaced
@@ -127,21 +127,21 @@ impl MemPage {
             self.backing
                 .get(&lower_offs)
                 .map(Clone::clone)
-                .unwrap_or(DataDword::zero())
+                .unwrap_or_else(DataDword::zero)
         } else {
             // Get the two dwords that the value crosses
             let lower_val: u64 = self
                 .backing
                 .get(&lower_offs)
                 .map(Clone::clone)
-                .unwrap_or(DataDword::zero())
+                .unwrap_or_else(DataDword::zero)
                 .into();
             let upper_offs = lower_offs + 8;
             let upper_val: u64 = self
                 .backing
                 .get(&upper_offs)
                 .map(Clone::clone)
-                .unwrap_or(DataDword::zero())
+                .unwrap_or_else(DataDword::zero)
                 .into();
             // Shift components by needed number of bytes
             // For example, if the offset is 1, we right shift the lower dword by 1B to chop off the
@@ -348,6 +348,12 @@ impl<T: ByteAddress> Memory<T> for SimpleMemory<T> {
     }
 }
 
+impl<T: ByteAddress> Default for SimpleMemory<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Maps a virtual page to a physical one.
 #[derive(Copy, Clone)]
 struct PTEntry {
@@ -448,27 +454,26 @@ impl<T: ByteAddress> Memory<T> for LinearPagedMemory<T> {
         // get a new ppn
         let ppn = self.lowest_free_ppn().unwrap();
         let page_table = &mut self.page_table;
-        Ok(
-            if let Some(idx) = page_table.iter().position(|&e| e.vpn == vpn) {
-                // check if page already mapped
-                // remove and move to front of vec
-                let e = page_table.remove(idx);
-                page_table.insert(0, e);
-            } else {
-                // create new entry
-                // check if eviction is needed
-                if page_table.len() == self.page_count {
-                    let evicted = page_table.pop().unwrap();
-                    self.paged_out
-                        .insert(evicted.vpn, self.phys_mem.remove(&evicted.ppn).unwrap());
-                }
-                // check if entry was previously paged out
-                let page = self.paged_out.remove(&vpn).unwrap_or(MemPage::new());
-                let e = PTEntry { vpn, ppn };
-                page_table.insert(0, e);
-                self.phys_mem.insert(ppn, page);
-            },
-        )
+        if let Some(idx) = page_table.iter().position(|&e| e.vpn == vpn) {
+            // check if page already mapped
+            // remove and move to front of vec
+            let e = page_table.remove(idx);
+            page_table.insert(0, e);
+        } else {
+            // create new entry
+            // check if eviction is needed
+            if page_table.len() == self.page_count {
+                let evicted = page_table.pop().unwrap();
+                self.paged_out
+                    .insert(evicted.vpn, self.phys_mem.remove(&evicted.ppn).unwrap());
+            }
+            // check if entry was previously paged out
+            let page = self.paged_out.remove(&vpn).unwrap_or_else(MemPage::new);
+            let e = PTEntry { vpn, ppn };
+            page_table.insert(0, e);
+            self.phys_mem.insert(ppn, page);
+        }
+        Ok(())
     }
 
     fn set_byte(&mut self, addr: T, value: DataByte) -> Result<(), MemFault<T>> {
@@ -505,7 +510,8 @@ impl<T: ByteAddress> Memory<T> for LinearPagedMemory<T> {
         MemFault::<T>::check_aligned(addr, DataWidth::Word)?;
         self.fault_if_unmapped(addr)?;
         let (vpn, offs) = self.split_addr(addr);
-        Ok(self.get_mut_page(vpn).unwrap().set_word(offs, value))
+        self.get_mut_page(vpn).unwrap().set_word(offs, value);
+        Ok(())
     }
 
     fn get_word(&self, addr: T) -> Result<DataWord, MemFault<T>> {
@@ -519,7 +525,8 @@ impl<T: ByteAddress> Memory<T> for LinearPagedMemory<T> {
         MemFault::<T>::check_aligned(addr, DataWidth::DoubleWord)?;
         self.fault_if_unmapped(addr)?;
         let (vpn, offs) = self.split_addr(addr);
-        Ok(self.get_mut_page(vpn).unwrap().set_doubleword(offs, value))
+        self.get_mut_page(vpn).unwrap().set_doubleword(offs, value);
+        Ok(())
     }
 
     fn get_doubleword(&self, addr: T) -> Result<DataDword, MemFault<T>> {

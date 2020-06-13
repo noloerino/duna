@@ -389,7 +389,7 @@ impl<T: MachineDataWidth> SType<T> for Sb {
         let base_addr: T::Signed = state.regfile.read(rs1).into();
         let byte_addr: T::ByteAddr = (base_addr.wrapping_add(&imm.into())).into();
         let new_byte = state.regfile.read(rs2).get_byte(0);
-        UserDiff::mem_write_op(state, byte_addr, DataEnum::Byte(DataByte::from(new_byte))).unwrap()
+        UserDiff::mem_write_op(state, byte_addr, DataEnum::Byte(new_byte)).unwrap()
     }
 }
 
