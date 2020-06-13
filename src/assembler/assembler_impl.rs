@@ -3,7 +3,7 @@ use super::parse_error::{ParseError, ParseErrorReporter};
 use super::parser::{Label, LabelRef, ParseResult, Parser};
 use super::partial_inst::{PartialInst, PartialInstType};
 use crate::arch::*;
-use crate::program_state::{Program, SimpleMemory};
+use crate::program_state::{ByteAddress, LinearPagedMemory, Memory, Program};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 
@@ -220,11 +220,7 @@ impl<S: Architecture> UnlinkedProgram<S> {
             .collect();
         // TODO expose memory configuration
         if reporter.is_empty() {
-            Ok(<S::Program>::new(
-                insts,
-                self.sections,
-                Box::new(SimpleMemory::new()),
-            ))
+            Ok(<S::Program>::new(insts, self.sections, Box::new(new_mem())))
         } else {
             Err(reporter)
         }
@@ -233,13 +229,12 @@ impl<S: Architecture> UnlinkedProgram<S> {
     /// Attempts to produce an instance of the program. Panics if some labels are needed
     /// but not found within the body of this program.
     pub fn try_into_program(self) -> S::Program {
-        <S::Program>::new(
-            self.insts
-                .into_iter()
-                .map(|(_, partial_inst)| partial_inst.try_into_concrete_inst())
-                .collect(),
-            self.sections,
-            Box::new(SimpleMemory::new()),
-        )
+        self.into_program().unwrap()
     }
+}
+
+/// Instantiates a new memory.
+fn new_mem<T: ByteAddress>() -> impl Memory<T> {
+    // 4 KiB page size, 4 MiB physical memory
+    LinearPagedMemory::<T>::new(22, 12)
 }

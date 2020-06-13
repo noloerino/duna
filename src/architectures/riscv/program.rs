@@ -35,12 +35,18 @@ impl Program<RiscV<Width32b>, Width32b> for RiscVProgram<Width32b> {
     fn new(
         insts: Vec<RiscVInst<Width32b>>,
         sections: SectionStore,
-        memory: Box<dyn Memory<ByteAddr32>>,
+        mut memory: Box<dyn Memory<ByteAddr32>>,
     ) -> RiscVProgram<Width32b> {
-        let mut state = ProgramState::new(memory);
-        let mut user_state = &mut state.user_state;
         let text_start: ByteAddr32 = RiscVProgram::TEXT_START_32.into();
         let stack_start: ByteAddr32 = RiscVProgram::STACK_START_32.into();
+        let data_start: ByteAddr32 = RiscVProgram::DATA_START_32.into();
+        // Page in text, stack, and data
+        memory.map_page(text_start).unwrap();
+        memory.map_page(stack_start).unwrap();
+        memory.map_page(data_start).unwrap();
+        let mut state = ProgramState::new(memory);
+        let mut user_state = &mut state.user_state;
+        // Initialize SP and PC
         user_state
             .regfile
             .set(RiscVRegister::SP, stack_start.into());
@@ -57,10 +63,7 @@ impl Program<RiscV<Width32b>, Width32b> for RiscVProgram<Width32b> {
         // store data
         let all_data = sections.data.into_iter().chain(sections.rodata.into_iter());
         for (_offs, byte) in all_data.enumerate() {
-            user_state
-                .memory
-                .set_byte(RiscVProgram::DATA_START_32.into(), byte.into())
-                .unwrap()
+            user_state.memory.set_byte(data_start, byte.into()).unwrap()
         }
         RiscVProgram { insts, state }
     }
