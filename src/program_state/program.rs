@@ -373,12 +373,22 @@ impl<T: ByteAddress> From<MemFault<T>> for TermCause {
 }
 
 impl TermCause {
+    // TODO currently prints exit cause, which should eventually be moved elsewhere
     pub fn to_exit_code<T: MachineDataWidth>(self) -> T::Signed {
         use TermCause::*;
         T::isize_to_sgn(match self {
-            SegFault => 11isize,
-            BusError => 10isize,
-            DoubleFault => 8isize,
+            SegFault => {
+                println!("Segmentation fault: 11");
+                11isize
+            }
+            BusError => {
+                println!("bus error");
+                10isize
+            }
+            DoubleFault => {
+                println!("Kernel faulted while attempting to handle a page fault");
+                8isize
+            }
         })
     }
 }

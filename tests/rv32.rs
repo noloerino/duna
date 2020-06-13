@@ -143,6 +143,18 @@ fn test_redefined_label() {
     assert!(report_string.contains("end"));
 }
 
+/// Tests that reading from the null pointer segfaults.
+#[test]
+fn test_npe_segfault() {
+    check_a0_at_end("npe_segfault.s", 11);
+}
+
+/// Tests that reading from an unaligned word raises a bus error.
+#[test]
+fn test_bad_unaligned_word() {
+    check_a0_at_end("bad_unaligned_word.s", 10);
+}
+
 // /// Tests labels for literal values declared by directive.
 // #[test]
 // fn test_directive_labels() {
