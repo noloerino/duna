@@ -3,6 +3,7 @@ use super::datatypes::*;
 use super::parse_error::{ParseError, ParseErrorReport, ParseErrorReporter};
 use super::parser::{Label, LabelDef};
 use crate::arch::*;
+use crate::config::*;
 use std::collections::HashMap;
 use std::fs;
 
@@ -63,7 +64,7 @@ impl Linker {
     }
 
     /// Attempts to link the provided programs together into a single executable.
-    pub fn link<S: Architecture>(self) -> Result<S::Program, ParseErrorReport> {
+    pub fn link<S: Architecture>(self, config: AsmConfig) -> Result<S::Program, ParseErrorReport> {
         assert!(
             !self.file_map.is_empty(),
             "Linker is missing a main program"
@@ -121,7 +122,7 @@ impl Linker {
             if errs.is_empty() {
                 // handles errantly undefined labels, although they should've already been caught
                 linked
-                    .into_program()
+                    .into_program(&config.machine)
                     .map_err(|r| r.into_report_with_file_map(self.file_map))
             } else {
                 // handles undeclared labels

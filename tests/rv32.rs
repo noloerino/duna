@@ -14,7 +14,7 @@ fn get_full_test_path(relative_path: &str) -> String {
 
 fn program_from_file(filename: &str) -> RiscVProgram<Width32b> {
     let program: RiscVProgram<Width32b> = Linker::with_main(&get_full_test_path(filename))
-        .link::<RV32>()
+        .link::<RV32>(Default::default())
         .unwrap();
     // stdout is suppressed unless a test fails
     program.dump_insts();
@@ -27,7 +27,7 @@ fn err_report_from_files(main_filename: &str, others: Vec<&str>) -> ParseErrorRe
         linker = linker.with_file(&get_full_test_path(file));
     }
     let report = linker
-        .link::<RV32>()
+        .link::<RV32>(Default::default())
         .err() // needed because RiscVProgram is not Debug
         .expect("linker did not error when it should have");
     report.report();
@@ -96,7 +96,7 @@ fn test_local_labels() {
 /// Tests linking two files that have no label dependencies.
 fn test_basic_link() {
     let mut program = Linker::with_main(&get_full_test_path("local_labels.s"))
-        .link::<RV32>()
+        .link::<RV32>(Default::default())
         .unwrap();
     program.dump_insts();
     assert_eq!(program.run() as u32, 0xABCD_0123u32);
@@ -107,7 +107,7 @@ fn test_basic_link() {
 fn test_global_link() {
     let mut program = Linker::with_main(&get_full_test_path("global_link_0.s"))
         .with_file(&get_full_test_path("global_link_1.s"))
-        .link::<RV32>()
+        .link::<RV32>(Default::default())
         .unwrap();
     program.dump_insts();
     assert_eq!(program.run(), 0x1234);

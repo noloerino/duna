@@ -103,7 +103,7 @@ impl str::FromStr for RiscVProgram<Width32b> {
     type Err = ParseErrorReport;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Linker::with_main_str(s).link::<RV32>()
+        Linker::with_main_str(s).link::<RV32>(Default::default())
     }
 }
 

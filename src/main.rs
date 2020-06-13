@@ -25,7 +25,7 @@ fn main() {
     for file in file_names {
         linker = linker.with_file(file);
     }
-    let link_result = linker.link::<RV32>();
+    let link_result = linker.link::<RV32>(Default::default());
     let mut program = match link_result {
         Ok(p) => p,
         Err(errs) => {

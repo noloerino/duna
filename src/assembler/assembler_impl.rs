@@ -3,7 +3,8 @@ use super::parse_error::{ParseError, ParseErrorReporter};
 use super::parser::{Label, LabelRef, ParseResult, Parser};
 use super::partial_inst::{PartialInst, PartialInstType};
 use crate::arch::*;
-use crate::program_state::{ByteAddress, LinearPagedMemory, Memory, Program};
+use crate::config::*;
+use crate::program_state::Program;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 
@@ -203,7 +204,7 @@ impl<S: Architecture> UnlinkedProgram<S> {
     }
 
     /// Produces a program, or an error report if some instructions are still missing labels.
-    pub fn into_program(self) -> Result<S::Program, ParseErrorReporter> {
+    pub fn into_program(self, config: &MachineConfig) -> Result<S::Program, ParseErrorReporter> {
         let mut reporter = ParseErrorReporter::new();
         let insts = self
             .insts
@@ -218,9 +219,12 @@ impl<S: Architecture> UnlinkedProgram<S> {
                 },
             )
             .collect();
-        // TODO expose memory configuration
         if reporter.is_empty() {
-            Ok(<S::Program>::new(insts, self.sections, Box::new(new_mem())))
+            Ok(<S::Program>::new(
+                insts,
+                self.sections,
+                config.mem_config.build_mem(),
+            ))
         } else {
             Err(reporter)
         }
@@ -228,13 +232,7 @@ impl<S: Architecture> UnlinkedProgram<S> {
 
     /// Attempts to produce an instance of the program. Panics if some labels are needed
     /// but not found within the body of this program.
-    pub fn try_into_program(self) -> S::Program {
-        self.into_program().unwrap()
+    pub fn try_into_program(self, config: &MachineConfig) -> S::Program {
+        self.into_program(config).unwrap()
     }
-}
-
-/// Instantiates a new memory.
-fn new_mem<T: ByteAddress>() -> impl Memory<T> {
-    // 4 KiB page size, 4 MiB physical memory
-    LinearPagedMemory::<T>::new(22, 12)
 }
