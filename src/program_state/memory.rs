@@ -464,25 +464,24 @@ impl<T: ByteAddress> Memory<T> for LinearPagedMemory<T> {
             return Err(MemFault::<T>::segfault_at_addr(addr));
         }
         // get a new ppn
-        let ppn = self.lowest_free_ppn().unwrap();
-        let page_table = &mut self.page_table;
-        if let Some(idx) = page_table.iter().position(|&e| e.vpn == vpn) {
+        if let Some(idx) = self.page_table.iter().position(|&e| e.vpn == vpn) {
             // check if page already mapped
             // remove and move to front of vec
-            let e = page_table.remove(idx);
-            page_table.insert(0, e);
+            let e = self.page_table.remove(idx);
+            self.page_table.insert(0, e);
         } else {
             // create new entry
             // check if eviction is needed
-            if page_table.len() == self.page_count {
-                let evicted = page_table.pop().unwrap();
+            if self.page_table.len() == self.page_count {
+                let evicted = self.page_table.pop().unwrap();
                 self.paged_out
                     .insert(evicted.vpn, self.phys_mem.remove(&evicted.ppn).unwrap());
             }
+            let ppn = self.lowest_free_ppn().unwrap();
             // check if entry was previously paged out
             let page = self.paged_out.remove(&vpn).unwrap_or_else(MemPage::new);
             let e = PTEntry { vpn, ppn };
-            page_table.insert(0, e);
+            self.page_table.insert(0, e);
             self.phys_mem.insert(ppn, page);
         }
         Ok(())
