@@ -1,9 +1,10 @@
 use super::datatypes::*;
 use super::parse_error::{ParseError, ParseErrorReporter};
-use super::parser::{Label, LabelRef, ParseResult, Parser};
+use super::parser::{Label, LabelDef, LabelRef, ParseResult, Parser};
 use super::partial_inst::{PartialInst, PartialInstType};
 use crate::arch::*;
 use crate::config::*;
+use crate::program_state::DataEnum;
 use crate::program_state::Program;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
@@ -66,6 +67,7 @@ pub struct SectionStore {
     pub data: Vec<u8>,
     /// Stores the contents of the .rodata section. The first element is at the lowest address.
     pub rodata: Vec<u8>,
+    pub labels: HashMap<Label, (ProgramSection, usize)>,
 }
 
 impl SectionStore {
@@ -73,10 +75,39 @@ impl SectionStore {
         SectionStore {
             data: Vec::new(),
             rodata: Vec::new(),
+            labels: HashMap::new(),
         }
     }
 
-    pub fn add_byte(&mut self, section: ProgramSection, val: u8) {
+    /// Adds a label to the next element in that section.
+    fn add_label_here(&mut self, section: ProgramSection, label: Label) {
+        use ProgramSection::*;
+        self.labels.insert(
+            label,
+            (
+                section,
+                match section {
+                    Data => &self.data,
+                    Rodata => &self.rodata,
+                    Text => panic!("adding data in text is currently unsupported"),
+                }
+                .len(),
+            ),
+        );
+    }
+
+    pub fn add(&mut self, section: ProgramSection, maybe_label: Option<LabelDef>, val: DataEnum) {
+        maybe_label.map(|label| self.add_label_here(section, label.name));
+        use DataEnum::*;
+        match val {
+            Byte(n) => self.add_byte(section, n.into()),
+            Half(n) => self.add_half(section, n.into()),
+            Word(n) => self.add_word(section, n.into()),
+            DoubleWord(n) => self.add_doubleword(section, n.into()),
+        }
+    }
+
+    fn add_byte(&mut self, section: ProgramSection, val: u8) {
         use ProgramSection::*;
         match section {
             Data => &mut self.data,
@@ -86,17 +117,17 @@ impl SectionStore {
         .push(val)
     }
 
-    pub fn add_half(&mut self, section: ProgramSection, val: u16) {
+    fn add_half(&mut self, section: ProgramSection, val: u16) {
         self.add_byte(section, val as u8);
         self.add_byte(section, (val >> 8) as u8);
     }
 
-    pub fn add_word(&mut self, section: ProgramSection, val: u32) {
+    fn add_word(&mut self, section: ProgramSection, val: u32) {
         self.add_half(section, val as u16);
         self.add_half(section, (val >> 16) as u16);
     }
 
-    pub fn add_doubleword(&mut self, section: ProgramSection, val: u64) {
+    fn add_doubleword(&mut self, section: ProgramSection, val: u64) {
         self.add_word(section, val as u32);
         self.add_word(section, (val >> 32) as u32);
     }
@@ -126,6 +157,7 @@ pub struct UnlinkedProgram<S: Architecture> {
     pub(super) needed_labels: HashMap<usize, LabelRef>,
     /// Maps global labels to its location, as well as the index of the insts that define them
     pub(super) defined_global_labels: HashMap<Label, (Location, usize)>,
+    /// Stores literal values declared by directives, as well as labels that reference those values.
     pub(super) sections: SectionStore,
 }
 

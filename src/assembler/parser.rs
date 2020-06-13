@@ -4,7 +4,7 @@ use super::lexer::*;
 use super::parse_error::{ParseError, ParseErrorReporter};
 use super::partial_inst::PartialInst;
 use crate::arch::*;
-
+use crate::program_state::*;
 use std::collections::HashSet;
 use std::iter::Peekable;
 use std::vec::IntoIter;
@@ -39,8 +39,51 @@ impl LabelDef {
     }
 }
 
+/// Stores literals that were parsed from a directive such as .byte.
+pub struct DirectiveLiterals {
+    pub section: ProgramSection,
+    pub data: Vec<DataEnum>,
+}
+
+impl DirectiveLiterals {
+    pub fn new(section: ProgramSection) -> Self {
+        DirectiveLiterals {
+            section,
+            data: Vec::new(),
+        }
+    }
+
+    pub fn add_byte(&mut self, val: u8) {
+        self.data.push(DataEnum::Byte(val.into()));
+    }
+
+    pub fn add_half(&mut self, val: u16) {
+        self.data.push(DataEnum::Half(val.into()));
+    }
+
+    pub fn add_word(&mut self, val: u32) {
+        self.data.push(DataEnum::Word(val.into()));
+    }
+
+    pub fn add_doubleword(&mut self, val: u64) {
+        self.data.push(DataEnum::DoubleWord(val.into()));
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.data.is_empty()
+    }
+}
+
+pub enum OkParseResult<F: ArchFamily<T>, T: MachineDataWidth> {
+    Insts(ParsedInstStream<F, T>),
+    Literals(DirectiveLiterals),
+    None,
+}
+
 pub type ParsedInstStream<F, T> = Vec<PartialInst<F, T>>;
-pub type LineParseResult<F, T> = Result<ParsedInstStream<F, T>, ParseError>;
+pub type InstParseResult<F, T> = Result<ParsedInstStream<F, T>, ParseError>;
+pub type LineParseResult<F, T> = Result<OkParseResult<F, T>, ParseError>;
+
 pub struct ParseResult<F, T>
 where
     F: ArchFamily<T>,
@@ -58,7 +101,6 @@ pub struct ParseState {
     /// The section in which parsed values should be placed.
     /// This should default to text.
     pub curr_section: ProgramSection,
-    pub sections: SectionStore,
     /// These labels were given to a .global declaration, which means either the
     /// current file defined the symbol and is making it visible to the linker, or
     /// the current file will look for the symbol in another file.
@@ -69,7 +111,6 @@ impl ParseState {
     pub fn new() -> ParseState {
         ParseState {
             curr_section: ProgramSection::Text,
-            sections: SectionStore::new(),
             declared_globals: HashSet::new(),
         }
     }

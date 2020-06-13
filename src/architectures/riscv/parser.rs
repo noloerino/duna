@@ -8,6 +8,7 @@ use crate::arch::*;
 use crate::assembler::lexer::*;
 use crate::assembler::parser::*;
 use crate::assembler::*;
+use crate::program_state::DataEnum;
 use crate::program_state::DataWidth;
 use std::collections::HashMap;
 use std::iter::Peekable;
@@ -141,6 +142,7 @@ impl RiscVParser<Width32b> {
     fn parse(mut self) -> ParseResult<RiscV<Width32b>, Width32b> {
         let mut insts = Vec::<PartialInst<RiscV<Width32b>, Width32b>>::new();
         let mut last_label: Option<LabelDef> = None;
+        let mut sections = SectionStore::new();
         let parser_data: &ParserData<Width32b> = &ParserData {
             inst_expansion_table: &RV32_INST_EXPANSION_TABLE,
             reg_expansion_table: &REG_EXPANSION_TABLE,
@@ -151,19 +153,41 @@ impl RiscVParser<Width32b> {
             let (found_label, parse_result) =
                 LineParser::new(parser_data, line, &last_label, &mut self.state).parse();
             match parse_result {
-                Ok(mut new_insts) => {
-                    // if insts is not empty, then that means the label was already used
-                    last_label = if new_insts.is_empty() {
-                        found_label
-                    } else {
-                        // stick label onto first inst
-                        if let Some(new_label) = found_label {
-                            let head_inst = new_insts.remove(0).with_label(new_label);
-                            new_insts.insert(0, head_inst);
+                Ok(ok_result) => {
+                    // each branch should return the label to apply to the next instruction
+                    last_label = match ok_result {
+                        OkParseResult::Insts(mut new_insts) => {
+                            // if insts is not empty, then that means the label gets used
+                            if new_insts.is_empty() {
+                                found_label
+                            } else {
+                                // stick label onto first inst
+                                if let Some(new_label) = found_label {
+                                    let head_inst = new_insts.remove(0).with_label(new_label);
+                                    new_insts.insert(0, head_inst);
+                                }
+                                insts.extend(new_insts);
+                                None
+                            }
                         }
-                        None
-                    };
-                    insts.extend(new_insts);
+                        OkParseResult::Literals(DirectiveLiterals { section, data }) => {
+                            let mut data_iter = data.into_iter();
+                            let first: Option<DataEnum> = data_iter.next();
+                            // if literals is not empty, then the label is going to be used
+                            match first {
+                                None => found_label,
+                                Some(first_val) => {
+                                    // stick label onto the first literal
+                                    sections.add(section, found_label, first_val);
+                                    for val in data_iter {
+                                        sections.add(section, None, val);
+                                    }
+                                    None
+                                }
+                            }
+                        }
+                        OkParseResult::None => found_label,
+                    }
                 }
                 Err(new_err) => self.reporter.add_error(new_err),
             }
@@ -171,7 +195,7 @@ impl RiscVParser<Width32b> {
         ParseResult {
             file_id: self.file_id,
             insts,
-            sections: self.state.sections,
+            sections,
             declared_globals: self.state.declared_globals,
             reporter: self.reporter,
         }
@@ -193,17 +217,17 @@ enum ImmOrLabelRef<T: RegSize> {
 }
 
 /// Convenience method to stuff a PartialInst into a Vec<PartialInst>
-fn ok_vec<T: MachineDataWidth>(inst: PartialInst<RiscV<T>, T>) -> LineParseResult<RiscV<T>, T> {
+fn ok_vec<T: MachineDataWidth>(inst: PartialInst<RiscV<T>, T>) -> InstParseResult<RiscV<T>, T> {
     Ok(vec![inst])
 }
 
 /// Convenience method to stuff a RiscVInst into Ok(vec![PartialInst(...)])
-fn ok_wrap_concr<T: MachineDataWidth>(inst: RiscVInst<T>) -> LineParseResult<RiscV<T>, T> {
+fn ok_wrap_concr<T: MachineDataWidth>(inst: RiscVInst<T>) -> InstParseResult<RiscV<T>, T> {
     ok_vec(PartialInst::new_complete(inst))
 }
 
 /// Convenience method to turn a Vec<RiscVInst<T>> into Ok(Vec<PartialInst>)
-fn ok_wrap_expanded<T: MachineDataWidth>(inst: Vec<RiscVInst<T>>) -> LineParseResult<RiscV<T>, T> {
+fn ok_wrap_expanded<T: MachineDataWidth>(inst: Vec<RiscVInst<T>>) -> InstParseResult<RiscV<T>, T> {
     Ok(inst.into_iter().map(PartialInst::new_complete).collect())
 }
 
@@ -520,10 +544,7 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
     }
 
     /// Expands an instruction that is known to be in the expansion table.
-    fn try_expand_found_inst(
-        &mut self,
-        parse_type: &ParseType<T>,
-    ) -> Result<ParsedInstStream<RiscV<T>, T>, ParseError> {
+    fn try_expand_found_inst(&mut self, parse_type: &ParseType<T>) -> InstParseResult<RiscV<T>, T> {
         use ParseType::*;
         match parse_type {
             R(inst_new) => {
@@ -686,7 +707,7 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
         }
     }
 
-    fn try_expand_inst(&mut self) -> LineParseResult<RiscV<T>, T> {
+    fn try_expand_inst(&mut self) -> InstParseResult<RiscV<T>, T> {
         if let Some(parse_type) = self.data.inst_expansion_table.get(self.inst_name) {
             self.try_expand_found_inst(parse_type)
         } else {
@@ -706,7 +727,7 @@ struct DirectiveParser<'a> {
     head_directive: &'a str,
 }
 
-type DirectiveParseResult = Result<(), ParseError>;
+type DirectiveParseResult = Result<Option<DirectiveLiterals>, ParseError>;
 
 impl<'a> DirectiveParser<'a> {
     fn new(
@@ -767,29 +788,31 @@ impl<'a> DirectiveParser<'a> {
             )),
             section => {
                 let toks = self.consume_unbounded_commasep_args()?;
+                let mut data = DirectiveLiterals::new(section);
                 for tok in toks {
                     use DataWidth::*;
                     match kind {
                         Byte => {
                             let val: u8 = self.try_parse_imm(8, tok)? as u8;
-                            self.state.sections.add_byte(section, val)
+                            data.add_byte(val);
                         }
                         Half => {
                             let val: u16 = self.try_parse_imm(16, tok)? as u16;
-                            self.state.sections.add_half(section, val)
+                            data.add_half(val);
                         }
                         Word => {
                             let val: u32 = self.try_parse_imm(32, tok)? as u32;
-                            self.state.sections.add_word(section, val)
+                            data.add_word(val);
                         }
                         DoubleWord => {
                             let val: u64 = self.try_parse_imm(32, tok)? as u64;
-                            self.state.sections.add_doubleword(section, val)
+                            data.add_doubleword(val);
                         }
                     }
                 }
                 // should never fail since we've consumed the whole iterator
-                self.ok(0)
+                self.ok(0)?;
+                Ok(Some(data))
             }
         }
     }
@@ -837,15 +860,14 @@ impl<'a> DirectiveParser<'a> {
             ));
         }
         let toks = self.consume_unbounded_commasep_args()?;
+        let mut data = DirectiveLiterals::new(self.state.curr_section);
         for tok in toks {
             if let TokenType::StringLiteral(s) = &tok.data {
                 for c in s.chars() {
-                    self.state
-                        .sections
-                        .add_byte(self.state.curr_section, c as u8)
+                    data.add_byte(c as u8)
                 }
                 if null_terminated {
-                    self.state.sections.add_byte(self.state.curr_section, 0);
+                    data.add_byte(0);
                 }
             } else {
                 return Err(ParseError::unexpected_type(
@@ -855,7 +877,8 @@ impl<'a> DirectiveParser<'a> {
                 ));
             }
         }
-        self.ok(0)
+        self.ok(0)?;
+        Ok(Some(data))
     }
 
     fn parse_zero(mut self) -> DirectiveParseResult {
@@ -875,10 +898,12 @@ impl<'a> DirectiveParser<'a> {
                     next_tok.data,
                 ))
             } else {
+                let mut data = DirectiveLiterals::new(self.state.curr_section);
                 for _ in 0..n {
-                    self.state.sections.add_byte(self.state.curr_section, 0)
+                    data.add_byte(0);
                 }
-                self.ok(1)
+                self.ok(1)?;
+                Ok(Some(data))
             }
         } else {
             Err(ParseError::unexpected_type(
@@ -928,7 +953,7 @@ impl<'a> DirectiveParser<'a> {
     /// still need to be consumed (which is always 0, since we're checking if we ran out of args).
     fn ok(mut self, needed_argc: u8) -> DirectiveParseResult {
         check_no_more_args(&mut self.iter, self.head_directive, needed_argc)?;
-        Ok(())
+        Ok(None)
     }
 }
 
@@ -989,6 +1014,7 @@ impl<'a, T: MachineDataWidth> LineParser<'a, T> {
                         if self.state.curr_section == ProgramSection::Text {
                             InstParser::new(self.data, self.iter, &head_tok.location, &name)
                                 .try_expand_inst()
+                                .map(|insts| OkParseResult::Insts(insts))
                         } else {
                             Err(ParseError::unsupported_directive(
                                 errloc,
@@ -1001,10 +1027,10 @@ impl<'a, T: MachineDataWidth> LineParser<'a, T> {
                     }
                     // first label def is handled by contructor
                     // TODO handle multiple labels on same line
-                    LabelDef(label_name) => Err(ParseError::generic(
+                    LabelDef(label_name) => Err(ParseError::unimplemented(
                         errloc,
                         &format!(
-                            "Multiple labels on the same line is unimplemented (found label {})",
+                            "(found label {}) multiple labels on the same line",
                             label_name
                         ),
                     )),
@@ -1015,8 +1041,14 @@ impl<'a, T: MachineDataWidth> LineParser<'a, T> {
                         &section_name,
                     )
                     .parse()
-                    .and(Ok(Vec::new())),
-                    Comment(..) => Ok(Vec::new()), // deliberate no-op
+                    .map(|option| {
+                        if let Some(literals) = option {
+                            OkParseResult::Literals(literals)
+                        } else {
+                            OkParseResult::None
+                        }
+                    }),
+                    Comment(..) => Ok(OkParseResult::None), // deliberate no-op
                     Comma => Err(ParseError::bad_head(errloc, ",")),
                     Immediate(n, style) => Err(ParseError::bad_head(errloc, &style.format(n))),
                     StringLiteral(s) => Err(ParseError::bad_head(errloc, &s)),
@@ -1024,7 +1056,7 @@ impl<'a, T: MachineDataWidth> LineParser<'a, T> {
                     RParen => Err(ParseError::bad_head(errloc, ")")),
                 }
             } else {
-                Ok(Vec::new())
+                Ok(OkParseResult::None)
             },
         )
     }
