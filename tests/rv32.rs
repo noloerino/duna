@@ -41,39 +41,39 @@ fn check_a0_at_end(filename: &str, exp_a0: u32) {
     assert_eq!(result as u32, exp_a0);
 }
 
-#[test]
 /// Tests some basic I-type instructions.
+#[test]
 fn test_simple() {
     check_a0_at_end("simple.s", 4);
 }
 
-#[test]
 /// Tests basic aligned loads and stores.
+#[test]
 fn test_basic_mem() {
     check_a0_at_end("basic_mem.s", 0xABCD_0123u32);
 }
 
-#[test]
 /// Tests li, mv, and nop pseudo-instructions.
+#[test]
 fn test_pseudo() {
     check_a0_at_end("pseudo.s", 0xFFEE_DDCCu32);
 }
 
-#[test]
 /// Tests j, ret, and the non-pseudo version of jalr.
 /// Uses only relative offsets.
+#[test]
 fn test_pseudo_jumps() {
     check_a0_at_end("pseudo_jumps.s", 0xDEAD);
 }
 
-#[test]
 /// Tests some branches to offsets, again using only relative offsets.
+#[test]
 fn test_offset_branches() {
     check_a0_at_end("offset_branches.s", 0xABCD_0123u32);
 }
 
-#[test]
 /// Tests the write syscall with some nice happy ASCII characters.
+#[test]
 fn test_write_stdout() {
     // this will print "deadbeef\n" to stdout
     let mut program = program_from_file("write_stdout.s");
@@ -86,14 +86,14 @@ fn test_write_stdout() {
     );
 }
 
-#[test]
 /// Tests jumping and branching to locally defined labels.
+#[test]
 fn test_local_labels() {
     check_a0_at_end("local_labels.s", 0xABCD_0123u32);
 }
 
-#[test]
 /// Tests linking two files that have no label dependencies.
+#[test]
 fn test_basic_link() {
     let mut program = Linker::with_main(&get_full_test_path("local_labels.s"))
         .link::<RV32>(Default::default())
@@ -102,8 +102,8 @@ fn test_basic_link() {
     assert_eq!(program.run() as u32, 0xABCD_0123u32);
 }
 
-#[test]
 /// Tests linking files that require global symbols.
+#[test]
 fn test_global_link() {
     let mut program = Linker::with_main(&get_full_test_path("global_link_0.s"))
         .with_file(&get_full_test_path("global_link_1.s"))
@@ -113,8 +113,8 @@ fn test_global_link() {
     assert_eq!(program.run(), 0x1234);
 }
 
-#[test]
 /// Tests reporting errors in multiple linked files.
+#[test]
 fn test_link_multi_err() {
     let report = err_report_from_files("parse_err_0.s", vec!["parse_err_1.s"]);
     let errs = report.get_errs();
@@ -128,8 +128,8 @@ fn test_link_multi_err() {
     assert!(report_string.contains("jal unknown"));
 }
 
-#[test]
 /// Tests that a redefined label gets reported.
+#[test]
 fn test_redefined_label() {
     let report = err_report_from_files("redefined_label_0.s", vec!["redefined_label_1.s"]);
     let errs = report.get_errs();
@@ -142,3 +142,16 @@ fn test_redefined_label() {
     assert!(report_string.contains("redefined_label_1.s:3:0"));
     assert!(report_string.contains("end"));
 }
+
+// /// Tests labels for literal values declared by directive.
+// #[test]
+// fn test_directive_labels() {
+//     let mut program = program_from_file("directive_labels.s");
+//     // should have written 12 bytes
+//     let result = program.run();
+//     assert_eq!(result, 12);
+//     assert_eq!(
+//         String::from_utf8(program.state.get_stdout().to_vec()),
+//         Ok("hello world\n".to_string())
+//     );
+// }

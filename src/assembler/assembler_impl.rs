@@ -174,6 +174,7 @@ impl<S: Architecture> UnlinkedProgram<S> {
     ) -> (UnlinkedProgram<S>, ParseErrorReporter) {
         let mut reporter = ParseErrorReporter::new();
         let mut local_labels: HashMap<Label, (Location, usize)> = Default::default();
+        // TODO implement data labels
         for (i, (_, partial_inst)) in insts.iter().enumerate() {
             if let Some(label_def) = &partial_inst.label {
                 let key = label_def.name.clone();
