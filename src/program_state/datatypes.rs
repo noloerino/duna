@@ -206,6 +206,18 @@ impl RegSize for DataDword {
         }
     }
 
+    fn zero_pad_from_half(h: DataHalf) -> DataDword {
+        DataDword {
+            value: h.value as u64,
+        }
+    }
+
+    fn sign_ext_from_half(h: DataHalf) -> DataDword {
+        DataDword {
+            value: ((h.value as i16) as i64) as u64,
+        }
+    }
+
     fn get_lower_word(self) -> DataWord {
         DataWord::from(self.value as u32)
     }
@@ -297,6 +309,18 @@ impl RegSize for DataWord {
     fn sign_ext_from_byte(b: DataByte) -> DataWord {
         DataWord {
             value: ((b.value as i8) as i32) as u32,
+        }
+    }
+
+    fn zero_pad_from_half(h: DataHalf) -> DataWord {
+        DataWord {
+            value: h.value as u32,
+        }
+    }
+
+    fn sign_ext_from_half(h: DataHalf) -> DataWord {
+        DataWord {
+            value: ((h.value as i16) as i32) as u32,
         }
     }
 

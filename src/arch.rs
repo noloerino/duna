@@ -38,14 +38,14 @@ pub trait RegSize: Copy + Clone + PartialEq + fmt::Display + From<BitStr32> + Fr
     fn to_bit_str(self, len: u8) -> BitStr32;
 
     fn zero_pad_from_byte(b: DataByte) -> Self;
-
     fn sign_ext_from_byte(b: DataByte) -> Self;
+    fn zero_pad_from_half(h: DataHalf) -> Self;
+    fn sign_ext_from_half(h: DataHalf) -> Self;
+    /// Sign extends a DataWord into this type if necessary.
+    fn sign_ext_from_word(value: DataWord) -> Self;
 
     /// Gets the lower 32 bits of this object.
     fn get_lower_word(self) -> DataWord;
-
-    /// Sign extends a DataWord into this type if necessary.
-    fn sign_ext_from_word(value: DataWord) -> Self;
 }
 
 /// Encodes the difference between a 32-bit and 64-bit system.

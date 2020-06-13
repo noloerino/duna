@@ -218,14 +218,8 @@ pub trait IType<T: MachineDataWidth> {
     ) -> RiscVInst<T> {
         let imm_vec = imm.to_bit_str(12);
         RiscVInst {
-            // closure must contain match, since otherwise the types for arms don't match
             eval: Box::new(move |state| {
-                InstResult::UserStateChange(<Self as IType<T>>::eval(
-                    &state.user_state,
-                    rd,
-                    rs1,
-                    imm_vec,
-                ))
+                <Self as IType<T>>::eval(&state.user_state, rd, rs1, imm_vec)
             }),
             data: RiscVInstData::I {
                 fields: Self::inst_fields(),
@@ -241,7 +235,7 @@ pub trait IType<T: MachineDataWidth> {
         rd: RiscVRegister,
         rs1: RiscVRegister,
         imm: BitStr32,
-    ) -> UserDiff<RiscV<T>, T>;
+    ) -> InstResult<RiscV<T>, T>;
 }
 
 pub(crate) trait ITypeArith<T: MachineDataWidth>: IType<T> {
@@ -257,7 +251,7 @@ pub(crate) trait ITypeLoad<T: MachineDataWidth>: IType<T> {
     fn eval(
         mem: &dyn Memory<T::ByteAddr>,
         addr: <T as MachineDataWidth>::ByteAddr,
-    ) -> <T as MachineDataWidth>::RegData;
+    ) -> Result<<T as MachineDataWidth>::RegData, MemFault<T::ByteAddr>>;
 }
 
 pub trait EnvironInst<T: MachineDataWidth> {
@@ -274,7 +268,7 @@ pub trait EnvironInst<T: MachineDataWidth> {
     }
     fn funct12() -> BitStr32;
     fn inst_fields() -> IInstFields;
-    fn eval(state: &ProgramState<RiscV<T>, T>) -> TrapKind;
+    fn eval(state: &ProgramState<RiscV<T>, T>) -> TrapKind<T::ByteAddr>;
 }
 
 pub trait SType<T: MachineDataWidth> {

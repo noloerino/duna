@@ -71,7 +71,7 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
         self.user_state.memory.set_word(addr, val).unwrap()
     }
 
-    pub fn handle_trap(&self, trap_kind: &TrapKind) -> PrivStateChange<T> {
+    pub fn handle_trap(&self, trap_kind: &TrapKind<T::ByteAddr>) -> PrivStateChange<T> {
         use TrapKind::*;
         match trap_kind {
             Ecall => self.dispatch_syscall(),
@@ -339,18 +339,24 @@ pub enum TermCause {
 
 /// Represents the type of trap being raised from user mode.
 /// See "Machine Cause Register" in the RISCV privileged spec for details.
-pub enum TrapKind {
+pub enum TrapKind<T: ByteAddress> {
     /// Corresponds to an ecall instruction issued from user mode.
     Ecall,
-    /// TODO implement paged memory
-    PageFault,
+    MemFault(MemFault<T>),
 }
 
 /// Encodes a change that occurs within the user space of a program, which entails a write to the
 /// PC and possibly a register or memory operation.
 pub enum InstResult<F: ArchFamily<T>, T: MachineDataWidth> {
-    Trap(TrapKind),
+    Trap(TrapKind<T::ByteAddr>),
     UserStateChange(UserDiff<F, T>),
+}
+
+/// Converts a memory fault into a trap.
+impl<T: ByteAddress> From<MemFault<T>> for TrapKind<T> {
+    fn from(fault: MemFault<T>) -> TrapKind<T> {
+        TrapKind::MemFault(fault)
+    }
 }
 
 /// Represents a diff as it is applied to a program.

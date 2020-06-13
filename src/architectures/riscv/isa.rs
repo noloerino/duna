@@ -211,7 +211,7 @@ impl<T: MachineDataWidth> EnvironInst<T> for Ecall {
         }
     }
 
-    fn eval(_state: &ProgramState<RiscV<T>, T>) -> TrapKind {
+    fn eval(_state: &ProgramState<RiscV<T>, T>) -> TrapKind<T::ByteAddr> {
         TrapKind::Ecall
     }
 }
@@ -252,14 +252,14 @@ impl<T: MachineDataWidth> IType<T> for Jalr {
         rd: RiscVRegister,
         rs1: RiscVRegister,
         imm: BitStr32,
-    ) -> UserDiff<RiscV<T>, T> {
+    ) -> InstResult<RiscV<T>, T> {
         let v1: T::Signed = state.regfile.read(rs1).into();
-        UserDiff::reg_write_op(
+        InstResult::UserStateChange(UserDiff::reg_write_op(
             state,
             (v1.wrapping_add(&imm.into())).into(),
             rd,
             state.pc.plus_4().into(),
-        )
+        ))
     }
 }
 
@@ -273,8 +273,11 @@ impl<T: MachineDataWidth> ITypeLoad<T> for Lb {
         }
     }
 
-    fn eval(mem: &dyn Memory<T::ByteAddr>, addr: T::ByteAddr) -> T::RegData {
-        <T::RegData>::sign_ext_from_byte(mem.get_byte(addr).unwrap())
+    fn eval(
+        mem: &dyn Memory<T::ByteAddr>,
+        addr: T::ByteAddr,
+    ) -> Result<T::RegData, MemFault<T::ByteAddr>> {
+        Ok(<T::RegData>::sign_ext_from_byte(mem.get_byte(addr)?))
     }
 }
 
@@ -288,8 +291,11 @@ impl<T: MachineDataWidth> ITypeLoad<T> for Lbu {
         }
     }
 
-    fn eval(mem: &dyn Memory<T::ByteAddr>, addr: T::ByteAddr) -> T::RegData {
-        <T::RegData>::zero_pad_from_byte(mem.get_byte(addr).unwrap())
+    fn eval(
+        mem: &dyn Memory<T::ByteAddr>,
+        addr: T::ByteAddr,
+    ) -> Result<T::RegData, MemFault<T::ByteAddr>> {
+        Ok(<T::RegData>::zero_pad_from_byte(mem.get_byte(addr)?))
     }
 }
 
@@ -303,15 +309,11 @@ impl<T: MachineDataWidth> ITypeLoad<T> for Lh {
         }
     }
 
-    // TODO define alignment behavior
-    fn eval(mem: &dyn Memory<T::ByteAddr>, addr: T::ByteAddr) -> T::RegData {
-        let og_addr: T::Signed = addr.into();
-        let second_byte_addr: T::ByteAddr = (og_addr.wrapping_add(&T::sgn_one())).into();
-        let upper_byte: T::Signed =
-            <T::RegData>::sign_ext_from_byte(mem.get_byte(second_byte_addr).unwrap()).into();
-        let lower_byte: T::Signed =
-            <T::RegData>::zero_pad_from_byte(mem.get_byte(addr).unwrap()).into();
-        ((upper_byte << 8) | lower_byte).into()
+    fn eval(
+        mem: &dyn Memory<T::ByteAddr>,
+        addr: T::ByteAddr,
+    ) -> Result<T::RegData, MemFault<T::ByteAddr>> {
+        Ok(<T::RegData>::sign_ext_from_half(mem.get_half(addr)?))
     }
 }
 
@@ -325,15 +327,11 @@ impl<T: MachineDataWidth> ITypeLoad<T> for Lhu {
         }
     }
 
-    // TODO define alignment behavior
-    fn eval(mem: &dyn Memory<T::ByteAddr>, addr: T::ByteAddr) -> T::RegData {
-        let og_addr: T::Signed = addr.into();
-        let second_byte_addr: T::ByteAddr = (og_addr.wrapping_add(&T::sgn_one())).into();
-        let upper_byte: T::Signed =
-            <T::RegData>::zero_pad_from_byte(mem.get_byte(second_byte_addr).unwrap()).into();
-        let lower_byte: T::Signed =
-            <T::RegData>::zero_pad_from_byte(mem.get_byte(addr).unwrap()).into();
-        ((upper_byte << 8) | lower_byte).into()
+    fn eval(
+        mem: &dyn Memory<T::ByteAddr>,
+        addr: T::ByteAddr,
+    ) -> Result<T::RegData, MemFault<T::ByteAddr>> {
+        Ok(<T::RegData>::zero_pad_from_half(mem.get_half(addr)?))
     }
 }
 
@@ -366,8 +364,11 @@ impl<T: MachineDataWidth> ITypeLoad<T> for Lw {
     }
 
     // TODO define alignment behavior
-    fn eval(mem: &dyn Memory<T::ByteAddr>, addr: T::ByteAddr) -> T::RegData {
-        <T::RegData>::sign_ext_from_word(mem.get_word(addr).unwrap())
+    fn eval(
+        mem: &dyn Memory<T::ByteAddr>,
+        addr: T::ByteAddr,
+    ) -> Result<T::RegData, MemFault<T::ByteAddr>> {
+        Ok(<T::RegData>::sign_ext_from_word(mem.get_word(addr)?))
     }
 }
 
