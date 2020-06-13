@@ -124,7 +124,9 @@ lazy_static! {
             (63, Read),
             (64, Write),
             (53, Open),
-            (57, Close)
+            (57, Close),
+            (214, Brk),
+            (222, Mmap),
         ]
         .iter()
         .cloned()

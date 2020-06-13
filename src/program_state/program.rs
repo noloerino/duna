@@ -74,8 +74,13 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
     pub fn handle_trap(&self, trap_kind: &TrapKind<T::ByteAddr>) -> PrivStateChange<T> {
         match trap_kind {
             TrapKind::Ecall => self.dispatch_syscall(),
-            TrapKind::MemFault(MemFault { user_vaddr, cause }) => match cause {
-                MemFaultCause::PageFault => PrivStateChange::TryPageIn { addr: *user_vaddr },
+            TrapKind::MemFault(MemFault {
+                user_vaddr: _,
+                cause,
+            }) => match cause {
+                // even though the OS could attempt to map the page,
+                // we requite the user to manually call brk/sbrk/mmap etc.
+                MemFaultCause::PageFault => PrivStateChange::Terminate(TermCause::SegFault),
                 MemFaultCause::SegFault => PrivStateChange::Terminate(TermCause::SegFault),
                 MemFaultCause::BusError => PrivStateChange::Terminate(TermCause::BusError),
             },
@@ -94,6 +99,7 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
         ) {
             match nr {
                 Syscall::Write => self.syscall_write(a0, a1.into(), a2),
+                Syscall::Brk => self.syscall_brk(a0.into()),
                 _ => self.syscall_unknown(),
             }
         } else {
@@ -113,6 +119,15 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
         len: T::RegData,
     ) -> PrivStateChange<T> {
         PrivStateChange::FileWrite { fd, buf, len }
+    }
+
+    /// Attempts to move the "program break" up to the indicated location.
+    /// For us, this means the OS will attempt to page in memory up to the designated address.
+    /// TODO unmap pages if brk goes down
+    /// TODO initialize the brk pointer on program state
+    /// * addr - the
+    fn syscall_brk(&self, addr: T::ByteAddr) -> PrivStateChange<T> {
+        PrivStateChange::TryPageIn { addr }
     }
 
     /// Handles an unknown syscall.
@@ -188,6 +203,8 @@ pub enum Syscall {
     Write,
     Open,
     Close,
+    Brk,
+    Mmap,
 }
 
 /// Contains program state that is visited only to privileged entities, i.e. a kernel thread.
@@ -215,6 +232,7 @@ impl PrivProgState {
         diff: &PrivStateChange<T>,
     ) -> Result<UserDiff<F, T>, TermCause> {
         use PrivStateChange::*;
+        let ret_reg = <F::Syscalls as SyscallConvention<F, T>>::syscall_return_regs()[0];
         match diff {
             NoChange => Ok(UserDiff::noop(user_state)),
             FileWrite { fd: _, buf, len } => {
@@ -235,7 +253,6 @@ impl PrivProgState {
                 print!("{}", String::from_utf8_lossy(&bytes));
                 self.stdout.extend(bytes);
                 // TODO parameterize priv state over R as well
-                let ret_reg = <F::Syscalls as SyscallConvention<F, T>>::syscall_return_regs()[0];
                 Ok(UserDiff::reg_write_pc_p4(user_state, ret_reg, *len))
             }
             TryPageIn { addr } => {
@@ -245,7 +262,7 @@ impl PrivProgState {
                     .map_err(
                         |fault| fault.into(), // converts into termcause
                     )
-                    .map(|_| UserDiff::empty(user_state))
+                    .map(|_| UserDiff::reg_write_pc_p4(user_state, ret_reg, 0.into()))
             }
             Terminate(cause) => Err(*cause),
         }
@@ -358,14 +375,12 @@ pub enum TermCause {
     /// The program was terminated by a bus error, i.e. the program attempted to access a physically
     /// invalid address
     BusError,
-    /// A fault occured while trying to handle a page fault.
-    DoubleFault,
 }
 
 impl<T: ByteAddress> From<MemFault<T>> for TermCause {
     fn from(fault: MemFault<T>) -> TermCause {
         match fault.cause {
-            MemFaultCause::PageFault => TermCause::DoubleFault,
+            MemFaultCause::PageFault => TermCause::SegFault,
             MemFaultCause::SegFault => TermCause::SegFault,
             MemFaultCause::BusError => TermCause::BusError,
         }
@@ -384,10 +399,6 @@ impl TermCause {
             BusError => {
                 println!("bus error");
                 10isize
-            }
-            DoubleFault => {
-                println!("Kernel faulted while attempting to handle a page fault");
-                8isize
             }
         })
     }

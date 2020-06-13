@@ -11,7 +11,7 @@ pub enum RiscVRegister {
     T0,
     T1,
     T2,
-    FP,
+    S0,
     S1,
     A0,
     A1,
@@ -52,7 +52,7 @@ impl From<u8> for RiscVRegister {
 }
 
 impl RiscVRegister {
-    pub const S0: RiscVRegister = RiscVRegister::FP;
+    pub const FP: RiscVRegister = RiscVRegister::S0;
     pub const REG_ARRAY: [RiscVRegister; 32] = [
         RiscVRegister::ZERO,
         RiscVRegister::RA,

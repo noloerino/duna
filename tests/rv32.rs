@@ -155,6 +155,12 @@ fn test_bad_unaligned_word() {
     check_a0_at_end("bad_unaligned_word.s", 10);
 }
 
+/// Tests the brk syscall, which should map a page.
+#[test]
+fn test_brk_single_page() {
+    check_a0_at_end("brk_single_page.s", 0xDEAD_BEEFu32);
+}
+
 // /// Tests labels for literal values declared by directive.
 // #[test]
 // fn test_directive_labels() {

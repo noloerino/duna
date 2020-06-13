@@ -1126,7 +1126,7 @@ mod tests {
     fn test_label_defs() {
         let insts = parse_and_lex("add a0, sp, fp\nl1: addi sp, sp, -4\naddi sp, sp, 4\nl2:");
         let expected_concrete: [RiscVInst<Width32b>; 3] = [
-            Add::new(A0, SP, FP),
+            Add::new(A0, SP, S0),
             Addi::new(SP, SP, DataWord::from(-4)),
             Addi::new(SP, SP, DataWord::from(4)),
         ];
@@ -1187,7 +1187,10 @@ mod tests {
     fn test_r_type_parse() {
         let insts = parse_and_lex_concr("add x5, sp, fp");
         assert_eq!(insts.len(), 1);
-        assert_eq!(insts[0], Add::new(RiscVRegister::from(5), SP, FP));
+        assert_eq!(
+            insts[0],
+            Add::new(RiscVRegister::from(5), SP, RiscVRegister::FP)
+        );
     }
 
     #[test]
