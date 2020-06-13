@@ -178,7 +178,7 @@ fn impl_itype_load_derive(ast: &syn::DeriveInput) -> TokenStream {
             ) -> UserDiff<RiscV<T>, T> {
                 let rs1_val: T::Signed = state.regfile.read(rs1).into();
                 let addr: T::RegData = (rs1_val + imm.into()).into();
-                let new_rd_val = <#name as ITypeLoad<T>>::eval(&state.memory, addr.into());
+                let new_rd_val = <#name as ITypeLoad<T>>::eval(state.memory.as_ref(), addr.into());
                 UserDiff::reg_write_pc_p4(state, rd, new_rd_val)
             }
         }

@@ -255,7 +255,7 @@ pub(crate) trait ITypeArith<T: MachineDataWidth>: IType<T> {
 pub(crate) trait ITypeLoad<T: MachineDataWidth>: IType<T> {
     fn inst_fields() -> IInstFields;
     fn eval(
-        mem: &Box<dyn Memory<T::ByteAddr>>,
+        mem: &dyn Memory<T::ByteAddr>,
         addr: <T as MachineDataWidth>::ByteAddr,
     ) -> <T as MachineDataWidth>::RegData;
 }
