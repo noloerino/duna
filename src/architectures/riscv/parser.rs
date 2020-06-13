@@ -1014,7 +1014,7 @@ impl<'a, T: MachineDataWidth> LineParser<'a, T> {
                         if self.state.curr_section == ProgramSection::Text {
                             InstParser::new(self.data, self.iter, &head_tok.location, &name)
                                 .try_expand_inst()
-                                .map(|insts| OkParseResult::Insts(insts))
+                                .map(OkParseResult::Insts)
                         } else {
                             Err(ParseError::unsupported_directive(
                                 errloc,

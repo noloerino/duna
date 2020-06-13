@@ -85,7 +85,14 @@ impl Program<RiscV<Width32b>, Width32b> for RiscVProgram<Width32b> {
             ByteAddr32::from(u32::from(self.state.user_state.pc).wrapping_sub(pc_start))
                 .to_word_address() as usize,
         ) {
-            self.state.apply_inst(inst);
+            if let Err(cause) = self.state.apply_inst(inst) {
+                // TODO find more elegant way to set exit code
+                self.state
+                    .user_state
+                    .regfile
+                    .set(RiscVRegister::A0, cause.to_exit_code::<Width32b>().into());
+                break;
+            }
         }
         self.state.user_state.regfile.read(RiscVRegister::A0).into()
     }

@@ -72,10 +72,13 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
     }
 
     pub fn handle_trap(&self, trap_kind: &TrapKind<T::ByteAddr>) -> PrivStateChange<T> {
-        use TrapKind::*;
         match trap_kind {
-            Ecall => self.dispatch_syscall(),
-            _ => unimplemented!(),
+            TrapKind::Ecall => self.dispatch_syscall(),
+            TrapKind::MemFault(MemFault { user_vaddr, cause }) => match cause {
+                MemFaultCause::PageFault => PrivStateChange::TryPageIn { addr: *user_vaddr },
+                MemFaultCause::SegFault => PrivStateChange::Terminate(TermCause::SegFault),
+                MemFaultCause::BusError => PrivStateChange::Terminate(TermCause::BusError),
+            },
         }
     }
 
@@ -124,21 +127,32 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
         }
     }
 
-    pub fn apply_inst(&mut self, inst: &F::Instruction) {
-        self.apply_diff(&inst.apply(self));
+    pub fn apply_inst(&mut self, inst: &F::Instruction) -> Result<(), TermCause> {
+        self.apply_diff(&inst.apply(self))
+    }
+
+    /// Asserts that applying the instruction does not fail.
+    #[cfg(test)]
+    pub fn apply_inst_test(&mut self, inst: &F::Instruction) {
+        self.apply_diff(&inst.apply(self)).unwrap();
     }
 
     /// Performs the described operation.
     /// The privileged operation is applied first, followed by the user operation.
-    pub fn apply_diff(&mut self, diff: &InstResult<F, T>) {
+    /// If the diff terminates the program, the TermCause is returned.
+    pub fn apply_diff(&mut self, diff: &InstResult<F, T>) -> Result<(), TermCause> {
         match diff {
             InstResult::Trap(trap_kind) => {
                 let priv_diff = &self.handle_trap(trap_kind);
-                let user_diff = self.priv_state.apply_diff(&self.user_state, priv_diff);
+                // In the event of termination, nothing happens in userland.
+                let user_diff = self
+                    .priv_state
+                    .apply_diff(&mut self.user_state, priv_diff)?;
                 self.user_state.apply_diff(&user_diff);
             }
             InstResult::UserStateChange(user_diff) => self.user_state.apply_diff(&user_diff),
         };
+        Ok(())
     }
 
     /// Reverts the described operation.
@@ -197,12 +211,12 @@ impl PrivProgState {
 
     pub fn apply_diff<F: ArchFamily<T>, T: MachineDataWidth>(
         &mut self,
-        user_state: &UserProgState<F, T>,
+        user_state: &mut UserProgState<F, T>,
         diff: &PrivStateChange<T>,
-    ) -> UserDiff<F, T> {
+    ) -> Result<UserDiff<F, T>, TermCause> {
         use PrivStateChange::*;
         match diff {
-            NoChange => UserDiff::noop(user_state),
+            NoChange => Ok(UserDiff::noop(user_state)),
             FileWrite { fd: _, buf, len } => {
                 let memory = &user_state.memory;
                 let len_val: T::Unsigned = (*len).into();
@@ -222,9 +236,18 @@ impl PrivProgState {
                 self.stdout.extend(bytes);
                 // TODO parameterize priv state over R as well
                 let ret_reg = <F::Syscalls as SyscallConvention<F, T>>::syscall_return_regs()[0];
-                UserDiff::reg_write_pc_p4(user_state, ret_reg, *len)
+                Ok(UserDiff::reg_write_pc_p4(user_state, ret_reg, *len))
             }
-            Terminate(_) => unimplemented!(),
+            TryPageIn { addr } => {
+                user_state
+                    .memory
+                    .map_page(*addr)
+                    .map_err(
+                        |fault| fault.into(), // converts into termcause
+                    )
+                    .map(|_| UserDiff::empty(user_state))
+            }
+            Terminate(cause) => Err(*cause),
         }
     }
 
@@ -327,14 +350,37 @@ struct MemDiff<T: MachineDataWidth> {
 }
 
 /// Represents a possible cause for the termination of a program.
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum TermCause {
     /// The program was terminated by a segmentation fault, i.e. the program attempted to
     /// access invalid memory.
-    Segfault,
+    SegFault,
     /// The program was terminated by a bus error, i.e. the program attempted to access a physically
     /// invalid address
     BusError,
+    /// A fault occured while trying to handle a page fault.
+    DoubleFault,
+}
+
+impl<T: ByteAddress> From<MemFault<T>> for TermCause {
+    fn from(fault: MemFault<T>) -> TermCause {
+        match fault.cause {
+            MemFaultCause::PageFault => TermCause::DoubleFault,
+            MemFaultCause::SegFault => TermCause::SegFault,
+            MemFaultCause::BusError => TermCause::BusError,
+        }
+    }
+}
+
+impl TermCause {
+    pub fn to_exit_code<T: MachineDataWidth>(self) -> T::Signed {
+        use TermCause::*;
+        T::isize_to_sgn(match self {
+            SegFault => 11isize,
+            BusError => 10isize,
+            DoubleFault => 8isize,
+        })
+    }
 }
 
 /// Represents the type of trap being raised from user mode.
@@ -381,6 +427,10 @@ pub enum PrivStateChange<T: MachineDataWidth> {
         buf: T::ByteAddr,
         len: T::RegData,
     },
+    /// Represents an attempt to map memory containing the provided address.
+    TryPageIn {
+        addr: T::ByteAddr,
+    },
 }
 
 /// Represents a diff that is applied only to the user state of a program.
@@ -409,6 +459,11 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> UserDiff<F, T> {
             reg: reg_change,
             mem: mem_change,
         }
+    }
+
+    // A temporary haack to allow for empty user diffs.
+    pub fn empty(state: &UserProgState<F, T>) -> Self {
+        UserDiff::new(state, state.pc, None, None)
     }
 
     fn new_pc_p4(

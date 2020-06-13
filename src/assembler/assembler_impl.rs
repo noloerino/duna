@@ -97,7 +97,9 @@ impl SectionStore {
     }
 
     pub fn add(&mut self, section: ProgramSection, maybe_label: Option<LabelDef>, val: DataEnum) {
-        maybe_label.map(|label| self.add_label_here(section, label.name));
+        if let Some(label) = maybe_label {
+            self.add_label_here(section, label.name);
+        }
         use DataEnum::*;
         match val {
             Byte(n) => self.add_byte(section, n.into()),

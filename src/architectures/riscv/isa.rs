@@ -472,7 +472,7 @@ mod test {
     #[test]
     fn test_write_x0() {
         let mut state: ProgramState<RiscV<Width32b>, Width32b> = Default::default();
-        state.apply_inst(&Addi::new(ZERO, ZERO, DataWord::from(0x100)));
+        state.apply_inst_test(&Addi::new(ZERO, ZERO, DataWord::from(0x100)));
         assert_eq!(i32::from(state.regfile_read(ZERO)), 0);
     }
 
@@ -488,7 +488,7 @@ mod test {
         args: Vec<RTestData>,
     ) {
         for RTestData { rs2, result } in args {
-            state.apply_inst(&T::new(RD, RS1, rs2));
+            state.apply_inst_test(&T::new(RD, RS1, rs2));
             assert_eq!(i32::from(state.regfile_read(RD)), result);
         }
     }
@@ -505,7 +505,7 @@ mod test {
         args: Vec<IArithTestData>,
     ) {
         for IArithTestData { imm, result } in args {
-            state.apply_inst(&T::new(RD, RS1, DataWord::from(imm)));
+            state.apply_inst_test(&T::new(RD, RS1, DataWord::from(imm)));
             assert_eq!(i32::from(state.regfile_read(RD)), result);
         }
     }
@@ -631,7 +631,7 @@ mod test {
     fn test_auipc() {
         let mut state = get_init_state();
         state.set_user_pc(ByteAddr32::from(0x10FC_0000));
-        state.apply_inst(&Auipc::new(RD, DataWord::from(0x10)));
+        state.apply_inst_test(&Auipc::new(RD, DataWord::from(0x10)));
         assert_eq!(
             u32::from(state.regfile_read(RD)),
             0x10FC_0000 + (0x10 << 12)
@@ -641,7 +641,7 @@ mod test {
     #[test]
     fn test_lui() {
         let mut state = get_init_state();
-        state.apply_inst(&Lui::new(RD, DataWord::from(0xD_EADC)));
+        state.apply_inst_test(&Lui::new(RD, DataWord::from(0xD_EADC)));
         assert_eq!(u32::from(state.regfile_read(RD)), 0xDEAD_C000);
     }
 
@@ -669,7 +669,7 @@ mod test {
                 );
                 state.regfile_set(RS1, rs1_val);
                 state.regfile_set(RS2, rs2_val);
-                state.apply_inst(&T::new(RS1, RS2, offs));
+                state.apply_inst_test(&T::new(RS1, RS2, offs));
                 assert_eq!(exp_new_pc, state.get_user_pc());
             }
         }
@@ -806,7 +806,7 @@ mod test {
         state.regfile_set(A1, DataWord::from(addr));
         state.regfile_set(A2, DataWord::from(4));
         let inst = Ecall::new();
-        state.apply_inst(&inst);
+        state.apply_inst_test(&inst);
         // beware of endianness
         assert_eq!(state.get_stdout(), &[0xEF, 0xBE, 0xAD, 0xDE]);
     }
@@ -817,12 +817,12 @@ mod test {
         let starting_pc_val = 0x10FC_0000;
         state.set_user_pc(ByteAddr32::from(starting_pc_val));
         let inst = Jal::new(RA, DataWord::from(16));
-        state.apply_inst(&inst);
+        state.apply_inst_test(&inst);
         assert_eq!(u32::from(state.regfile_read(RA)), starting_pc_val + 4);
         assert_eq!(state.get_user_pc(), ByteAddr32::from(starting_pc_val + 16));
         state.set_user_pc(ByteAddr32::from(starting_pc_val));
         let inst = Jal::new(RA, DataWord::from(-256));
-        state.apply_inst(&inst);
+        state.apply_inst_test(&inst);
         assert_eq!(u32::from(state.regfile_read(RA)), starting_pc_val + 4);
         assert_eq!(state.get_user_pc(), ByteAddr32::from(starting_pc_val - 256));
     }
@@ -836,7 +836,7 @@ mod test {
         let inst = Jalr::new(RA, RS1, DataWord::from(-4));
         let exp_pc_val = tgt_pc_val - 4;
         state.regfile_set(RS1, DataWord::from(tgt_pc_val));
-        state.apply_inst(&inst);
+        state.apply_inst_test(&inst);
         assert_eq!(state.get_user_pc(), ByteAddr32::from(exp_pc_val));
     }
 
@@ -848,19 +848,19 @@ mod test {
         state.memory_set_word(ByteAddr32::from(base_addr), DataWord::from(test_data));
         state.regfile_set(T0, DataWord::from(base_addr));
         // signed loads
-        state.apply_inst(&Lb::new(T1, T0, DataWord::from(0)));
-        state.apply_inst(&Lb::new(T2, T0, DataWord::from(1)));
-        state.apply_inst(&Lb::new(T3, T0, DataWord::from(2)));
-        state.apply_inst(&Lb::new(T4, T0, DataWord::from(3)));
+        state.apply_inst_test(&Lb::new(T1, T0, DataWord::from(0)));
+        state.apply_inst_test(&Lb::new(T2, T0, DataWord::from(1)));
+        state.apply_inst_test(&Lb::new(T3, T0, DataWord::from(2)));
+        state.apply_inst_test(&Lb::new(T4, T0, DataWord::from(3)));
         assert_eq!(state.regfile_read(T1), DataWord::from(0x01));
         assert_eq!(state.regfile_read(T2), DataWord::from(0xFFFF_FFEFu32));
         assert_eq!(state.regfile_read(T3), DataWord::from(0xFFFF_FFCDu32));
         assert_eq!(state.regfile_read(T4), DataWord::from(0xFFFF_FFABu32));
         // unsigned loads
-        state.apply_inst(&Lbu::new(T1, T0, DataWord::from(0)));
-        state.apply_inst(&Lbu::new(T2, T0, DataWord::from(1)));
-        state.apply_inst(&Lbu::new(T3, T0, DataWord::from(2)));
-        state.apply_inst(&Lbu::new(T4, T0, DataWord::from(3)));
+        state.apply_inst_test(&Lbu::new(T1, T0, DataWord::from(0)));
+        state.apply_inst_test(&Lbu::new(T2, T0, DataWord::from(1)));
+        state.apply_inst_test(&Lbu::new(T3, T0, DataWord::from(2)));
+        state.apply_inst_test(&Lbu::new(T4, T0, DataWord::from(3)));
         assert_eq!(state.regfile_read(T1), DataWord::from(0x01));
         assert_eq!(state.regfile_read(T2), DataWord::from(0xEF));
         assert_eq!(state.regfile_read(T3), DataWord::from(0xCD));
@@ -875,13 +875,13 @@ mod test {
         state.memory_set_word(ByteAddr32::from(base_addr), DataWord::from(test_data));
         state.regfile_set(T0, DataWord::from(base_addr));
         // signed loads
-        state.apply_inst(&Lh::new(T1, T0, DataWord::from(0)));
-        state.apply_inst(&Lh::new(T2, T0, DataWord::from(2)));
+        state.apply_inst_test(&Lh::new(T1, T0, DataWord::from(0)));
+        state.apply_inst_test(&Lh::new(T2, T0, DataWord::from(2)));
         assert_eq!(state.regfile_read(T1), DataWord::from(0xFFFF_EF01u32));
         assert_eq!(state.regfile_read(T2), DataWord::from(0x0BCD));
         // unsigned loads
-        state.apply_inst(&Lhu::new(T1, T0, DataWord::from(0)));
-        state.apply_inst(&Lhu::new(T2, T0, DataWord::from(2)));
+        state.apply_inst_test(&Lhu::new(T1, T0, DataWord::from(0)));
+        state.apply_inst_test(&Lhu::new(T2, T0, DataWord::from(2)));
         assert_eq!(state.regfile_read(T1), DataWord::from(0xEF01));
         assert_eq!(state.regfile_read(T2), DataWord::from(0x0BCD));
     }
@@ -893,11 +893,11 @@ mod test {
         let test_data = 0xABCD_EF01u32;
         state.memory_set_word(ByteAddr32::from(base_addr), DataWord::from(test_data));
         state.regfile_set(T0, DataWord::from(base_addr));
-        state.apply_inst(&Lw::new(T1, T0, DataWord::from(0)));
+        state.apply_inst_test(&Lw::new(T1, T0, DataWord::from(0)));
         assert_eq!(state.regfile_read(T1), DataWord::from(test_data));
         // Test loading with negative offset
         state.regfile_set(T0, DataWord::from(base_addr + 16));
-        state.apply_inst(&Lw::new(T1, T0, DataWord::from(-16)));
+        state.apply_inst_test(&Lw::new(T1, T0, DataWord::from(-16)));
         assert_eq!(state.regfile_read(T1), DataWord::from(test_data));
     }
 
@@ -911,13 +911,13 @@ mod test {
         state.regfile_set(RS2, DataWord::from(byte));
         // don't store msb yet
         for i in 0..3 {
-            state.apply_inst(&Sb::new(RS1, RS2, DataWord::from(i)));
+            state.apply_inst_test(&Sb::new(RS1, RS2, DataWord::from(i)));
         }
         assert_eq!(
             state.memory_get_word(ByteAddr32::from(addr)),
             DataWord::from(0x00DE_DEDEu32)
         );
-        state.apply_inst(&Sb::new(RS1, RS2, DataWord::from(3)));
+        state.apply_inst_test(&Sb::new(RS1, RS2, DataWord::from(3)));
         assert_eq!(
             state.memory_get_word(ByteAddr32::from(addr)),
             DataWord::from(0xDEDE_DEDEu32)
@@ -935,8 +935,8 @@ mod test {
             state.regfile_set(RS1, DataWord::from(addr));
             state.regfile_set(RS2_POS, DataWord::from(rs2_val));
             state.regfile_set(RS2_NEG, DataWord::from(rs2_val >> 16));
-            state.apply_inst(&Sh::new(RS1, RS2_POS, DataWord::from(offs)));
-            state.apply_inst(&Sh::new(RS1, RS2_NEG, DataWord::from(offs + 2)));
+            state.apply_inst_test(&Sh::new(RS1, RS2_POS, DataWord::from(offs)));
+            state.apply_inst_test(&Sh::new(RS1, RS2_NEG, DataWord::from(offs + 2)));
             assert_eq!(
                 state.memory_get_word((addr + offs).into()),
                 DataWord::from(rs2_val)
@@ -954,7 +954,7 @@ mod test {
         for (addr, offs, rs2_val) in test_data {
             state.regfile_set(RS1, DataWord::from(addr));
             state.regfile_set(RS2, rs2_val);
-            state.apply_inst(&Sw::new(RS1, RS2, DataWord::from(offs)));
+            state.apply_inst_test(&Sw::new(RS1, RS2, DataWord::from(offs)));
             assert_eq!(state.memory_get_word((addr + offs).into()), rs2_val);
         }
     }

@@ -154,8 +154,8 @@ impl MemPage {
 
 #[derive(Debug, PartialEq)]
 pub struct MemFault<T: ByteAddress> {
-    user_vaddr: T,
-    cause: MemFaultCause,
+    pub user_vaddr: T,
+    pub cause: MemFaultCause,
 }
 
 impl<T: ByteAddress> MemFault<T> {
@@ -224,7 +224,7 @@ pub trait Memory<T: ByteAddress> {
     }
 
     /// Maps a page containing the provided address to physical memory if it is not already mapped.
-    /// If the page cannot be mapped, then a TermCause is returned.
+    /// If the page cannot be mapped, then a MemFault is returned.
     /// If the page was successfully mapped or already mapped, then Ok(()) is returned.
     fn map_page(&mut self, addr: T) -> Result<(), MemFault<T>>;
 
