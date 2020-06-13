@@ -1,4 +1,5 @@
 use super::datatypes::*;
+use crate::arch::*;
 use std::collections::HashMap;
 use std::marker::PhantomData;
 
@@ -10,9 +11,8 @@ type PageOffset = usize;
 /// TODO implement default value
 pub struct MemPage {
     /// To ensure the simulator doesn't waste space allocating the full size of the page,
-    /// this backing store allocates bytes lazily.
-    /// TODO do something more efficient like a u64
-    backing: HashMap<PageOffset, DataByte>,
+    /// this backing store allocates doublewords lazily.
+    backing: HashMap<PageOffset, DataDword>,
 }
 
 impl MemPage {
@@ -23,15 +23,33 @@ impl MemPage {
     }
 
     fn set_byte(&mut self, offs: PageOffset, value: DataByte) {
-        self.backing.insert(offs, value);
+        let dword_offs = offs ^ 0b111;
+        let byte_offs = offs & 0b111;
+        let old_dword: u64 = self
+            .backing
+            .get(&dword_offs)
+            .map(Clone::clone)
+            .unwrap_or(DataDword::zero())
+            .into();
+        // Zero out byte so we can set it
+        let shamt = byte_offs * 8;
+        let mask = !(0xFFu64 << shamt);
+        let val: u8 = value.into();
+        let new_dword = (old_dword & mask) | ((val as u64) << shamt);
+        self.backing.insert(dword_offs, new_dword.into());
     }
 
     fn get_byte(&self, offs: PageOffset) -> DataByte {
-        if let Some(v) = self.backing.get(&offs) {
-            *v
-        } else {
-            DataByte::from(0u8)
-        }
+        let dword_offs = offs ^ 0b111;
+        let byte_offs = offs & 0b111;
+        let val: u64 = self
+            .backing
+            .get(&dword_offs)
+            .map(Clone::clone)
+            .unwrap_or(DataDword::zero())
+            .into();
+        // Shift and let truncating happen automatically with cast
+        DataByte::from((val >> (byte_offs * 8)) as u8)
     }
 
     fn set_half(&mut self, offs: PageOffset, value: DataHalf) {
@@ -59,15 +77,78 @@ impl MemPage {
     }
 
     fn set_doubleword(&mut self, offs: PageOffset, value: DataDword) {
-        let dword: u64 = value.into();
-        self.set_word(offs, (dword as u32).into());
-        self.set_word(offs + 4, ((dword >> 32) as u32).into());
+        // Check alignment
+        let lsb = offs & 0b111;
+        let lower_offs = (offs >> 3) << 3;
+        if lsb == 0 {
+            self.backing.insert(lower_offs, value);
+        } else {
+            let val: u64 = value.into();
+            // Get the two dwords that the value crosses
+            let mut lower_val: u64 = self
+                .backing
+                .get(&lower_offs)
+                .map(Clone::clone)
+                .unwrap_or(DataDword::zero())
+                .into();
+            let lsb_shamt = (8 - lsb) * 8;
+            // Shift to zero upper bytes to be replaced
+            // e.g. if offset is 1, we need to replace upper 7 bytes
+            lower_val = (lower_val << lsb_shamt) >> lsb_shamt;
+            self.backing.insert(
+                lower_offs,
+                // e.g. if offset is 1, we want to only shift by 1 byte
+                DataDword::from(lower_val | (val << (lsb * 8))),
+            );
+            let upper_offs = lower_offs + 8;
+            let mut upper_val: u64 = self
+                .backing
+                .get(&upper_offs)
+                .map(Clone::clone)
+                .unwrap_or(DataDword::zero())
+                .into();
+            let msb_shamt = lsb * 8;
+            // Shift to zero lower bytes to be replaced
+            // e.g. if offset is 1, we need to replace lower 1 byte
+            upper_val = (upper_val >> msb_shamt) << msb_shamt;
+            self.backing.insert(
+                upper_offs,
+                // e.g. if offset is 1, we want to only store top 1 byte
+                DataDword::from(upper_val | (val >> ((8 - lsb) * 8))),
+            );
+        }
     }
 
     fn get_doubleword(&self, offs: PageOffset) -> DataDword {
-        let lower: u32 = self.get_word(offs).into();
-        let upper: u32 = self.get_word(offs + 4).into();
-        DataDword::from(((upper as u64) << 32) | (lower as u64))
+        // Check alignment
+        let lsb = offs & 0b111;
+        let lower_offs = (offs >> 3) << 3;
+        if lsb == 0 {
+            self.backing
+                .get(&lower_offs)
+                .map(Clone::clone)
+                .unwrap_or(DataDword::zero())
+        } else {
+            // Get the two dwords that the value crosses
+            let lower_val: u64 = self
+                .backing
+                .get(&lower_offs)
+                .map(Clone::clone)
+                .unwrap_or(DataDword::zero())
+                .into();
+            let upper_offs = lower_offs + 8;
+            let upper_val: u64 = self
+                .backing
+                .get(&upper_offs)
+                .map(Clone::clone)
+                .unwrap_or(DataDword::zero())
+                .into();
+            // Shift components by needed number of bytes
+            // For example, if the offset is 1, we right shift the lower dword by 1B to chop off the
+            // byte at offset 0, and left shift the upper dword by 7 to eliminate all but the lowest
+            // byte in it.
+            DataDword::from((upper_val << ((8 - lsb) * 8)) | (lower_val >> (lsb * 8)))
+        }
     }
 }
 
@@ -299,7 +380,7 @@ impl<T: ByteAddress> LinearPagedMemory<T> {
         let page_count = 1 << (phys_addr_len - page_offs_len);
         LinearPagedMemory {
             page_offs_len,
-            page_count: page_count,
+            page_count,
             page_table: Vec::with_capacity(page_count),
             phys_mem: HashMap::new(),
             paged_out: HashMap::new(),
@@ -446,5 +527,35 @@ impl<T: ByteAddress> Memory<T> for LinearPagedMemory<T> {
         self.fault_if_unmapped(addr)?;
         let (vpn, offs) = self.split_addr(addr);
         Ok(self.get_page(vpn).unwrap().get_doubleword(offs))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Ensures that unaligned loads/stores on a MemPage succeed.
+    #[test]
+    fn test_unaligned_mempage_rw() {
+        let mut mem = MemPage::new();
+        // This address is not dword-aligned
+        mem.set_doubleword(0xFFFF_FFF0, 0xFFFF_FFFF_FFFF_FFFFu64.into());
+        mem.set_doubleword(0xFFFF_FFF8, 0xEEEE_EEEE_EEEE_EEEEu64.into());
+        // This should overwrite parts of both previous words
+        mem.set_doubleword(0xFFFF_FFF1, 0xABCD_ABCD_ABCD_ABCDu64.into());
+        assert_eq!(
+            mem.get_doubleword(0xFFFF_FFF1),
+            0xABCD_ABCD_ABCD_ABCDu64.into()
+        );
+        // Assuming little endian, the upper bytes of the lower address were set
+        assert_eq!(
+            mem.get_doubleword(0xFFFF_FFF0),
+            0xCDAB_CDAB_CDAB_CD_FFu64.into()
+        );
+        // Assuming little endian, the lower bytes of the upper address were set
+        assert_eq!(
+            mem.get_doubleword(0xFFFF_FFF8),
+            0xEEEE_EEEE_EEEE_EEABu64.into()
+        );
     }
 }
