@@ -17,8 +17,12 @@ where
     ) -> Self;
     /// Prints out all the instructions that this program contains.
     fn dump_insts(&self);
+
     /// Runs the program to completion, returning an exit code.
-    fn run(&mut self) -> i32;
+    /// If the program was terminated abnormally, the upper bit of the u8 will be set.
+    /// The lower 7 bits are the value passed to the exit handler (or the default register for the
+    /// first argument of a syscall if exit is not explicitly invoked), and will be truncated.
+    fn run(&mut self) -> u8;
 
     /// Returns the instructions provided to this program.
     fn get_inst_vec(&self) -> &[F::Instruction];
@@ -389,18 +393,18 @@ impl<T: ByteAddress> From<MemFault<T>> for TermCause {
 
 impl TermCause {
     // TODO currently prints exit cause, which should eventually be moved elsewhere
-    pub fn to_exit_code<T: MachineDataWidth>(self) -> T::Signed {
+    pub fn handle_exit(self) -> u8 {
         use TermCause::*;
-        T::isize_to_sgn(match self {
+        match self {
             SegFault => {
                 println!("Segmentation fault: 11");
-                11isize
+                11u8
             }
             BusError => {
                 println!("bus error");
-                10isize
+                10u8
             }
-        })
+        }
     }
 }
 

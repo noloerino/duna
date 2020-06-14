@@ -1,5 +1,5 @@
 use duna::arch::*;
-use duna::architectures::riscv::{RiscVProgram, RV32};
+use duna::architectures::riscv::{RiscVProgram, RiscVRegister, RV32};
 use duna::assembler::{Linker, ParseErrorReport};
 use duna::program_state::Program;
 use std::path::Path;
@@ -37,8 +37,11 @@ fn err_report_from_files(main_filename: &str, others: Vec<&str>) -> ParseErrorRe
 /// Runs a test that checks the value left in register a0 after running the program.
 fn check_a0_at_end(filename: &str, exp_a0: u32) {
     let mut program = program_from_file(filename);
-    let result = program.run();
-    assert_eq!(result as u32, exp_a0);
+    program.run();
+    assert_eq!(
+        u32::from(program.state.regfile_read(RiscVRegister::A0)),
+        exp_a0
+    );
 }
 
 /// Tests some basic I-type instructions.
@@ -99,7 +102,11 @@ fn test_basic_link() {
         .link::<RV32>(Default::default())
         .unwrap();
     program.dump_insts();
-    assert_eq!(program.run() as u32, 0xABCD_0123u32);
+    program.run();
+    assert_eq!(
+        u32::from(program.state.regfile_read(RiscVRegister::A0)),
+        0xABCD_0123u32
+    );
 }
 
 /// Tests linking files that require global symbols.
@@ -110,7 +117,11 @@ fn test_global_link() {
         .link::<RV32>(Default::default())
         .unwrap();
     program.dump_insts();
-    assert_eq!(program.run(), 0x1234);
+    program.run();
+    assert_eq!(
+        u32::from(program.state.regfile_read(RiscVRegister::A0)),
+        0x1234
+    );
 }
 
 /// Tests reporting errors in multiple linked files.
@@ -144,15 +155,20 @@ fn test_redefined_label() {
 }
 
 /// Tests that reading from the null pointer segfaults.
+/// Shells set the high bit on abnormal exits.
 #[test]
 fn test_npe_segfault() {
-    check_a0_at_end("npe_segfault.s", 11);
+    assert_eq!(program_from_file("npe_segfault.s").run(), 11 | 0b1000_0000);
 }
 
 /// Tests that reading from an unaligned word raises a bus error.
+/// Shells set the high bit on abnormal exits.
 #[test]
 fn test_bad_unaligned_word() {
-    check_a0_at_end("bad_unaligned_word.s", 10);
+    assert_eq!(
+        program_from_file("bad_unaligned_word.s").run(),
+        10 | 0b1000_0000
+    );
 }
 
 /// Tests the brk syscall, which should map a page.

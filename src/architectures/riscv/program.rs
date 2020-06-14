@@ -76,7 +76,7 @@ impl Program<RiscV<Width32b>, Width32b> for RiscVProgram<Width32b> {
     }
 
     /// Runs the program to completion, returning the value in register a0.
-    fn run(&mut self) -> i32 {
+    fn run(&mut self) -> u8 {
         // for now, just use the instruction vec to determine the next instruction
         let pc_start: u32 = RiscVProgram::TEXT_START_32;
         // for now, if we're out of instructions just call it a day
@@ -86,15 +86,13 @@ impl Program<RiscV<Width32b>, Width32b> for RiscVProgram<Width32b> {
                 .to_word_address() as usize,
         ) {
             if let Err(cause) = self.state.apply_inst(inst) {
-                // TODO find more elegant way to set exit code
-                self.state
-                    .user_state
-                    .regfile
-                    .set(RiscVRegister::A0, cause.to_exit_code::<Width32b>().into());
-                break;
+                // Shells set exit code high on exit
+                return cause.handle_exit() | 0b1000_0000;
             }
         }
-        self.state.user_state.regfile.read(RiscVRegister::A0).into()
+        let a0_val: u32 = self.state.user_state.regfile.read(RiscVRegister::A0).into();
+        // For a non-abnormal exit, downcast to u8 and set upper bit to 0
+        (a0_val as u8) & 0b0111_1111
     }
 
     fn get_inst_vec(&self) -> &[RiscVInst<Width32b>] {
