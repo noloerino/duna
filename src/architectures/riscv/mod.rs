@@ -6,7 +6,7 @@ mod program;
 mod pseudo_inst;
 mod registers;
 
-pub use arch::{RiscV, RV32};
+pub use arch::*;
 pub use instruction::RiscVInst;
 pub use program::*;
 pub use registers::RiscVRegister;

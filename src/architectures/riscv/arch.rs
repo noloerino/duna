@@ -23,3 +23,12 @@ impl Architecture for RV32 {
     type ProgramBehavior = RiscVProgramBehavior<Width32b>;
     type Parser = RiscVParser<Width32b>;
 }
+
+pub struct RV64;
+
+impl Architecture for RV64 {
+    type DataWidth = Width64b;
+    type Family = RiscV<Width64b>;
+    type ProgramBehavior = RiscVProgramBehavior<Width64b>;
+    type Parser = RiscVParser<Width64b>;
+}

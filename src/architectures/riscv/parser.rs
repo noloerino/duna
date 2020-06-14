@@ -1,7 +1,6 @@
 use super::arch::*;
 use super::instruction::*;
 use super::isa;
-use super::pseudo_inst;
 use super::pseudo_inst::*;
 use super::registers::RiscVRegister;
 use crate::arch::*;
@@ -32,7 +31,8 @@ enum ParseType<T: MachineDataWidth> {
     Jalr,
     U(fn(RiscVRegister, T::RegData) -> RiscVInst<T>),
     // Pseudo-instructions
-    Li,
+    // Li is split to allow for distinction between 32 and 64-bit variants
+    Li(fn(RiscVRegister, T::RegData) -> Vec<RiscVInst<T>>),
     RegReg(fn(RiscVRegister, RiscVRegister) -> RiscVInst<T>),
     NoArgs(fn() -> RiscVInst<T>),
     OneReg(fn(RiscVRegister) -> RiscVInst<T>),
@@ -99,7 +99,66 @@ lazy_static! {
             ("sw", MemS(Sw::new)),
             // ("xor", R),
             // ("xori", Arith),
-            ("li", ParseType::Li),
+            ("li", ParseType::Li(Li32::expand)),
+            ("mv", RegReg(Mv::expand)),
+            ("nop", NoArgs(Nop::expand)),
+            ("j", LikeJ(J::expand)),
+            ("jr", OneReg(Jr::expand)),
+            ("ret", NoArgs(Ret::expand)),
+        ]
+        .iter()
+        .cloned()
+        .map(|(s, t)| (s.to_string(), t))
+        .collect()
+    };
+    static ref RV64_INST_EXPANSION_TABLE: HashMap<String, ParseType<Width64b>> = {
+        use super::isa::*;
+        use ParseType::*;
+        [
+            ("add", R(Add::new)),
+            ("addi", Arith(Addi::new)),
+            // ("addiw", Arith(Addiw::new)),
+            ("and", R(And::new)),
+            ("andi", Arith(Andi::new)),
+            ("auipc", U(Auipc::new)),
+            ("beq", B(Beq::new)),
+            ("bge", B(Bge::new)),
+            ("bgeu", B(Bgeu::new)),
+            ("blt", B(Blt::new)),
+            ("bltu", B(Bltu::new)),
+            ("bne", B(Bne::new)),
+            // ("ebreak", Env),
+            ("ecall", Env(Ecall::new)),
+            ("jal", ParseType::Jal),
+            ("jalr", ParseType::Jalr),
+            ("lb", MemL(Lb::new)),
+            ("lbu", MemL(Lbu::new)),
+            // ("ld", MemL),
+            ("lh", MemL(Lh::new)),
+            ("lhu", MemL(Lhu::new)),
+            ("lui", U(Lui::new)),
+            ("lw", MemL(Lw::new)),
+            // ("lwu", MemL),
+            // ("or", R),
+            // ("ori", Arith),
+            ("sb", MemS(Sb::new)),
+            // ("sd", MemS(Sd::new)),
+            ("sh", MemS(Sh::new)),
+            // ("sll", R),
+            // ("slli", Arith),
+            // ("slt", R),
+            // ("slti", Arith),
+            // ("sltiu", Arith),
+            // ("sltu", R),
+            // ("sra", R),
+            // ("srai", Arith),
+            // ("srl", R),
+            // ("srli", Arith),
+            // ("sub", R),
+            ("sw", MemS(Sw::new)),
+            // ("xor", R),
+            // ("xori", Arith),
+            ("li", ParseType::Li(Li64::expand)),
             ("mv", RegReg(Mv::expand)),
             ("nop", NoArgs(Nop::expand)),
             ("j", LikeJ(J::expand)),
@@ -134,17 +193,34 @@ impl Parser<RiscV<Width32b>, Width32b> for RiscVParser<Width32b> {
             state: ParseState::new(),
             _phantom: PhantomData,
         }
-        .parse()
+        .parse(&RV32_INST_EXPANSION_TABLE)
     }
 }
 
-impl RiscVParser<Width32b> {
-    fn parse(mut self) -> ParseResult<RiscV<Width32b>, Width32b> {
-        let mut insts = Vec::<PartialInst<RiscV<Width32b>, Width32b>>::new();
+impl Parser<RiscV<Width64b>, Width64b> for RiscVParser<Width64b> {
+    fn parse_lex_result(lex_result: LexResult) -> ParseResult<RiscV<Width64b>, Width64b> {
+        RiscVParser {
+            file_id: lex_result.file_id,
+            lines: lex_result.lines,
+            reporter: lex_result.reporter,
+            state: ParseState::new(),
+            _phantom: PhantomData,
+        }
+        .parse(&RV64_INST_EXPANSION_TABLE)
+    }
+}
+
+// TODO abstract out common behavior into a struct
+impl<T: MachineDataWidth> RiscVParser<T> {
+    fn parse(
+        mut self,
+        inst_expansion_table: &HashMap<String, ParseType<T>>,
+    ) -> ParseResult<RiscV<T>, T> {
+        let mut insts = Vec::<PartialInst<RiscV<T>, T>>::new();
         let mut last_label: Option<LabelDef> = None;
         let mut sections = SectionStore::new();
-        let parser_data: &ParserData<Width32b> = &ParserData {
-            inst_expansion_table: &RV32_INST_EXPANSION_TABLE,
+        let parser_data = &ParserData {
+            inst_expansion_table,
             reg_expansion_table: &REG_EXPANSION_TABLE,
         };
         for line in self.lines {
@@ -672,11 +748,11 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
                 let imm = self.try_parse_imm(20, args.remove(0))?;
                 ok_wrap_concr(inst_new(rd, imm))
             }
-            Li => {
+            Li(inst_expand) => {
                 let mut args = self.consume_commasep_args(2)?;
                 let rd = self.try_parse_reg(args.remove(0))?;
                 let imm = self.try_parse_imm(32, args.remove(0))?;
-                ok_wrap_expanded(pseudo_inst::Li::expand(rd, imm))
+                ok_wrap_expanded(inst_expand(rd, imm))
             }
             NoArgs(inst_expand) => {
                 let _args = self.consume_commasep_args(0)?;
@@ -1221,6 +1297,6 @@ mod tests {
     #[test]
     fn test_pseudo_li() {
         let insts = parse_and_lex_concr("li a0, 0xDEAD_BEEF");
-        assert_eq!(insts, Li::expand(A0, DataWord::from(0xDEAD_BEEFu32)));
+        assert_eq!(insts, Li32::expand(A0, DataWord::from(0xDEAD_BEEFu32)));
     }
 }
