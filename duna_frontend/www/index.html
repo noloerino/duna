@@ -6,7 +6,6 @@
   </head>
   <body>
     <noscript>Duna requires Javascript and WebAssembly to run.</noscript>
-    <script src="./bootstrap.js"></script>
     <div>
       <textarea
         id="code"
@@ -21,11 +20,13 @@
         disabled
         placeholder="console output appears here"
       ></textarea>
+      <table><tbody id="registers"></tbody></table>
       <p>Program exited with code <span id="exit-code">--</span></p>
     </div>
     <!-- TODO replace this with assemble/simulate buttons -->
     <div>
       <button id="go">Go!</button>
     </div>
+    <script src="./bootstrap.js"></script>
   </body>
 </html>

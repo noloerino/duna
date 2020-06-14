@@ -2,7 +2,7 @@
   "name": "duna_frontend",
   "version": "0.1.0",
   "description": "a versatile assembly emulator",
-  "main": "index.js",
+  "main": "bootstrap.js",
   "scripts": {
     "build": "webpack --config webpack.config.js",
     "start": "webpack-dev-server",
@@ -17,7 +17,7 @@
   },
   "license": "MIT",
   "devDependencies": {
-    "copy-webpack-plugin": "^5.0.0",
+    "copy-webpack-plugin": "^5.1.1",
     "prettier": "^2.0.5",
     "ts-loader": "^7.0.5",
     "typescript": "^3.9.3",
