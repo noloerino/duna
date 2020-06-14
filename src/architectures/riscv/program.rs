@@ -87,7 +87,7 @@ impl Program<RiscV<Width32b>, Width32b> for RiscVProgram<Width32b> {
         ) {
             if let Err(cause) = self.state.apply_inst(inst) {
                 // Shells set exit code high on exit
-                return cause.handle_exit() | 0b1000_0000;
+                return cause.handle_exit(&mut self.state) | 0b1000_0000;
             }
         }
         let a0_val: u32 = self.state.user_state.regfile.read(RiscVRegister::A0).into();

@@ -49,6 +49,15 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
         self.priv_state.stdout.as_slice()
     }
 
+    pub fn get_stderr(&self) -> &[u8] {
+        self.priv_state.stderr.as_slice()
+    }
+
+    pub fn write_stderr(&mut self, string: &str) {
+        self.priv_state.stderr.extend(string.as_bytes());
+        eprint!("{}", string);
+    }
+
     pub fn get_user_pc(&self) -> T::ByteAddr {
         self.user_state.pc
     }
@@ -216,6 +225,7 @@ pub enum Syscall {
 pub struct PrivProgState {
     /// Holds the contents of all bytes that have been printed to stdout (used mostly for testing)
     stdout: Vec<u8>,
+    stderr: Vec<u8>,
     // file_descriptors: Vec<Vec<u8>>
 }
 
@@ -227,7 +237,10 @@ impl Default for PrivProgState {
 
 impl PrivProgState {
     pub fn new() -> PrivProgState {
-        PrivProgState { stdout: Vec::new() }
+        PrivProgState {
+            stdout: Vec::new(),
+            stderr: Vec::new(),
+        }
     }
 
     pub fn apply_diff<F: ArchFamily<T>, T: MachineDataWidth>(
@@ -239,7 +252,7 @@ impl PrivProgState {
         let ret_reg = <F::Syscalls as SyscallConvention<F, T>>::syscall_return_regs()[0];
         match diff {
             NoChange => Ok(UserDiff::noop(user_state)),
-            FileWrite { fd: _, buf, len } => {
+            FileWrite { fd, buf, len } => {
                 let memory = &user_state.memory;
                 let len_val: T::Unsigned = (*len).into();
                 let count: usize = T::usgn_to_usize(len_val);
@@ -254,18 +267,28 @@ impl PrivProgState {
                     })
                     .collect();
                 // TODO impl for other files
-                print!("{}", String::from_utf8_lossy(&bytes));
-                self.stdout.extend(bytes);
-                // TODO parameterize priv state over R as well
+                let fd_idx: usize = {
+                    let num: T::Unsigned = (*fd).into();
+                    T::usgn_to_usize(num)
+                };
+                match fd_idx {
+                    1 => {
+                        print!("{}", String::from_utf8_lossy(&bytes));
+                        self.stdout.extend(bytes);
+                    }
+                    2 => {
+                        eprint!("{}", String::from_utf8_lossy(&bytes));
+                        self.stderr.extend(bytes);
+                    }
+                    _ => unimplemented!(),
+                }
                 Ok(UserDiff::reg_write_pc_p4(user_state, ret_reg, *len))
             }
             TryPageIn { addr } => {
                 user_state
                     .memory
                     .map_page(*addr)
-                    .map_err(
-                        |fault| fault.into(), // converts into termcause
-                    )
+                    .map_err(|fault| fault.into()) // converts into termcause
                     .map(|_| UserDiff::reg_write_pc_p4(user_state, ret_reg, 0.into()))
             }
             Terminate(cause) => Err(*cause),
@@ -393,15 +416,18 @@ impl<T: ByteAddress> From<MemFault<T>> for TermCause {
 
 impl TermCause {
     // TODO currently prints exit cause, which should eventually be moved elsewhere
-    pub fn handle_exit(self) -> u8 {
+    pub fn handle_exit<F: ArchFamily<T>, T: MachineDataWidth>(
+        self,
+        program_state: &mut ProgramState<F, T>,
+    ) -> u8 {
         use TermCause::*;
         match self {
             SegFault => {
-                println!("Segmentation fault: 11");
+                program_state.write_stderr("Segmentation fault: 11\n");
                 11u8
             }
             BusError => {
-                println!("bus error");
+                program_state.write_stderr("bus error\n");
                 10u8
             }
         }
