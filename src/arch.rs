@@ -2,6 +2,7 @@
 use crate::assembler::parser::Parser;
 use crate::instruction::ConcreteInst;
 use crate::program_state::*;
+use num_traits::cast;
 use num_traits::int;
 use num_traits::ops::wrapping;
 use num_traits::sign;
@@ -11,7 +12,7 @@ use std::fmt;
 pub trait Architecture: Sized {
     type DataWidth: MachineDataWidth;
     type Family: ArchFamily<Self::DataWidth>;
-    type Program: Program<Self::Family, Self::DataWidth>;
+    type ProgramBehavior: ProgramBehavior<Self::Family, Self::DataWidth>;
     type Parser: Parser<Self::Family, Self::DataWidth>;
 }
 
@@ -66,6 +67,7 @@ pub trait MachineDataWidth: Clone + Copy {
         + Ord
         + int::PrimInt
         + sign::Unsigned
+        + cast::AsPrimitive<u8>
         + wrapping::WrappingAdd
         + wrapping::WrappingSub
         + Copy

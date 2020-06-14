@@ -1,5 +1,4 @@
-use duna::arch::*;
-use duna::architectures::riscv::{RiscVProgram, RiscVRegister, RV32};
+use duna::architectures::riscv::{RiscVRegister, RV32};
 use duna::assembler::{Linker, ParseErrorReport};
 use duna::program_state::Program;
 use std::path::Path;
@@ -12,8 +11,8 @@ fn get_full_test_path(relative_path: &str) -> String {
         .to_string()
 }
 
-fn program_from_file(filename: &str) -> RiscVProgram<Width32b> {
-    let program: RiscVProgram<Width32b> = Linker::with_main(&get_full_test_path(filename))
+fn program_from_file(filename: &str) -> Program<RV32> {
+    let program: Program<RV32> = Linker::with_main(&get_full_test_path(filename))
         .link::<RV32>(Default::default())
         .unwrap();
     // stdout is suppressed unless a test fails

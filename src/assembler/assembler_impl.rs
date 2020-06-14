@@ -4,8 +4,7 @@ use super::parser::{Label, LabelDef, LabelRef, ParseResult, Parser};
 use super::partial_inst::{PartialInst, PartialInstType};
 use crate::arch::*;
 use crate::config::*;
-use crate::program_state::DataEnum;
-use crate::program_state::Program;
+use crate::program_state::{DataEnum, Program};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 
@@ -239,7 +238,7 @@ impl<S: Architecture> UnlinkedProgram<S> {
     }
 
     /// Produces a program, or an error report if some instructions are still missing labels.
-    pub fn into_program(self, config: &MachineConfig) -> Result<S::Program, ParseErrorReporter> {
+    pub fn into_program(self, config: &MachineConfig) -> Result<Program<S>, ParseErrorReporter> {
         let mut reporter = ParseErrorReporter::new();
         let insts = self
             .insts
@@ -255,7 +254,7 @@ impl<S: Architecture> UnlinkedProgram<S> {
             )
             .collect();
         if reporter.is_empty() {
-            Ok(<S::Program>::new(
+            Ok(Program::<S>::new(
                 insts,
                 self.sections,
                 config.mem_config.build_mem(),
@@ -267,7 +266,7 @@ impl<S: Architecture> UnlinkedProgram<S> {
 
     /// Attempts to produce an instance of the program. Panics if some labels are needed
     /// but not found within the body of this program.
-    pub fn try_into_program(self, config: &MachineConfig) -> S::Program {
+    pub fn try_into_program(self, config: &MachineConfig) -> Program<S> {
         self.into_program(config).unwrap()
     }
 }

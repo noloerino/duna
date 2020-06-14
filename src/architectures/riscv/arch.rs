@@ -20,6 +20,6 @@ pub struct RV32;
 impl Architecture for RV32 {
     type DataWidth = Width32b;
     type Family = RiscV<Width32b>;
-    type Program = RiscVProgram<Width32b>;
+    type ProgramBehavior = RiscVProgramBehavior<Width32b>;
     type Parser = RiscVParser<Width32b>;
 }

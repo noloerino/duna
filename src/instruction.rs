@@ -1,7 +1,8 @@
 use crate::arch::*;
 use crate::program_state::{InstResult, ProgramState};
+use std::fmt::Debug;
 
-pub trait ConcreteInst<F, T>
+pub trait ConcreteInst<F, T>: Debug
 where
     F: ArchFamily<T>,
     T: MachineDataWidth,

@@ -1,5 +1,6 @@
 use crate::arch::RegSize;
 use duna_macro::*;
+use num_traits::cast;
 use std::cmp::{max, min};
 use std::fmt;
 use std::hash::Hash;
@@ -450,7 +451,7 @@ impl From<DataByte> for i8 {
 }
 
 pub trait ByteAddress: Clone + Copy + Sized + fmt::Debug + 'static {
-    type WordAddress: Hash + Eq + Copy + Clone;
+    type WordAddress: Hash + Eq + Copy + Clone + cast::AsPrimitive<usize>;
 
     /// Gets the number of bits in this address type.
     fn bitlen() -> usize;

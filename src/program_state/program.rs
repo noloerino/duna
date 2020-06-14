@@ -2,33 +2,140 @@ use super::datatypes::*;
 use super::memory::*;
 use super::registers::{IRegister, RegFile};
 use crate::arch::*;
-use crate::assembler::SectionStore;
+use crate::assembler::{Linker, ParseErrorReport, SectionStore};
 use crate::instruction::ConcreteInst;
+use num_traits::cast::AsPrimitive;
+use num_traits::ops::wrapping::WrappingSub;
+use std::str::FromStr;
 
-pub trait Program<F, T>
+/// Defines architecture-specific behavior that defines the execution of a program.
+pub trait ProgramBehavior<F, T>
 where
     F: ArchFamily<T>,
     T: MachineDataWidth,
 {
-    fn new(
-        insts: Vec<F::Instruction>,
+    /// Returns the register that holds the stack pointer.
+    fn sp_register() -> F::Register;
+    /// Returns the register that holds function return values.
+    fn return_register() -> F::Register;
+    /// Start addresses for text, stack, and data sections. TODO make these configurable
+    fn text_start() -> T::ByteAddr;
+    fn stack_start() -> T::ByteAddr;
+    fn data_start() -> T::ByteAddr;
+}
+
+pub struct Program<A: Architecture> {
+    pub insts: Vec<<A::Family as ArchFamily<A::DataWidth>>::Instruction>,
+    pub state: ProgramState<A::Family, A::DataWidth>,
+}
+
+impl<A: Architecture> Program<A> {
+    /// Initializes a new program instance from the provided instructions.
+    ///
+    /// The instructions are loaded into memory at the start of the instruction section,
+    /// which defaults to TEXT_START to avoid any accidental null pointer derefs.
+    ///
+    /// The stack pointer is initialized to STACK_START.
+    ///
+    /// The data given in SectionStore is used to initialize the data and rodata sections.
+    ///
+    /// Until paged memory is implemented, rodata is placed sequentially with data, and
+    /// no guarantees on read-onliness are enforced.
+    pub fn new(
+        insts: Vec<<A::Family as ArchFamily<A::DataWidth>>::Instruction>,
         sections: SectionStore,
-        memory: Box<dyn Memory<T::ByteAddr>>,
-    ) -> Self;
+        mut memory: Box<dyn Memory<<A::DataWidth as MachineDataWidth>::ByteAddr>>,
+    ) -> Self {
+        let text_start =
+            <A::ProgramBehavior as ProgramBehavior<A::Family, A::DataWidth>>::text_start();
+        let stack_start =
+            <A::ProgramBehavior as ProgramBehavior<A::Family, A::DataWidth>>::stack_start();
+        let data_start =
+            <A::ProgramBehavior as ProgramBehavior<A::Family, A::DataWidth>>::data_start();
+        // Page in text, stack, and data
+        memory.map_page(text_start).unwrap();
+        memory.map_page(stack_start).unwrap();
+        memory.map_page(data_start).unwrap();
+        let mut state = ProgramState::new(memory);
+        let mut user_state = &mut state.user_state;
+        let sp = <A::ProgramBehavior as ProgramBehavior<A::Family, A::DataWidth>>::sp_register();
+        // Initialize SP and PC
+        user_state.regfile.set(sp, stack_start.into());
+        user_state.pc = text_start;
+        // store instructions
+        let mut next_addr: <A::DataWidth as MachineDataWidth>::ByteAddr = user_state.pc;
+        for inst in &insts {
+            user_state
+                .memory
+                .set_word(next_addr, DataWord::from(inst.to_machine_code()))
+                .unwrap();
+            next_addr = next_addr.plus_4()
+        }
+        // store data
+        let all_data = sections.data.into_iter().chain(sections.rodata.into_iter());
+        for (_offs, byte) in all_data.enumerate() {
+            user_state.memory.set_byte(data_start, byte.into()).unwrap()
+        }
+        Program { insts, state }
+    }
+
     /// Prints out all the instructions that this program contains.
-    fn dump_insts(&self);
+    pub fn dump_insts(&self) {
+        for inst in &self.insts {
+            println!("{:?}", inst);
+        }
+    }
 
     /// Runs the program to completion, returning an exit code.
     /// If the program was terminated abnormally, the upper bit of the u8 will be set.
     /// The lower 7 bits are the value passed to the exit handler (or the default register for the
     /// first argument of a syscall if exit is not explicitly invoked), and will be truncated.
-    fn run(&mut self) -> u8;
+    pub fn run(&mut self) -> u8 {
+        // for now, just use the instruction vec to determine the next instruction
+        let pc_start: <A::DataWidth as MachineDataWidth>::ByteAddr =
+            <A::ProgramBehavior as ProgramBehavior<A::Family, A::DataWidth>>::text_start();
+        // for now, if we're out of instructions just call it a day
+        // if pc dipped below pc_start, panic for now is also fine
+        while let Some(inst) = self.insts.get({
+            // all this logic calculates the next address (very verbose due to generic types)
+            let curr_pc: <A::DataWidth as MachineDataWidth>::Unsigned =
+                self.state.user_state.pc.into();
+            let orig_pc: <A::DataWidth as MachineDataWidth>::Unsigned = pc_start.into();
+            let offs: <A::DataWidth as MachineDataWidth>::ByteAddr =
+                curr_pc.wrapping_sub(&orig_pc).into();
+            let idx: usize = offs.to_word_address().as_();
+            idx
+        }) {
+            if let Err(cause) = self.state.apply_inst(inst) {
+                return cause.handle_exit(&mut self.state);
+            }
+        }
+        let a0 =
+            <A::ProgramBehavior as ProgramBehavior<A::Family, A::DataWidth>>::return_register();
+        let a0_val: <A::DataWidth as MachineDataWidth>::Unsigned =
+            self.state.user_state.regfile.read(a0).into();
+        // For a non-abnormal exit, downcast to u8 and set upper bit to 0
+        let val_u8 = a0_val.as_();
+        val_u8 & 0b0111_1111
+    }
 
     /// Returns the instructions provided to this program.
-    fn get_inst_vec(&self) -> &[F::Instruction];
+    pub fn get_inst_vec(&self) -> &[<A::Family as ArchFamily<A::DataWidth>>::Instruction] {
+        self.insts.as_slice()
+    }
 
     /// Returns the current state of this program.
-    fn get_state(self) -> ProgramState<F, T>;
+    pub fn get_state(self) -> ProgramState<A::Family, A::DataWidth> {
+        self.state
+    }
+}
+
+impl<A: Architecture> FromStr for Program<A> {
+    type Err = ParseErrorReport;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Linker::with_main_str(s).link::<A>(Default::default())
+    }
 }
 
 pub struct ProgramState<F: ArchFamily<T>, T: MachineDataWidth> {
@@ -113,7 +220,7 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
             match nr {
                 Syscall::Write => self.syscall_write(a0, a1.into(), a2),
                 Syscall::Brk => self.syscall_brk(a0.into()),
-                Syscall::Exit => self.syscall_exit(a0.into()),
+                Syscall::Exit => self.syscall_exit(a0),
                 _ => unimplemented!(),
             }
         } else {

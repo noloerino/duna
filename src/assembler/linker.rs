@@ -4,6 +4,7 @@ use super::parse_error::{ParseError, ParseErrorReport, ParseErrorReporter};
 use super::parser::{Label, LabelDef};
 use crate::arch::*;
 use crate::config::*;
+use crate::program_state::Program;
 use std::collections::HashMap;
 use std::fs;
 
@@ -64,7 +65,7 @@ impl Linker {
     }
 
     /// Attempts to link the provided programs together into a single executable.
-    pub fn link<S: Architecture>(self, config: AsmConfig) -> Result<S::Program, ParseErrorReport> {
+    pub fn link<S: Architecture>(self, config: AsmConfig) -> Result<Program<S>, ParseErrorReport> {
         assert!(
             !self.file_map.is_empty(),
             "Linker is missing a main program"

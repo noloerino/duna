@@ -2,7 +2,6 @@
 use clap::{App, Arg};
 use duna::architectures::riscv::RV32;
 use duna::assembler::Linker;
-use duna::program_state::Program;
 use std::process;
 
 fn main() {
