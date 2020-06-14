@@ -91,32 +91,7 @@ impl<A: Architecture> Program<A> {
     /// The lower 7 bits are the value passed to the exit handler (or the default register for the
     /// first argument of a syscall if exit is not explicitly invoked), and will be truncated.
     pub fn run(&mut self) -> u8 {
-        // for now, just use the instruction vec to determine the next instruction
-        let pc_start: <A::DataWidth as MachineDataWidth>::ByteAddr =
-            <A::ProgramBehavior as ProgramBehavior<A::Family, A::DataWidth>>::text_start();
-        // for now, if we're out of instructions just call it a day
-        // if pc dipped below pc_start, panic for now is also fine
-        while let Some(inst) = self.insts.get({
-            // all this logic calculates the next address (very verbose due to generic types)
-            let curr_pc: <A::DataWidth as MachineDataWidth>::Unsigned =
-                self.state.user_state.pc.into();
-            let orig_pc: <A::DataWidth as MachineDataWidth>::Unsigned = pc_start.into();
-            let offs: <A::DataWidth as MachineDataWidth>::ByteAddr =
-                curr_pc.wrapping_sub(&orig_pc).into();
-            let idx: usize = offs.to_word_address().as_();
-            idx
-        }) {
-            if let Err(cause) = self.state.apply_inst(inst) {
-                return cause.handle_exit(&mut self.state);
-            }
-        }
-        let a0 =
-            <A::ProgramBehavior as ProgramBehavior<A::Family, A::DataWidth>>::return_register();
-        let a0_val: <A::DataWidth as MachineDataWidth>::Unsigned =
-            self.state.user_state.regfile.read(a0).into();
-        // For a non-abnormal exit, downcast to u8 and set upper bit to 0
-        let val_u8 = a0_val.as_();
-        val_u8 & 0b0111_1111
+        ProgramExecutor::run(self)
     }
 
     /// Returns the instructions provided to this program.
@@ -128,6 +103,18 @@ impl<A: Architecture> Program<A> {
     pub fn get_state(self) -> ProgramState<A::Family, A::DataWidth> {
         self.state
     }
+
+    fn get_pc_word_index(&self) -> usize {
+        let pc_start: <A::DataWidth as MachineDataWidth>::ByteAddr =
+            <A::ProgramBehavior as ProgramBehavior<A::Family, A::DataWidth>>::text_start();
+        // all this logic calculates the next address (very verbose due to generic types)
+        let curr_pc: <A::DataWidth as MachineDataWidth>::Unsigned = self.state.user_state.pc.into();
+        let orig_pc: <A::DataWidth as MachineDataWidth>::Unsigned = pc_start.into();
+        let offs: <A::DataWidth as MachineDataWidth>::ByteAddr =
+            curr_pc.wrapping_sub(&orig_pc).into();
+        let idx: usize = offs.to_word_address().as_();
+        idx
+    }
 }
 
 impl<A: Architecture> FromStr for Program<A> {
@@ -135,6 +122,84 @@ impl<A: Architecture> FromStr for Program<A> {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Linker::with_main_str(s).link::<A>(Default::default())
+    }
+}
+
+pub struct ProgramExecutor<A: Architecture> {
+    pub program: Program<A>,
+    pub diff_stack: Vec<ProgramDiff<A::Family, A::DataWidth>>,
+}
+
+impl<A: Architecture> ProgramExecutor<A> {
+    pub fn new(program: Program<A>) -> Self {
+        ProgramExecutor {
+            program,
+            diff_stack: Vec::new(),
+        }
+    }
+
+    /// Runs the next instruction of the program.
+    /// Returns the exit code if the program terminates, and None otherwise.
+    pub fn step(&mut self) -> Option<u8> {
+        let program = &mut self.program;
+        // TODO gracefully handle out of bounds instructions
+        // for now, if we reach an oob instruction just report the return value
+        if let Some(inst) = program.insts.get(program.get_pc_word_index()) {
+            let exec_result = program.state.apply_inst(&inst);
+            match exec_result {
+                Ok(diffs) => {
+                    self.diff_stack.extend(diffs);
+                    None
+                }
+                Err(cause) => Some(cause.handle_exit(&mut program.state)),
+            }
+        } else {
+            let a0 =
+                <A::ProgramBehavior as ProgramBehavior<A::Family, A::DataWidth>>::return_register();
+            let a0_val: <A::DataWidth as MachineDataWidth>::Unsigned =
+                program.state.regfile_read(a0).into();
+            // For a non-abnormal exit, downcast to u8 and set upper bit to 0
+            let val_u8 = a0_val.as_();
+            Some(val_u8 & 0b0111_1111)
+        }
+    }
+
+    /// Reverts one step of exeuction. Returns None if there are no steps to revert.
+    pub fn revert(&mut self) -> Option<()> {
+        let diff = self.diff_stack.pop()?;
+        self.program.state.revert_diff(&diff);
+        Some(())
+    }
+
+    /// Attempts to run the program to completion. If a more than timeout cycles were run after the
+    /// invocation of this method, then the function will return None.
+    pub fn step_to_completion(&mut self, timeout: usize) -> Option<u8> {
+        for _ in 0..timeout {
+            if let Some(code) = self.step() {
+                return Some(code);
+            }
+        }
+        None
+    }
+
+    /// Runs the program to completion, returning an exit code.
+    /// Hangs on an infinite loop.
+    pub fn run(program: &mut Program<A>) -> u8 {
+        // for now, just use the instruction vec to determine the next instruction
+        // for now, if we're out of instructions just call it a day
+        // if pc dipped below pc_start, panic for now is also fine
+        while let Some(inst) = program.insts.get(program.get_pc_word_index()) {
+            if let Err(cause) = program.state.apply_inst(inst) {
+                return cause.handle_exit(&mut program.state);
+            }
+        }
+        let a0 =
+            <A::ProgramBehavior as ProgramBehavior<A::Family, A::DataWidth>>::return_register();
+        let a0_val: <A::DataWidth as MachineDataWidth>::Unsigned =
+            program.state.regfile_read(a0).into();
+        // For a non-abnormal exit, downcast to u8 and set upper bit to 0
+        let val_u8 = a0_val.as_();
+        val_u8 & 0b0111_1111
     }
 }
 
@@ -271,32 +336,45 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
         }
     }
 
-    pub fn apply_inst(&mut self, inst: &F::Instruction) -> Result<(), TermCause> {
-        self.apply_diff(&inst.apply(self))
+    pub fn apply_inst(
+        &mut self,
+        inst: &F::Instruction,
+    ) -> Result<Vec<ProgramDiff<F, T>>, TermCause> {
+        self.apply_inst_result(inst.apply(self))
     }
 
     /// Asserts that applying the instruction does not fail.
     #[cfg(test)]
     pub fn apply_inst_test(&mut self, inst: &F::Instruction) {
-        self.apply_diff(&inst.apply(self)).unwrap();
+        self.apply_inst_result(inst.apply(self)).unwrap();
     }
 
     /// Performs the described operation.
     /// The privileged operation is applied first, followed by the user operation.
-    /// If the diff terminates the program, the TermCause is returned.
-    pub fn apply_diff(&mut self, diff: &InstResult<F, T>) -> Result<(), TermCause> {
+    /// If the diff terminates the program, the TermCause is returned. Otherwise, it just returns
+    /// the program diff(s) produced in the order that they were applied.
+    pub fn apply_inst_result(
+        &mut self,
+        diff: InstResult<F, T>,
+    ) -> Result<Vec<ProgramDiff<F, T>>, TermCause> {
         match diff {
             InstResult::Trap(trap_kind) => {
-                let priv_diff = &self.handle_trap(trap_kind);
+                let priv_diff = self.handle_trap(&trap_kind);
                 // In the event of termination, nothing happens in userland.
                 let user_diff = self
                     .priv_state
-                    .apply_diff(&mut self.user_state, priv_diff)?;
+                    .apply_diff(&mut self.user_state, &priv_diff)?;
                 self.user_state.apply_diff(&user_diff);
+                Ok(vec![
+                    ProgramDiff::PrivOnly(priv_diff),
+                    ProgramDiff::UserOnly(user_diff),
+                ])
             }
-            InstResult::UserStateChange(user_diff) => self.user_state.apply_diff(&user_diff),
-        };
-        Ok(())
+            InstResult::UserStateChange(user_diff) => {
+                self.user_state.apply_diff(&user_diff);
+                Ok(vec![ProgramDiff::UserOnly(user_diff)])
+            }
+        }
     }
 
     /// Reverts the described operation.
@@ -695,5 +773,55 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> UserDiff<F, T> {
                 new_val: val,
             }),
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::architectures::riscv::RiscVRegister::*;
+    use crate::architectures::riscv::RV32;
+
+    /// Makes sure the executor can step and revert instructions.
+    #[test]
+    fn test_executor() {
+        let code = "
+            addi a0, zero, 4
+            addi a1, zero, 2
+            addi a0, zero, 16
+            ";
+        let mut executor = ProgramExecutor::<RV32>::new(code.parse::<Program<RV32>>().unwrap());
+        // after one operation
+        assert_eq!(executor.step(), None);
+        assert_eq!(executor.program.state.regfile_read(A0), 4u32.into());
+        assert_eq!(executor.program.state.regfile_read(A1), 0u32.into());
+        // after two operations
+        assert_eq!(executor.step(), None);
+        assert_eq!(executor.program.state.regfile_read(A0), 4u32.into());
+        assert_eq!(executor.program.state.regfile_read(A1), 2u32.into());
+        // rewind once
+        assert_eq!(executor.revert(), Some(()));
+        assert_eq!(executor.program.state.regfile_read(A0), 4u32.into());
+        assert_eq!(executor.program.state.regfile_read(A1), 0u32.into());
+        // rewind again
+        assert_eq!(executor.revert(), Some(()));
+        assert_eq!(executor.program.state.regfile_read(A0), 0u32.into());
+        assert_eq!(executor.program.state.regfile_read(A1), 0u32.into());
+        // next rewind should fail
+        assert_eq!(executor.revert(), None);
+        // step 2
+        assert_eq!(executor.step_to_completion(2), None);
+        assert_eq!(executor.program.state.regfile_read(A0), 4u32.into());
+        assert_eq!(executor.program.state.regfile_read(A1), 2u32.into());
+        // step once more
+        assert_eq!(executor.step(), None);
+        assert_eq!(executor.program.state.regfile_read(A0), 16u32.into());
+        assert_eq!(executor.program.state.regfile_read(A1), 2u32.into());
+        // final step should cause a termination
+        assert_eq!(executor.step(), Some(16));
+        // reverting after termination should revert the last instruction, not the termination
+        assert_eq!(executor.revert(), Some(()));
+        assert_eq!(executor.program.state.regfile_read(A0), 4u32.into());
+        assert_eq!(executor.program.state.regfile_read(A1), 2u32.into());
     }
 }
