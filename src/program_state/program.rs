@@ -113,7 +113,8 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
             match nr {
                 Syscall::Write => self.syscall_write(a0, a1.into(), a2),
                 Syscall::Brk => self.syscall_brk(a0.into()),
-                _ => self.syscall_unknown(),
+                Syscall::Exit => self.syscall_exit(a0.into()),
+                _ => unimplemented!(),
             }
         } else {
             self.syscall_unknown()
@@ -141,6 +142,14 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
     /// * addr - the
     fn syscall_brk(&self, addr: T::ByteAddr) -> PrivStateChange<T> {
         PrivStateChange::TryPageIn { addr }
+    }
+
+    /// Exits the program with the provided 32-bit code.
+    /// Note that the shell will only see the lower 7-bits.
+    fn syscall_exit(&self, code: T::RegData) -> PrivStateChange<T> {
+        // downcast to u32 no matter what
+        let val: T::Unsigned = code.into();
+        PrivStateChange::Terminate(TermCause::Exit(T::usgn_to_usize(val) as u32))
     }
 
     /// Handles an unknown syscall.
@@ -216,6 +225,7 @@ pub enum Syscall {
     Write,
     Open,
     Close,
+    Exit,
     Brk,
     Mmap,
 }
@@ -396,6 +406,8 @@ struct MemDiff<T: MachineDataWidth> {
 /// Represents a possible cause for the termination of a program.
 #[derive(Copy, Clone, Debug)]
 pub enum TermCause {
+    /// An invocation of the exit syscall.
+    Exit(u32),
     /// The program was terminated by a segmentation fault, i.e. the program attempted to
     /// access invalid memory.
     SegFault,
@@ -415,20 +427,23 @@ impl<T: ByteAddress> From<MemFault<T>> for TermCause {
 }
 
 impl TermCause {
-    // TODO currently prints exit cause, which should eventually be moved elsewhere
+    /// Prints any messages related to the exit cause, and returns the exit code.
     pub fn handle_exit<F: ArchFamily<T>, T: MachineDataWidth>(
         self,
         program_state: &mut ProgramState<F, T>,
     ) -> u8 {
         use TermCause::*;
+        const ABNORMAL_MASK: u8 = 0b1000_0000;
+        const NORMAL_MASK: u8 = 0b0111_1111;
         match self {
+            Exit(n) => (n as u8) & NORMAL_MASK,
             SegFault => {
                 program_state.write_stderr("Segmentation fault: 11\n");
-                11u8
+                11u8 | ABNORMAL_MASK
             }
             BusError => {
                 program_state.write_stderr("bus error\n");
-                10u8
+                10u8 | ABNORMAL_MASK
             }
         }
     }
