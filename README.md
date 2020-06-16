@@ -11,15 +11,12 @@ figuring out the proper abstractions)
 - Run by CLI with `cargo run <INPUT_FILE>`
 
 ## Roadmap - RISCV
-- [ ] Refactor 32/64-bit into own modules
-- [ ] Add hints/warnings
-- [ ] Run [compliance tests](https://github.com/riscv/riscv-compliance)
 
 ## Roadmap - General Features
-### Neart term
+### Near term
 - [ ] CLI configuration
-- [ ] Moar syscalls + standard library
-- [ ] Implement paged memory
+- [ ] Standard library
+- [ ] Labels in data section
 - [ ] Support assembler [relocation functions](https://github.com/riscv/riscv-asm-manual/blob/master/riscv-asm.md#assembler-relocation-functions)
 
 ### Long term
@@ -27,6 +24,10 @@ figuring out the proper abstractions)
 - [ ] Display regfile, memory, and cache info
 - [ ] Provide debugger support a la GDB, possibly valgrind-like tools as well?
 - [ ] Implement peephole optimizations + visualizations
+
+### Niceties
+- [ ] Add hints/warnings
+- [ ] Run [riscv compliance tests](https://github.com/riscv/riscv-compliance)
 
 ## Roadmap - Other ISAs?
 - [ ] MIPS 32/64bit? whatever they're called?
