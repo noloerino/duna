@@ -16,6 +16,7 @@ pub fn convert_int32_derive(input: TokenStream) -> TokenStream {
     let ast = syn::parse(input).unwrap();
     impl_convert_int32_derive(&ast)
 }
+
 #[proc_macro_derive(ITypeArith)]
 /// Automatically derives IType for an instance of ITypeArith.
 pub fn itype_arith_derive(input: TokenStream) -> TokenStream {
@@ -23,11 +24,27 @@ pub fn itype_arith_derive(input: TokenStream) -> TokenStream {
     impl_itype_arith_derive(&ast)
 }
 
+#[proc_macro_derive(ITypeArith64)]
+/// Automatically derives IType for an instance of ITypeArith that is implemented only for 64-bit
+/// instructions.
+pub fn itype_arith_64_derive(input: TokenStream) -> TokenStream {
+    let ast = syn::parse(input).unwrap();
+    impl_itype_arith_64_derive(&ast)
+}
+
 #[proc_macro_derive(ITypeLoad)]
 /// Automatically derives IType for an instance of ITypeLoad.
 pub fn itype_load_derive(input: TokenStream) -> TokenStream {
     let ast = syn::parse(input).unwrap();
     impl_itype_load_derive(&ast)
+}
+
+#[proc_macro_derive(ITypeLoad64)]
+/// Automatically derives IType for an instance of ITypeLoad that is implemented only for 64-bit
+/// instructions.
+pub fn itype_load_64_derive(input: TokenStream) -> TokenStream {
+    let ast = syn::parse(input).unwrap();
+    impl_itype_load_64_derive(&ast)
 }
 
 fn impl_convert_int64_derive(ast: &syn::DeriveInput) -> TokenStream {
@@ -162,6 +179,28 @@ fn impl_itype_arith_derive(ast: &syn::DeriveInput) -> TokenStream {
     gen.into()
 }
 
+fn impl_itype_arith_64_derive(ast: &syn::DeriveInput) -> TokenStream {
+    let name = &ast.ident;
+    let gen = quote! {
+        impl IType<Width64b> for #name {
+            fn inst_fields() -> IInstFields {
+                <#name as ITypeArith<Width64b>>::inst_fields()
+            }
+
+            fn eval(
+                state: &UserProgState<RiscV<Width64b>, Width64b>,
+                rd: RiscVRegister,
+                rs1: RiscVRegister,
+                imm: BitStr32
+            ) -> InstResult<RiscV<Width64b>, Width64b> {
+                let new_rd_val = <#name as ITypeArith<Width64b>>::eval(state.regfile.read(rs1), imm.into());
+                InstResult::UserStateChange(UserDiff::reg_write_pc_p4(state, rd, new_rd_val))
+            }
+        }
+    };
+    gen.into()
+}
+
 fn impl_itype_load_derive(ast: &syn::DeriveInput) -> TokenStream {
     let name = &ast.ident;
     let gen = quote! {
@@ -179,6 +218,35 @@ fn impl_itype_load_derive(ast: &syn::DeriveInput) -> TokenStream {
                 let rs1_val: T::Signed = state.regfile.read(rs1).into();
                 let addr: T::RegData = (rs1_val + imm.into()).into();
                 let result = <#name as ITypeLoad<T>>::eval(state.memory.as_ref(), addr.into());
+                match result {
+                    Ok(new_rd_val) =>
+                        InstResult::UserStateChange(UserDiff::reg_write_pc_p4(state, rd, new_rd_val)),
+                    Err(fault) => InstResult::Trap(fault.into()),
+                }
+            }
+        }
+    };
+    gen.into()
+}
+
+fn impl_itype_load_64_derive(ast: &syn::DeriveInput) -> TokenStream {
+    let name = &ast.ident;
+    let gen = quote! {
+        impl IType<Width64b> for #name {
+            fn inst_fields() -> IInstFields {
+                <#name as ITypeLoad<Width64b>>::inst_fields()
+            }
+
+            fn eval(
+                state: &UserProgState<RiscV<Width64b>, Width64b>,
+                rd: RiscVRegister,
+                rs1: RiscVRegister,
+                imm: BitStr32
+            ) -> InstResult<RiscV<Width64b>, Width64b> {
+                let rs1_val: i64 = state.regfile.read(rs1).into();
+                let imm_val: i64 = imm.into();
+                let addr: DataDword = (rs1_val + imm_val).into();
+                let result = <#name as ITypeLoad<Width64b>>::eval(state.memory.as_ref(), addr.into());
                 match result {
                     Ok(new_rd_val) =>
                         InstResult::UserStateChange(UserDiff::reg_write_pc_p4(state, rd, new_rd_val)),

@@ -5,7 +5,7 @@ use super::registers::RiscVRegister;
 use crate::arch::*;
 use crate::program_state::*;
 use duna_macro::*;
-use num_traits::ops::wrapping::WrappingAdd;
+use num_traits::ops::wrapping::{WrappingAdd, WrappingSub};
 
 fn f3(val: u32) -> BitStr32 {
     BitStr32::new(val, 3)
@@ -16,7 +16,9 @@ fn f7(val: u32) -> BitStr32 {
 }
 
 const R_OPCODE: BitStr32 = BitStr32::new(0b011_0011, 7);
+const R_W_OPCODE: BitStr32 = BitStr32::new(0b011_1011, 7);
 const I_OPCODE_ARITH: BitStr32 = BitStr32::new(0b001_0011, 7);
+const I_W_OPCODE_ARITH: BitStr32 = BitStr32::new(0b001_1011, 7);
 const I_OPCODE_LOAD: BitStr32 = BitStr32::new(0b000_0011, 7);
 const SYS_OPCODE: BitStr32 = BitStr32::new(0b111_0011, 7);
 const B_OPCODE: BitStr32 = BitStr32::new(0b110_0011, 7);
@@ -32,6 +34,7 @@ impl<T: MachineDataWidth> RType<T> for Add {
             opcode: R_OPCODE,
         }
     }
+
     fn eval(rs1_val: T::RegData, rs2_val: T::RegData) -> T::RegData {
         let v1: T::Signed = rs1_val.into();
         (v1.wrapping_add(&rs2_val.into())).into()
@@ -52,6 +55,42 @@ impl<T: MachineDataWidth> ITypeArith<T> for Addi {
         let v1: T::Signed = rs1_val.into();
         let imm_val: T::Signed = imm.into();
         (v1.wrapping_add(&imm_val)).into()
+    }
+}
+
+#[derive(ITypeArith64)]
+pub struct Addiw;
+impl ITypeArith<Width64b> for Addiw {
+    fn inst_fields() -> IInstFields {
+        IInstFields {
+            funct3: f3(0),
+            opcode: I_W_OPCODE_ARITH,
+        }
+    }
+
+    fn eval(rs1_val: DataDword, imm: BitStr32) -> DataDword {
+        let v1: DataWord = rs1_val.get_lower_word();
+        let v2: DataWord = imm.into();
+        let result: DataWord = u32::from(v1).wrapping_add(u32::from(v2)).into();
+        DataDword::sign_ext_from_word(result)
+    }
+}
+
+pub struct Addw;
+impl RType<Width64b> for Addw {
+    fn inst_fields() -> RInstFields {
+        RInstFields {
+            funct7: f7(0),
+            funct3: f3(0),
+            opcode: R_W_OPCODE,
+        }
+    }
+
+    fn eval(rs1_val: DataDword, rs2_val: DataDword) -> DataDword {
+        let v1: DataWord = rs1_val.get_lower_word().into();
+        let v2: DataWord = rs2_val.get_lower_word().into();
+        let result: DataWord = u32::from(v1).wrapping_add(u32::from(v2)).into();
+        DataDword::sign_ext_from_word(result)
     }
 }
 
@@ -299,6 +338,24 @@ impl<T: MachineDataWidth> ITypeLoad<T> for Lbu {
     }
 }
 
+#[derive(ITypeLoad64)]
+pub struct Ld;
+impl ITypeLoad<Width64b> for Ld {
+    fn inst_fields() -> IInstFields {
+        IInstFields {
+            opcode: I_OPCODE_LOAD,
+            funct3: f3(0b011),
+        }
+    }
+
+    fn eval(
+        mem: &dyn Memory<ByteAddr64>,
+        addr: ByteAddr64,
+    ) -> Result<DataDword, MemFault<ByteAddr64>> {
+        Ok(mem.get_doubleword(addr)?)
+    }
+}
+
 #[derive(ITypeLoad)]
 pub struct Lh;
 impl<T: MachineDataWidth> ITypeLoad<T> for Lh {
@@ -363,12 +420,62 @@ impl<T: MachineDataWidth> ITypeLoad<T> for Lw {
         }
     }
 
-    // TODO define alignment behavior
     fn eval(
         mem: &dyn Memory<T::ByteAddr>,
         addr: T::ByteAddr,
     ) -> Result<T::RegData, MemFault<T::ByteAddr>> {
         Ok(<T::RegData>::sign_ext_from_word(mem.get_word(addr)?))
+    }
+}
+
+#[derive(ITypeLoad64)]
+pub struct Lwu;
+impl ITypeLoad<Width64b> for Lwu {
+    fn inst_fields() -> IInstFields {
+        IInstFields {
+            opcode: I_OPCODE_LOAD,
+            funct3: f3(0b110),
+        }
+    }
+
+    fn eval(
+        mem: &dyn Memory<ByteAddr64>,
+        addr: ByteAddr64,
+    ) -> Result<DataDword, MemFault<ByteAddr64>> {
+        Ok(DataDword::sign_ext_from_word(mem.get_word(addr)?))
+    }
+}
+
+pub struct Or;
+impl<T: MachineDataWidth> RType<T> for Or {
+    fn inst_fields() -> RInstFields {
+        RInstFields {
+            funct7: f7(0),
+            funct3: f3(0b110),
+            opcode: R_OPCODE,
+        }
+    }
+
+    fn eval(rs1_val: T::RegData, rs2_val: T::RegData) -> T::RegData {
+        let v1: T::Signed = rs1_val.into();
+        (v1 | rs2_val.into()).into()
+    }
+}
+
+#[derive(ITypeArith)]
+pub struct Ori;
+impl<T: MachineDataWidth> ITypeArith<T> for Ori {
+    fn inst_fields() -> IInstFields {
+        IInstFields {
+            funct3: f3(0b110),
+            opcode: I_OPCODE_ARITH,
+        }
+    }
+
+    fn eval(rs1_val: T::RegData, imm: BitStr32) -> T::RegData {
+        let v1: T::Signed = rs1_val.into();
+        let imm_val: T::Signed = imm.into();
+        (v1 | imm_val).into()
     }
 }
 
@@ -394,6 +501,28 @@ impl<T: MachineDataWidth> SType<T> for Sb {
     }
 }
 
+pub struct Sd;
+impl SType<Width64b> for Sd {
+    fn inst_fields() -> SInstFields {
+        SInstFields {
+            funct3: f3(0b011),
+            opcode: S_OPCODE,
+        }
+    }
+
+    fn eval(
+        state: &UserProgState<RiscV<Width64b>, Width64b>,
+        rs1: RiscVRegister,
+        rs2: RiscVRegister,
+        imm: BitStr32,
+    ) -> UserDiff<RiscV<Width64b>, Width64b> {
+        let base_addr: i64 = state.regfile.read(rs1).into();
+        let byte_addr: ByteAddr64 = (base_addr.wrapping_add(imm.into())).into();
+        let new_dword = state.regfile.read(rs2);
+        UserDiff::mem_write_op(state, byte_addr, DataEnum::DoubleWord(new_dword)).unwrap()
+    }
+}
+
 pub struct Sh;
 impl<T: MachineDataWidth> SType<T> for Sh {
     fn inst_fields() -> SInstFields {
@@ -415,6 +544,40 @@ impl<T: MachineDataWidth> SType<T> for Sh {
         let upper_byte: u8 = state.regfile.read(rs2).get_byte(1).into();
         let full: u16 = ((upper_byte as u16) << 8) | (lower_byte as u16);
         UserDiff::mem_write_op(state, byte_addr, DataEnum::Half(full.into())).unwrap()
+    }
+}
+
+pub struct Sub;
+impl<T: MachineDataWidth> RType<T> for Sub {
+    fn inst_fields() -> RInstFields {
+        RInstFields {
+            funct7: f7(0b0100_0000),
+            funct3: f3(0),
+            opcode: R_OPCODE,
+        }
+    }
+
+    fn eval(rs1_val: T::RegData, rs2_val: T::RegData) -> T::RegData {
+        let v1: T::Unsigned = rs1_val.into();
+        (v1.wrapping_sub(&rs2_val.into())).into()
+    }
+}
+
+pub struct Subw;
+impl RType<Width64b> for Subw {
+    fn inst_fields() -> RInstFields {
+        RInstFields {
+            funct7: f7(0b0100_0000),
+            funct3: f3(0),
+            opcode: R_W_OPCODE,
+        }
+    }
+
+    fn eval(rs1_val: DataDword, rs2_val: DataDword) -> DataDword {
+        let v1: DataWord = rs1_val.get_lower_word().into();
+        let v2: DataWord = rs2_val.get_lower_word().into();
+        let result: DataWord = u32::from(v1).wrapping_sub(u32::from(v2)).into();
+        DataDword::sign_ext_from_word(result)
     }
 }
 
@@ -444,8 +607,42 @@ impl<T: MachineDataWidth> SType<T> for Sw {
     }
 }
 
+pub struct Xor;
+impl<T: MachineDataWidth> RType<T> for Xor {
+    fn inst_fields() -> RInstFields {
+        RInstFields {
+            funct7: f7(0),
+            funct3: f3(0b100),
+            opcode: R_OPCODE,
+        }
+    }
+
+    fn eval(rs1_val: T::RegData, rs2_val: T::RegData) -> T::RegData {
+        let v1: T::Signed = rs1_val.into();
+        (v1 ^ rs2_val.into()).into()
+    }
+}
+
+#[derive(ITypeArith)]
+pub struct Xori;
+impl<T: MachineDataWidth> ITypeArith<T> for Xori {
+    fn inst_fields() -> IInstFields {
+        IInstFields {
+            funct3: f3(0b100),
+            opcode: I_OPCODE_ARITH,
+        }
+    }
+
+    fn eval(rs1_val: T::RegData, imm: BitStr32) -> T::RegData {
+        let v1: T::Signed = rs1_val.into();
+        let imm_val: T::Signed = imm.into();
+        (v1 ^ imm_val).into()
+    }
+}
+
+/// Tests for the base 32-bit ISA.
 #[cfg(test)]
-mod test {
+mod tests_32 {
     use super::super::program::RiscVSyscallConvention;
     use super::*;
     use crate::instruction::*;
@@ -506,6 +703,7 @@ mod test {
     ) {
         for IArithTestData { imm, result } in args {
             state.apply_inst_test(&T::new(RD, RS1, DataWord::from(imm)));
+            println!("{:b}\n{:b}", i32::from(state.regfile_read(RD)), result);
             assert_eq!(i32::from(state.regfile_read(RD)), result);
         }
     }
@@ -573,6 +771,19 @@ mod test {
                 },
             ],
         );
+        test_r_type::<Sub>(
+            &mut state,
+            vec![
+                RTestData {
+                    rs2: RS2_POS,
+                    result: RS1_VAL - RS2_VAL_POS,
+                },
+                RTestData {
+                    rs2: RS2_NEG,
+                    result: RS1_VAL - RS2_VAL_NEG,
+                },
+            ],
+        );
         test_r_type::<And>(
             &mut state,
             vec![
@@ -585,12 +796,39 @@ mod test {
                     result: RS1_VAL & RS2_VAL_NEG,
                 },
             ],
-        )
+        );
+        test_r_type::<Or>(
+            &mut state,
+            vec![
+                RTestData {
+                    rs2: RS2_POS,
+                    result: RS1_VAL | RS2_VAL_POS,
+                },
+                RTestData {
+                    rs2: RS2_NEG,
+                    result: RS1_VAL | RS2_VAL_NEG,
+                },
+            ],
+        );
+        test_r_type::<Xor>(
+            &mut state,
+            vec![
+                RTestData {
+                    rs2: RS2_POS,
+                    result: RS1_VAL ^ RS2_VAL_POS,
+                },
+                RTestData {
+                    rs2: RS2_NEG,
+                    result: RS1_VAL ^ RS2_VAL_NEG,
+                },
+            ],
+        );
     }
 
     #[test]
     fn test_i_type_arith_insts() {
         let mut state = get_init_state();
+        println!("testing ADDI");
         test_i_type_arith::<Addi>(
             &mut state,
             vec![
@@ -612,6 +850,7 @@ mod test {
                 },
             ],
         );
+        println!("testing ANDI");
         test_i_type_arith::<Andi>(
             &mut state,
             vec![
@@ -620,11 +859,40 @@ mod test {
                     result: RS1_VAL & 0b1100,
                 },
                 IArithTestData {
-                    imm: 0xFF7C_FABCu32 as i32,
-                    result: RS1_VAL & 0xFF7C_FABCu32 as i32,
+                    imm: 0xABCu32 as i32,
+                    // account for sign extension of 12-bit immediate
+                    result: RS1_VAL & 0xFFFF_FABCu32 as i32,
                 },
             ],
-        )
+        );
+        println!("testing ORI");
+        test_i_type_arith::<Ori>(
+            &mut state,
+            vec![
+                IArithTestData {
+                    imm: 0b1100,
+                    result: RS1_VAL | 0b1100,
+                },
+                IArithTestData {
+                    imm: 0xABCu32 as i32,
+                    result: RS1_VAL | 0xFFFF_FABCu32 as i32,
+                },
+            ],
+        );
+        println!("testing XORI");
+        test_i_type_arith::<Xori>(
+            &mut state,
+            vec![
+                IArithTestData {
+                    imm: 0b1100,
+                    result: RS1_VAL ^ 0b1100,
+                },
+                IArithTestData {
+                    imm: 0xABCu32 as i32,
+                    result: RS1_VAL ^ 0xFFFF_FABCu32 as i32,
+                },
+            ],
+        );
     }
 
     #[test]
@@ -960,32 +1228,120 @@ mod test {
     }
 }
 
-// pub enum Instruction {
-//     Addw,
-//     Addiw,
-//     Ebreak,
-//     Ld,
-//     Lwu,
-//     Or,
-//     Ori,
-//     Sd,
-//     Sll,
-//     Sllw,
-//     Slli,
-//     Slt,
-//     Slti,
-//     Sltiu,
-//     Sltu,
-//     Sra,
-//     Srai,
-//     Sraiw,
-//     Sraw,
-//     Srl,
-//     Srli,
-//     Srlis,
-//     Srlw,
-//     Sub,
-//     Subw,
-//     Xor,
-//     Xori,
-// }
+/// Tests for 64-bit-only instructions.
+#[cfg(test)]
+mod tests_64 {
+    use super::*;
+    use RiscVRegister::*;
+
+    fn get_init_state() -> ProgramState<RiscV<Width64b>, Width64b> {
+        let state: ProgramState<RiscV<Width64b>, Width64b> = Default::default();
+        state
+    }
+
+    #[test]
+    fn test_sd_aligned() {
+        let mut state = get_init_state();
+        let val: DataDword = 0xABCD_ABCD_0123_0123u64.into();
+        let addr: ByteAddr64 = 0x7FFF_FFFF_FFFF_FFF0u64.into();
+        state.regfile_set(S0, val);
+        state.regfile_set(S1, addr.into());
+        state.apply_inst_test(&Sd::new(S1, S0, DataDword::zero()));
+        assert_eq!(state.memory_get_doubleword(addr), val);
+    }
+
+    #[test]
+    fn test_ld_aligned() {
+        let mut state = get_init_state();
+        let val: DataDword = 0xABCD_ABCD_0123_0123u64.into();
+        let addr: ByteAddr64 = 0x7FFF_FFFF_FFFF_FFF0u64.into();
+        state.memory_set_doubleword(addr, val);
+        state.regfile_set(S1, addr.into());
+        state.apply_inst_test(&Ld::new(S2, S1, DataDword::zero()));
+        assert_eq!(state.regfile_read(S2), val);
+    }
+
+    #[test]
+    fn test_lwu_aligned() {
+        let mut state = get_init_state();
+        // this value will be sign extended
+        let val: DataWord = 0xF123_0123u32.into();
+        let addr: ByteAddr64 = 0x7FFF_FFFF_FFFF_FFF0u64.into();
+        state.memory_set_word(addr, val);
+        state.regfile_set(S1, addr.into());
+        state.apply_inst_test(&Lwu::new(S2, S1, DataDword::zero()));
+        assert_eq!(state.regfile_read(S2), DataDword::sign_ext_from_word(val));
+        // this value will not be sign extended
+        let val2: DataWord = 0x0123_0123u32.into();
+        state.memory_set_word(addr, val2);
+        state.regfile_set(T1, addr.into());
+        state.apply_inst_test(&Lwu::new(T2, T1, DataDword::zero()));
+        assert_eq!(state.regfile_read(T2), DataDword::zero_pad_from_word(val2));
+    }
+
+    /// Tests addition.
+    #[test]
+    fn test_addw_add() {
+        let mut state = get_init_state();
+        let a_big: u64 = 0x1234_5678_9ABC_DEF0u64;
+        let b_big: u64 = 0x1111;
+        let a_small: u32 = 0xDEAD_BEEFu32;
+        let b_small: u32 = 0xFFFF_1234u32;
+        state.regfile_set(T1, a_big.into());
+        state.regfile_set(T2, b_big.into());
+        state.regfile_set(T3, (a_small as u64).into());
+        state.regfile_set(T4, (b_small as u64).into());
+        // addw will truncate and sign extend
+        state.apply_inst_test(&Addw::new(A0, T1, T2));
+        assert_eq!(
+            state.regfile_read(A0),
+            (((a_big as i32) + (b_big as i32)) as u64).into()
+        );
+        state.apply_inst_test(&Addw::new(A0, T3, T4));
+        assert_eq!(
+            state.regfile_read(A0),
+            (((a_small as i32) + (b_small as i32)) as i64).into()
+        );
+        // add does not truncate
+        state.apply_inst_test(&Add::new(A0, T1, T2));
+        assert_eq!(state.regfile_read(A0), (a_big + b_big).into());
+        state.apply_inst_test(&Add::new(A0, T3, T4));
+        assert_eq!(
+            state.regfile_read(A0),
+            ((a_small as i64) + (b_small as i64)).into()
+        );
+    }
+
+    /// Tests subtraction.
+    #[test]
+    fn test_subw_sub() {
+        let mut state = get_init_state();
+        let a_big: u64 = 0x1234_5678_9ABC_DEF0u64;
+        let b_big: u64 = 0x1111;
+        let a_small: u32 = 0xDEAD_BEEFu32;
+        let b_small: u32 = 0xFFFF_1234u32;
+        state.regfile_set(T1, a_big.into());
+        state.regfile_set(T2, b_big.into());
+        state.regfile_set(T3, (a_small as u64).into());
+        state.regfile_set(T4, (b_small as u64).into());
+        // subw will truncate and sign extend
+        state.apply_inst_test(&Subw::new(A0, T1, T2));
+        assert_eq!(
+            state.regfile_read(A0),
+            (((a_big as i32) - (b_big as i32)) as u64).into()
+        );
+        state.apply_inst_test(&Subw::new(A0, T3, T4));
+        assert_eq!(
+            state.regfile_read(A0),
+            (((a_small as i32) - (b_small as i32)) as i64).into()
+        );
+        // sub does not truncate
+        state.apply_inst_test(&Sub::new(A0, T1, T2));
+        assert_eq!(state.regfile_read(A0), (a_big - b_big).into());
+        state.apply_inst_test(&Sub::new(A0, T3, T4));
+        assert_eq!(
+            state.regfile_read(A0),
+            ((a_small as i64) - (b_small as i64)).into()
+        );
+    }
+}

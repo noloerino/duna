@@ -226,6 +226,10 @@ impl RegSize for DataDword {
     fn sign_ext_from_word(value: DataWord) -> DataDword {
         DataDword::from((value.value as i32) as u64)
     }
+
+    fn zero_pad_from_word(value: DataWord) -> DataDword {
+        DataDword::from(value.value as u64)
+    }
 }
 
 impl fmt::Display for DataDword {
@@ -330,6 +334,10 @@ impl RegSize for DataWord {
     }
 
     fn sign_ext_from_word(value: DataWord) -> DataWord {
+        value
+    }
+
+    fn zero_pad_from_word(value: DataWord) -> DataWord {
         value
     }
 }

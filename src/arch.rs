@@ -42,8 +42,8 @@ pub trait RegSize: Copy + Clone + PartialEq + fmt::Display + From<BitStr32> + Fr
     fn sign_ext_from_byte(b: DataByte) -> Self;
     fn zero_pad_from_half(h: DataHalf) -> Self;
     fn sign_ext_from_half(h: DataHalf) -> Self;
-    /// Sign extends a DataWord into this type if necessary.
     fn sign_ext_from_word(value: DataWord) -> Self;
+    fn zero_pad_from_word(value: DataWord) -> Self;
 
     /// Gets the lower 32 bits of this object.
     fn get_lower_word(self) -> DataWord;

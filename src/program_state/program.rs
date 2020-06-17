@@ -256,6 +256,16 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
         self.user_state.memory.set_word(addr, val).unwrap()
     }
 
+    #[cfg(test)]
+    pub fn memory_get_doubleword(&self, addr: T::ByteAddr) -> DataDword {
+        self.user_state.memory.get_doubleword(addr).unwrap()
+    }
+
+    #[cfg(test)]
+    pub fn memory_set_doubleword(&mut self, addr: T::ByteAddr, val: DataDword) {
+        self.user_state.memory.set_doubleword(addr, val).unwrap()
+    }
+
     pub fn handle_trap(&self, trap_kind: &TrapKind<T::ByteAddr>) -> PrivStateChange<T> {
         match trap_kind {
             TrapKind::Ecall => self.dispatch_syscall(),
