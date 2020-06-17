@@ -8,13 +8,6 @@ use crate::arch::*;
 use crate::program_state::{BitStr32, DataDword, DataWord};
 use RiscVRegister::*;
 
-pub struct Nop;
-impl Nop {
-    pub fn expand<T: MachineDataWidth>() -> RiscVInst<T> {
-        Addi::new(ZERO, ZERO, <T::RegData>::zero())
-    }
-}
-
 pub struct Li32;
 impl Li32 {
     pub fn expand(reg: RiscVRegister, data: DataWord) -> Vec<RiscVInst<Width32b>> {
@@ -73,6 +66,27 @@ impl Mv {
     }
 }
 
+pub struct Neg;
+impl Neg {
+    pub fn expand<T: MachineDataWidth>(rd: RiscVRegister, rs: RiscVRegister) -> RiscVInst<T> {
+        Sub::new(rd, RiscVRegister::ZERO, rs)
+    }
+}
+
+pub struct Nop;
+impl Nop {
+    pub fn expand<T: MachineDataWidth>() -> RiscVInst<T> {
+        Addi::new(ZERO, ZERO, <T::RegData>::zero())
+    }
+}
+
+pub struct Not;
+impl Not {
+    pub fn expand<T: MachineDataWidth>(rd: RiscVRegister, rs: RiscVRegister) -> RiscVInst<T> {
+        Xori::new(rd, rs, (-1).into())
+    }
+}
+
 pub struct JalPseudo;
 impl JalPseudo {
     pub fn expand<T: MachineDataWidth>(offs: T::RegData) -> RiscVInst<T> {
@@ -112,7 +126,9 @@ impl Ret {
 mod tests {
     use super::*;
     use crate::arch::Width32b;
+    use crate::architectures::riscv::RiscV;
     use crate::program_state::DataWord;
+    use crate::program_state::ProgramState;
 
     type Expanded = Vec<RiscVInst<Width32b>>;
 
@@ -143,5 +159,20 @@ mod tests {
         let num: Expanded = Li32::expand(A0, DataWord::from(-273));
         assert_eq!(num.len(), 1);
         assert_eq!(num[0], Addi::new(A0, ZERO, DataWord::from(-273)));
+    }
+
+    #[test]
+    fn test_not_neg() {
+        let mut state: ProgramState<RiscV<Width64b>, Width64b> = Default::default();
+        let v1 = 0xABCD_ABCD_0123_0123u64 as i64;
+        state.regfile_set(S0, v1.into());
+        state.apply_inst_test(&Not::expand(A0, S0));
+        assert_eq!(state.regfile_read(A0), (!v1).into());
+        state.apply_inst_test(&Not::expand(A0, A0));
+        assert_eq!(state.regfile_read(A0), v1.into());
+        state.apply_inst_test(&Neg::expand(A0, S0));
+        assert_eq!(state.regfile_read(A0), (-v1).into());
+        state.apply_inst_test(&Neg::expand(A0, A0));
+        assert_eq!(state.regfile_read(A0), v1.into());
     }
 }

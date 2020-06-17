@@ -11,11 +11,14 @@ figuring out the proper abstractions)
 - Run by CLI with `cargo run <INPUT_FILE>`
 
 ## Roadmap - RISCV
+- [ ] Finish base ISA
+- [ ] Multiplication extension
 
 ## Roadmap - General Features
 ### Near term
+- [ ] Basic repl that allows stepping/viewing
+- [ ] Standard library functions
 - [ ] CLI configuration
-- [ ] Standard library
 - [ ] Labels in data section
 - [ ] Support assembler [relocation functions](https://github.com/riscv/riscv-asm-manual/blob/master/riscv-asm.md#assembler-relocation-functions)
 
