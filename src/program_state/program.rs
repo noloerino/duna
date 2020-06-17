@@ -234,16 +234,24 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
         self.user_state.pc
     }
 
-    pub fn set_user_pc(&mut self, addr: <T>::ByteAddr) {
+    pub fn set_user_pc(&mut self, addr: T::ByteAddr) {
         self.user_state.pc = addr
     }
 
-    pub fn regfile_read(&self, reg: F::Register) -> <T>::RegData {
+    pub fn regfile_read(&self, reg: F::Register) -> T::RegData {
         self.user_state.regfile.read(reg)
     }
 
-    pub fn regfile_set(&mut self, reg: F::Register, val: <T>::RegData) {
+    pub fn regfile_set(&mut self, reg: F::Register, val: T::RegData) {
         self.user_state.regfile.set(reg, val);
+    }
+
+    pub fn regfile(&mut self) -> &RegFile<F::Register, T> {
+        &self.user_state.regfile
+    }
+
+    pub fn get_pc(&mut self) -> T::ByteAddr {
+        self.user_state.pc
     }
 
     #[cfg(test)]

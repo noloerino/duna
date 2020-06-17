@@ -1,9 +1,10 @@
 use crate::arch::*;
 use std::fmt;
+use std::fmt::Display;
 use std::marker::PhantomData;
 
 /// Marker trait to denote an integer register.
-pub trait IRegister: Copy + Clone + PartialEq + fmt::Debug + fmt::Display {
+pub trait IRegister: Copy + Clone + PartialEq + From<u8> + fmt::Debug + fmt::Display {
     /// Indexes the register file.
     /// If the result is 0, then the corresponding register value is pinned to 0.
     fn to_usize(self) -> usize;
@@ -32,5 +33,16 @@ impl<R: IRegister, T: MachineDataWidth> RegFile<R, T> {
 
     pub fn read(&self, rs: R) -> T::RegData {
         self.store[rs.to_usize()]
+    }
+}
+
+/// Dumps the contents of the register file.
+impl<R: IRegister, T: MachineDataWidth> Display for RegFile<R, T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for i in 0..REGFILE_SIZE {
+            let reg: R = (i as u8).into();
+            writeln!(f, "{}: {}", reg, self.read(reg))?;
+        }
+        Ok(())
     }
 }

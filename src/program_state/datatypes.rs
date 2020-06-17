@@ -458,7 +458,7 @@ impl From<DataByte> for i8 {
     }
 }
 
-pub trait ByteAddress: Clone + Copy + Sized + fmt::Debug + 'static {
+pub trait ByteAddress: Clone + Copy + Sized + fmt::Debug + fmt::Display + 'static {
     type WordAddress: Hash + Eq + Copy + Clone + cast::AsPrimitive<usize>;
 
     /// Gets the number of bits in this address type.
@@ -532,6 +532,12 @@ impl From<DataDword> for ByteAddr64 {
     }
 }
 
+impl fmt::Display for ByteAddr64 {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:x}", self.value)
+    }
+}
+
 #[derive(Eq, PartialEq, Debug, Copy, Clone, ConvertInt32)]
 pub struct ByteAddr32 {
     value: u32,
@@ -580,6 +586,12 @@ impl From<DataWord> for ByteAddr32 {
 impl From<u64> for ByteAddr32 {
     fn from(value: u64) -> ByteAddr32 {
         ByteAddr32::new(value as u32)
+    }
+}
+
+impl fmt::Display for ByteAddr32 {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:x}", self.value)
     }
 }
 
