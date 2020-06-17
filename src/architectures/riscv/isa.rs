@@ -87,8 +87,8 @@ impl RType<Width64b> for Addw {
     }
 
     fn eval(rs1_val: DataDword, rs2_val: DataDword) -> DataDword {
-        let v1: DataWord = rs1_val.get_lower_word().into();
-        let v2: DataWord = rs2_val.get_lower_word().into();
+        let v1: DataWord = rs1_val.get_lower_word();
+        let v2: DataWord = rs2_val.get_lower_word();
         let result: DataWord = u32::from(v1).wrapping_add(u32::from(v2)).into();
         DataDword::sign_ext_from_word(result)
     }
@@ -574,8 +574,8 @@ impl RType<Width64b> for Subw {
     }
 
     fn eval(rs1_val: DataDword, rs2_val: DataDword) -> DataDword {
-        let v1: DataWord = rs1_val.get_lower_word().into();
-        let v2: DataWord = rs2_val.get_lower_word().into();
+        let v1: DataWord = rs1_val.get_lower_word();
+        let v2: DataWord = rs2_val.get_lower_word();
         let result: DataWord = u32::from(v1).wrapping_sub(u32::from(v2)).into();
         DataDword::sign_ext_from_word(result)
     }
