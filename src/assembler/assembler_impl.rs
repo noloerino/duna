@@ -4,7 +4,7 @@ use super::parser::{Label, LabelDef, LabelRef, ParseResult, Parser};
 use super::partial_inst::{PartialInst, PartialInstType};
 use crate::arch::*;
 use crate::config::*;
-use crate::program_state::{DataEnum, Program};
+use crate::program_state::{DataEnum, Program, ProgramBehavior};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 
@@ -66,7 +66,7 @@ pub struct SectionStore {
     pub data: Vec<u8>,
     /// Stores the contents of the .rodata section. The first element is at the lowest address.
     pub rodata: Vec<u8>,
-    pub labels: HashMap<Label, (ProgramSection, usize)>,
+    pub labels: Vec<(LabelDef, ProgramSection, usize)>,
 }
 
 impl SectionStore {
@@ -74,30 +74,28 @@ impl SectionStore {
         SectionStore {
             data: Vec::new(),
             rodata: Vec::new(),
-            labels: HashMap::new(),
+            labels: Vec::new(),
         }
     }
 
     /// Adds a label to the next element in that section.
-    fn add_label_here(&mut self, section: ProgramSection, label: Label) {
+    fn add_label_here(&mut self, section: ProgramSection, label: LabelDef) {
         use ProgramSection::*;
-        self.labels.insert(
+        self.labels.push((
             label,
-            (
-                section,
-                match section {
-                    Data => &self.data,
-                    Rodata => &self.rodata,
-                    Text => panic!("adding data in text is currently unsupported"),
-                }
-                .len(),
-            ),
-        );
+            section,
+            match section {
+                Data => &self.data,
+                Rodata => &self.rodata,
+                Text => panic!("adding data in text is currently unsupported"),
+            }
+            .len(),
+        ));
     }
 
     pub fn add(&mut self, section: ProgramSection, maybe_label: Option<LabelDef>, val: DataEnum) {
         if let Some(label) = maybe_label {
-            self.add_label_here(section, label.name);
+            self.add_label_here(section, label);
         }
         use DataEnum::*;
         match val {
@@ -128,6 +126,7 @@ impl SectionStore {
         self.add_half(section, (val >> 16) as u16);
     }
 
+    // TODO add option for these to preserve alignment
     fn add_doubleword(&mut self, section: ProgramSection, val: u64) {
         self.add_word(section, val as u32);
         self.add_word(section, (val >> 32) as u32);
@@ -156,26 +155,49 @@ pub struct UnlinkedProgram<S: Architecture> {
     // TODO put labels in sections
     /// Maps index of an instruction to the label it needs.
     pub(super) needed_labels: HashMap<usize, LabelRef>,
-    /// Maps global labels to its location, as well as the index of the insts that define them
-    pub(super) defined_global_labels: HashMap<Label, (Location, usize)>,
+    /// Maps global labels to its token location and program location.
+    pub(super) defined_global_labels: HashMap<Label, LabelTarget>,
     /// Stores literal values declared by directives, as well as labels that reference those values.
     pub(super) sections: SectionStore,
 }
 
-impl<S: Architecture> UnlinkedProgram<S> {
+/// Determintes whether the label points to an instruction or the data section.
+#[derive(Copy, Clone)]
+pub enum LabelTarget {
+    Inst {
+        location: Location,
+        idx: usize,
+    },
+    Data {
+        location: Location,
+        section: ProgramSection,
+        idx: usize,
+    },
+}
+
+impl LabelTarget {
+    pub fn location(self) -> Location {
+        use LabelTarget::*;
+        match self {
+            Inst { location, .. } | Data { location, .. } => location,
+        }
+    }
+}
+
+impl<A: Architecture> UnlinkedProgram<A> {
     /// Constructs an instance of an UnlinkedProgram from a stream of (file name, instruction).
     /// Also attempts to match needed labels to locally defined labels, and populates the needed
     /// and global symbol tables.
     /// A ParseErrorReporter is also returned to allow the linker to proceed with partial information
     /// in the event of a non-fatal error in this program.
     pub(super) fn new(
-        mut insts: Vec<FileIdAndInst<S>>,
+        mut insts: Vec<FileIdAndInst<A>>,
         sections: SectionStore,
         declared_globals: HashSet<String>,
-    ) -> (UnlinkedProgram<S>, ParseErrorReporter) {
+    ) -> (UnlinkedProgram<A>, ParseErrorReporter) {
         let mut reporter = ParseErrorReporter::new();
-        let mut local_labels: HashMap<Label, (Location, usize)> = Default::default();
-        // TODO implement data labels
+        let mut local_labels: HashMap<Label, LabelTarget> = Default::default();
+        // Label definitions in instructions
         for (i, (_, partial_inst)) in insts.iter().enumerate() {
             if let Some(label_def) = &partial_inst.label {
                 let key = label_def.name.clone();
@@ -183,8 +205,30 @@ impl<S: Architecture> UnlinkedProgram<S> {
                     // If already defined, don't touch the original def
                     reporter.add_error(ParseError::redefined_label(label_def));
                 } else {
-                    local_labels.insert(label_def.name.clone(), (label_def.location, i));
+                    local_labels.insert(
+                        key,
+                        LabelTarget::Inst {
+                            location: label_def.location,
+                            idx: i,
+                        },
+                    );
                 }
+            }
+        }
+        // Label definitions in data sections
+        for (label_def, section, idx) in sections.labels.iter().cloned() {
+            let key = label_def.name.clone();
+            if local_labels.contains_key(&key) {
+                reporter.add_error(ParseError::redefined_label(&label_def));
+            } else {
+                local_labels.insert(
+                    key,
+                    LabelTarget::Data {
+                        location: label_def.location,
+                        section,
+                        idx,
+                    },
+                );
             }
         }
         let all_needed_labels: HashMap<usize, LabelRef> = insts
@@ -194,11 +238,11 @@ impl<S: Architecture> UnlinkedProgram<S> {
                 Some((i, partial_inst.get_needed_label()?.clone()))
             })
             .collect();
-        let defined_global_labels: HashMap<Label, (Location, usize)> = local_labels
+        let defined_global_labels: HashMap<Label, LabelTarget> = local_labels
             .iter()
-            .filter_map(|(label, index)| {
+            .filter_map(|(label, tgt)| {
                 if declared_globals.contains(label) {
-                    Some((label.to_string(), *index))
+                    Some((label.to_string(), *tgt))
                 } else {
                     None
                 }
@@ -207,10 +251,42 @@ impl<S: Architecture> UnlinkedProgram<S> {
         // map of labels after resolving local ones
         let mut needed_labels = HashMap::new();
         for (inst_index, label) in all_needed_labels.into_iter() {
-            if let Some(&(_, tgt_index)) = local_labels.get(&label.target) {
-                // Figure out how many instructions we need to jump
-                let inst_distance = (tgt_index as isize) - (inst_index as isize);
-                let byte_distance = (inst_distance * 4) as i64;
+            if let Some(&target_type) = local_labels.get(&label.target) {
+                let byte_distance: i64 = match target_type {
+                    LabelTarget::Inst {
+                        location: _,
+                        idx: tgt_index,
+                    } => {
+                        // Figure out how many instructions we need to jump
+                        let inst_distance = (tgt_index as isize) - (inst_index as isize);
+                        (inst_distance * 4) as i64
+                    }
+                    LabelTarget::Data {
+                        location: _,
+                        section,
+                        idx: data_index,
+                    } => {
+                        // If the instruction is at (TEXT_START + x) and the target occurs at
+                        // (DATA_START + y), then we can compute the offset to be
+                        // (DATA_START - TEXT_START + y - x)
+                        // TODO make this more configurable
+                        // TODO for now assuming, data
+                        let text_start: <A::DataWidth as MachineDataWidth>::Signed =
+                            <A::ProgramBehavior as ProgramBehavior<A::Family, A::DataWidth>>::text_start().into();
+                        let data_start: <A::DataWidth as MachineDataWidth>::Signed =
+                            <A::ProgramBehavior as ProgramBehavior<A::Family, A::DataWidth>>::data_start().into();
+                        if section != ProgramSection::Data {
+                            unimplemented!()
+                        }
+                        // since inst_index is in words, we need to multiply by 4
+                        let small_distance = (data_index as isize) - ((inst_index * 4) as isize);
+                        let byte_distance = small_distance
+                            + <A::DataWidth as MachineDataWidth>::sgn_to_isize(
+                                data_start - text_start,
+                            );
+                        byte_distance as i64
+                    }
+                };
                 let (file_id, old_inst) = &insts[inst_index];
                 if let PartialInstType::NeedsLabelRef(inst) = &old_inst.tpe {
                     insts[inst_index] = (
@@ -238,7 +314,7 @@ impl<S: Architecture> UnlinkedProgram<S> {
     }
 
     /// Produces a program, or an error report if some instructions are still missing labels.
-    pub fn into_program(self, config: &MachineConfig) -> Result<Program<S>, ParseErrorReporter> {
+    pub fn into_program(self, config: &MachineConfig) -> Result<Program<A>, ParseErrorReporter> {
         let mut reporter = ParseErrorReporter::new();
         let insts = self
             .insts
@@ -254,7 +330,7 @@ impl<S: Architecture> UnlinkedProgram<S> {
             )
             .collect();
         if reporter.is_empty() {
-            Ok(Program::<S>::new(
+            Ok(Program::<A>::new(
                 insts,
                 self.sections,
                 config.mem_config.build_mem(),
@@ -266,7 +342,7 @@ impl<S: Architecture> UnlinkedProgram<S> {
 
     /// Attempts to produce an instance of the program. Panics if some labels are needed
     /// but not found within the body of this program.
-    pub fn try_into_program(self, config: &MachineConfig) -> Program<S> {
+    pub fn try_into_program(self, config: &MachineConfig) -> Program<A> {
         self.into_program(config).unwrap()
     }
 }

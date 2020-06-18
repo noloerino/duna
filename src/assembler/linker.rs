@@ -1,4 +1,4 @@
-use super::assembler_impl::{Assembler, SectionStore, UnlinkedProgram};
+use super::assembler_impl::{Assembler, LabelTarget, SectionStore, UnlinkedProgram};
 use super::datatypes::*;
 use super::parse_error::{ParseError, ParseErrorReport, ParseErrorReporter};
 use super::parser::{Label, LabelDef};
@@ -85,7 +85,7 @@ impl Linker {
         // the union of all the global symbol tables as the new "local" symbol table.
         let mut all_insts = Vec::new();
         let mut needed_labels: HashMap<usize, Label> = Default::default();
-        let mut defined_global_labels: HashMap<Label, usize> = Default::default();
+        let mut defined_global_labels: HashMap<Label, LabelTarget> = Default::default();
         let mut combined_sections = SectionStore::new();
 
         for (file_id, program) in programs.into_iter().enumerate() {
@@ -101,19 +101,45 @@ impl Linker {
                 combined_sections = sections;
             }
             let prev_inst_size = all_insts.len();
+            // TODO implement for other sections
+            let prev_data_size = combined_sections.data.len();
             all_insts.append(&mut new_insts);
             for (idx, label) in new_needed_labels.into_iter() {
                 needed_labels.insert(idx + prev_inst_size, label.target);
             }
-            for (label, (new_label_loc, idx)) in new_global_labels {
+            for (label, target_type) in new_global_labels {
                 // Check for previous definition and preserve original
                 if defined_global_labels.contains_key(&label) {
                     reporter.add_error(ParseError::redefined_label(&LabelDef {
                         name: label.clone(),
-                        location: new_label_loc,
+                        location: target_type.location(),
                     }))
                 } else {
-                    defined_global_labels.insert(label.clone(), idx + prev_inst_size);
+                    match target_type {
+                        LabelTarget::Inst { location, idx } => {
+                            defined_global_labels.insert(
+                                label.clone(),
+                                LabelTarget::Inst {
+                                    location,
+                                    idx: idx + prev_inst_size,
+                                },
+                            );
+                        }
+                        LabelTarget::Data {
+                            location,
+                            section,
+                            idx,
+                        } => {
+                            defined_global_labels.insert(
+                                label.clone(),
+                                LabelTarget::Data {
+                                    location,
+                                    section,
+                                    idx: idx + prev_data_size,
+                                },
+                            );
+                        }
+                    }
                 }
             }
         }
