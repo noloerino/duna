@@ -534,7 +534,7 @@ impl From<DataDword> for ByteAddr64 {
 
 impl fmt::Display for ByteAddr64 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:x}", self.value)
+        write!(f, "{:#X}", self.value)
     }
 }
 
@@ -591,7 +591,7 @@ impl From<u64> for ByteAddr32 {
 
 impl fmt::Display for ByteAddr32 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:x}", self.value)
+        write!(f, "{:#X}", self.value)
     }
 }
 

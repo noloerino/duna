@@ -279,6 +279,8 @@ impl<A: Architecture> UnlinkedProgram<A> {
                             unimplemented!()
                         }
                         // since inst_index is in words, we need to multiply by 4
+                        println!("data index: {}", data_index);
+                        println!("inst index: {}", inst_index * 4);
                         let small_distance = (data_index as isize) - ((inst_index * 4) as isize);
                         let byte_distance = small_distance
                             + <A::DataWidth as MachineDataWidth>::sgn_to_isize(

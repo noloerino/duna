@@ -8,6 +8,33 @@ use crate::arch::*;
 use crate::program_state::{BitStr32, DataDword, DataWord};
 use RiscVRegister::*;
 
+pub struct La;
+impl La {
+    /// Since the AUIPC is emitted immediately before the ADDI, the offset of the ADDI must be
+    /// adjusted by the size of one instruction to account for this difference.
+    fn get_lower(imm: BitStr32) -> BitStr32 {
+        let lower = imm.slice(11, 0);
+        BitStr32::new(lower.as_u32() + 4, 12)
+    }
+
+    pub fn expand_upper<T: MachineDataWidth>(reg: RiscVRegister, data: T::RegData) -> RiscVInst<T> {
+        let imm: BitStr32 = data.to_bit_str(32);
+        let mut upper = imm.slice(31, 12);
+        let lower = La::get_lower(imm);
+        // offset sign extension
+        if lower.index(11).as_u32() > 0 {
+            upper = BitStr32::new(upper.as_u32() + 1, 20);
+        }
+        Auipc::new(reg, upper.into())
+    }
+
+    pub fn expand_lower<T: MachineDataWidth>(reg: RiscVRegister, data: T::RegData) -> RiscVInst<T> {
+        let imm: BitStr32 = data.to_bit_str(32);
+        let lower = La::get_lower(imm);
+        Addi::new(reg, reg, lower.into())
+    }
+}
+
 pub struct Li32;
 impl Li32 {
     pub fn expand(reg: RiscVRegister, data: DataWord) -> Vec<RiscVInst<Width32b>> {
@@ -24,7 +51,7 @@ impl Li32 {
         let no_lui = upper.is_zero();
         let rs1 = if no_lui { ZERO } else { reg };
         let addi = Addi::new(reg, rs1, lower.into());
-        if upper.is_zero() {
+        if no_lui {
             vec![addi]
         } else {
             vec![Lui::new(reg, upper.into()), addi]

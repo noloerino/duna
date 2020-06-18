@@ -1,6 +1,7 @@
 use super::arch::*;
 use super::instruction::*;
 use super::isa;
+use super::pseudo_inst;
 use super::pseudo_inst::*;
 use super::registers::RiscVRegister;
 use crate::arch::*;
@@ -31,6 +32,8 @@ enum ParseType<T: MachineDataWidth> {
     Jalr,
     U(fn(RiscVRegister, T::RegData) -> RiscVInst<T>),
     // Pseudo-instructions
+    // La is special because it produces two instructions and takes a label
+    La,
     // Li is split to allow for distinction between 32 and 64-bit variants
     Li(fn(RiscVRegister, T::RegData) -> Vec<RiscVInst<T>>),
     RegReg(fn(RiscVRegister, RiscVRegister) -> RiscVInst<T>),
@@ -99,7 +102,8 @@ lazy_static! {
             ("sw", MemS(Sw::new)),
             ("xor", R(Xor::new)),
             ("xori", Arith(Xori::new)),
-            ("li", ParseType::Li(Li32::expand)),
+            ("la", ParseType::La),
+            ("li", Li(Li32::expand)),
             ("mv", RegReg(Mv::expand)),
             ("neg", RegReg(Neg::expand)),
             ("nop", NoArgs(Nop::expand)),
@@ -168,7 +172,8 @@ lazy_static! {
             ("sw", MemS(Sw::new)),
             ("xor", R(Xor::new)),
             ("xori", Arith(Xori::new)),
-            ("li", ParseType::Li(Li64::expand)),
+            ("la", ParseType::La),
+            ("li", Li(Li64::expand)),
             ("mv", RegReg(Mv::expand)),
             ("neg", RegReg(Neg::expand)),
             ("nop", NoArgs(Nop::expand)),
@@ -759,6 +764,29 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
                 let rd = self.try_parse_reg(args.remove(0))?;
                 let imm = self.try_parse_imm(20, args.remove(0))?;
                 ok_wrap_concr(inst_new(rd, imm))
+            }
+            La => {
+                let mut args = self.consume_commasep_args(2)?;
+                let rd = self.try_parse_reg(args.remove(0))?;
+                let last_arg = self.try_parse_imm_or_label_ref(32, args.remove(0))?;
+                match last_arg {
+                    ImmOrLabelRef::Imm(imm) => Ok(vec![
+                        PartialInst::new_complete(pseudo_inst::La::expand_upper(rd, imm)),
+                        PartialInst::new_complete(pseudo_inst::La::expand_lower(rd, imm)),
+                    ]),
+                    ImmOrLabelRef::LabelRef(tgt_label) => Ok(vec![
+                        PartialInst::new_one_reg_needs_label(
+                            pseudo_inst::La::expand_upper,
+                            rd,
+                            tgt_label.clone(),
+                        ),
+                        PartialInst::new_one_reg_needs_label(
+                            pseudo_inst::La::expand_lower,
+                            rd,
+                            tgt_label.clone(),
+                        ),
+                    ]),
+                }
             }
             Li(inst_expand) => {
                 let mut args = self.consume_commasep_args(2)?;

@@ -73,8 +73,11 @@ impl<A: Architecture> Program<A> {
         }
         // store data
         let all_data = sections.data.into_iter().chain(sections.rodata.into_iter());
-        for (_offs, byte) in all_data.enumerate() {
-            user_state.memory.set_byte(data_start, byte.into()).unwrap()
+        let data_start_usize = <A::DataWidth as MachineDataWidth>::usgn_to_usize(data_start.into());
+        for (offs, byte) in all_data.enumerate() {
+            let addr: <A::DataWidth as MachineDataWidth>::ByteAddr =
+                <A::DataWidth as MachineDataWidth>::usize_to_usgn(data_start_usize + offs).into();
+            user_state.memory.set_byte(addr, byte.into()).unwrap()
         }
         Program { insts, state }
     }

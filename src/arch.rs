@@ -60,7 +60,9 @@ pub trait MachineDataWidth: Clone + Copy {
         + sign::Signed
         + wrapping::WrappingAdd
         + Copy
-        + Clone;
+        + Clone
+        + fmt::Display
+        + fmt::Debug;
     type Unsigned: From<Self::RegData>
         + From<Self::ByteAddr>
         + Eq
@@ -71,7 +73,9 @@ pub trait MachineDataWidth: Clone + Copy {
         + wrapping::WrappingAdd
         + wrapping::WrappingSub
         + Copy
-        + Clone;
+        + Clone
+        + fmt::Display
+        + fmt::Debug;
     type RegData: RegSize + From<Self::Signed> + From<Self::Unsigned> + From<Self::ByteAddr>;
     type ByteAddr: ByteAddress + From<Self::Signed> + From<Self::Unsigned> + From<Self::RegData>;
 

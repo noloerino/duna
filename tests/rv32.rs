@@ -176,15 +176,15 @@ fn test_brk_single_page() {
     check_a0_at_end("brk_single_page.s", 0xDEAD_BEEFu32);
 }
 
-// /// Tests labels for literal values declared by directive.
-// #[test]
-// fn test_directive_labels() {
-//     let mut program = program_from_file("directive_labels.s");
-//     // should have written 12 bytes
-//     let result = program.run();
-//     assert_eq!(result, 12);
-//     assert_eq!(
-//         String::from_utf8(program.state.get_stdout().to_vec()),
-//         Ok("hello world\n".to_string())
-//     );
-// }
+/// Tests labels for literal values declared by directive.
+#[test]
+fn test_directive_labels() {
+    let mut program = program_from_file("directive_labels.s");
+    // should have written 12 bytes
+    let result = program.run();
+    assert_eq!(result, 12);
+    assert_eq!(
+        String::from_utf8(program.state.get_stdout().to_vec()),
+        Ok("hello world\n".to_string())
+    );
+}

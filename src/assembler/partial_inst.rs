@@ -1,8 +1,6 @@
 use super::parser::{LabelDef, LabelRef};
 use crate::arch::*;
 
-
-
 pub(crate) enum NeededRegs<F: ArchFamily<T>, T: MachineDataWidth> {
     Two {
         assemble: fn(F::Register, F::Register, T::RegData) -> F::Instruction,

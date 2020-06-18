@@ -97,7 +97,7 @@ impl Linker {
                 ..
             } = program;
             // TODO combine sections (currently just takes first)
-            if file_id == 1 {
+            if file_id == 0 {
                 combined_sections = sections;
             }
             let prev_inst_size = all_insts.len();

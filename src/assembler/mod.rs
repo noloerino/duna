@@ -4,7 +4,7 @@ pub mod lexer;
 mod linker;
 mod parse_error;
 pub mod parser;
-mod partial_inst;
+pub mod partial_inst;
 
 pub use assembler_impl::{Assembler, ProgramSection, SectionStore, UnlinkedProgram};
 pub use datatypes::{FileData, FileId, Location};
