@@ -188,3 +188,9 @@ fn test_directive_labels() {
         Ok("hello world\n".to_string())
     );
 }
+
+/// Tests that an instruction address loaded through la can be jumped to.
+#[test]
+fn test_jump_to_la() {
+    check_a0_at_end("jump_to_la.s", 111);
+}
