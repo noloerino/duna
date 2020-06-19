@@ -95,7 +95,7 @@ fn link_and_repl<A: Architecture>(config: AsmConfig, linker: Linker) {
                 println!("PC: {}", executor.program.state.get_pc())
             }
             "c" | "continue" => {
-                executor.step_to_completion(100000);
+                executor.step_to_completion(1000);
             }
             "info registers" | "i r" | "i registers" | "info r" => {
                 println!("{}", executor.program.state.regfile())

@@ -783,7 +783,7 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
                         PartialInst::new_one_reg_needs_label(
                             pseudo_inst::La::expand_lower,
                             rd,
-                            tgt_label.clone(),
+                            tgt_label,
                         ),
                     ]),
                 }

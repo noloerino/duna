@@ -250,13 +250,12 @@ impl<A: Architecture> UnlinkedProgram<A> {
         // Label definitions in instructions
         for (i, (_, partial_inst)) in insts.iter().enumerate() {
             if let Some(label_def) = &partial_inst.label {
-                let key = label_def.name.clone();
-                if local_labels.contains_key(&key) {
+                if local_labels.contains_key(&label_def.name) {
                     // If already defined, don't touch the original def
                     reporter.add_error(ParseError::redefined_label(label_def));
                 } else {
                     local_labels.insert(
-                        key,
+                        label_def.name.clone(),
                         LabelTarget::Inst {
                             location: label_def.location,
                             idx: i,
@@ -267,12 +266,11 @@ impl<A: Architecture> UnlinkedProgram<A> {
         }
         // Label definitions in data sections
         for (label_def, section, idx) in sections.labels.iter().cloned() {
-            let key = label_def.name.clone();
-            if local_labels.contains_key(&key) {
+            if local_labels.contains_key(&label_def.name) {
                 reporter.add_error(ParseError::redefined_label(&label_def));
             } else {
                 local_labels.insert(
-                    key,
+                    label_def.name.clone(),
                     LabelTarget::Data {
                         location: label_def.location,
                         section,
