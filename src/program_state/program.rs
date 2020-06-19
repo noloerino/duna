@@ -257,7 +257,7 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
         self.user_state.pc
     }
 
-    #[cfg(test)]
+    // #[cfg(test)]
     pub fn memory_get_word(&self, addr: T::ByteAddr) -> DataWord {
         self.user_state.memory.get_word(addr).unwrap()
     }

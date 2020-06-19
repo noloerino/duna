@@ -67,6 +67,7 @@ pub struct SectionStore {
     /// Stores the contents of the .rodata section. The first element is at the lowest address.
     pub rodata: Vec<u8>,
     pub labels: Vec<(LabelDef, ProgramSection, usize)>,
+    require_align: bool,
 }
 
 impl SectionStore {
@@ -75,6 +76,7 @@ impl SectionStore {
             data: Vec::new(),
             rodata: Vec::new(),
             labels: Vec::new(),
+            require_align: true,
         }
     }
 
@@ -93,7 +95,29 @@ impl SectionStore {
         ));
     }
 
+    fn byte_len(&self, section: ProgramSection) -> usize {
+        use ProgramSection::*;
+        match section {
+            Data => &self.data,
+            Rodata => &self.rodata,
+            Text => panic!("adding data in text is currently unsupported"),
+        }
+        .len()
+    }
+
     pub fn add(&mut self, section: ProgramSection, maybe_label: Option<LabelDef>, val: DataEnum) {
+        // handle alignment first so the label is placed at the correct index
+        if self.require_align {
+            let pad_requirement = match val {
+                Byte(_) => 1,
+                Half(_) => 2,
+                Word(_) => 4,
+                DoubleWord(_) => 8,
+            };
+            while self.byte_len(section) % pad_requirement != 0 {
+                self.add_byte(section, 0);
+            }
+        }
         if let Some(label) = maybe_label {
             self.add_label_here(section, label);
         }
@@ -103,6 +127,32 @@ impl SectionStore {
             Half(n) => self.add_half(section, n.into()),
             Word(n) => self.add_word(section, n.into()),
             DoubleWord(n) => self.add_doubleword(section, n.into()),
+        }
+    }
+
+    /// Adds zero bytes until the total number of bytes in the section is a multiple of 8, making it
+    /// aligned to a doubleword.
+    pub fn zero_pad_until_doubleword_aligned(&mut self) {
+        use ProgramSection::*;
+        for &section in &[Data, Rodata] {
+            while self.byte_len(section) % 8 != 0 {
+                self.add_byte(section, 0);
+            }
+        }
+    }
+
+    /// Consumes the other SectionStore, joining it with this one.
+    /// Agnostic to alignment.
+    pub fn join(&mut self, other: SectionStore) {
+        let old_data_len = self.byte_len(ProgramSection::Data);
+        self.data.extend(other.data);
+        self.rodata.extend(other.rodata);
+        // combine labels
+        for (label_def, section, idx) in other.labels.into_iter() {
+            match section {
+                ProgramSection::Data => self.labels.push((label_def, section, old_data_len + idx)),
+                _ => unimplemented!(),
+            }
         }
     }
 
@@ -279,8 +329,6 @@ impl<A: Architecture> UnlinkedProgram<A> {
                             unimplemented!()
                         }
                         // since inst_index is in words, we need to multiply by 4
-                        println!("data index: {}", data_index);
-                        println!("inst index: {}", inst_index * 4);
                         let small_distance = (data_index as isize) - ((inst_index * 4) as isize);
                         let byte_distance = small_distance
                             + <A::DataWidth as MachineDataWidth>::sgn_to_isize(

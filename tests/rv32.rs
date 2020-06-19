@@ -194,3 +194,34 @@ fn test_directive_labels() {
 fn test_jump_to_la() {
     check_a0_at_end("jump_to_la.s", 111);
 }
+
+/// Tests that data directives preserve appropriate alignment, even across files.
+#[test]
+fn test_aligned_directive_labels() {
+    let mut program = Linker::with_main(&get_full_test_path("aligned_directive_labels_0.s"))
+        .with_file(&get_full_test_path("aligned_directive_labels_1.s"))
+        .link::<RV32>(Default::default())
+        .unwrap();
+    program.dump_insts();
+    println!(
+        "at 18 , i found {:#X}",
+        u32::from(program.state.memory_get_word(0x2000_0018.into()))
+    );
+    println!(
+        "at 14 , i found {:#X}",
+        u32::from(program.state.memory_get_word(0x2000_0014.into()))
+    );
+    println!(
+        "at 0x10 , i found {:#X}",
+        u32::from(program.state.memory_get_word(0x2000_0010.into()))
+    );
+    program.run();
+    use RiscVRegister::*;
+    assert_eq!(u32::from(program.state.regfile_read(A0)), 0xAB);
+    assert_eq!(u32::from(program.state.regfile_read(A1)), 0xABCD);
+    assert_eq!(u32::from(program.state.regfile_read(A2)), 0x1234_5678);
+    assert_eq!(u32::from(program.state.regfile_read(A3)), 0xCD);
+    assert_eq!(u32::from(program.state.regfile_read(A4)), 0xEE);
+    assert_eq!(u32::from(program.state.regfile_read(A5)), 0xFEDC);
+    assert_eq!(u32::from(program.state.regfile_read(A6)), 0x9876_5432);
+}

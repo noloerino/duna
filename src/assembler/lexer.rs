@@ -233,9 +233,9 @@ impl<'a> LineLexer<'a> {
             Some((_, c_ref)) => {
                 let c = *c_ref;
                 // possibly look for format specifier
-                if c1 == '0' && c == 'x' {
+                if c1 == '0' && (c == 'x' || c == 'X') {
                     fmt = Hex;
-                } else if c1 == '0' && c == 'b' {
+                } else if c1 == '0' && (c == 'b' || c == 'B') {
                     fmt = Bin;
                 } else {
                     // definitely base 10

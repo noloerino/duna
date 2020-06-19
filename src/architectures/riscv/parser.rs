@@ -1214,7 +1214,7 @@ mod tests {
     #[test]
     /// Tests the loading of immediates in the .data section.
     fn test_data_directives() {
-        let prog = ".section .data\n.byte 0x12\n.word 0xdeadbeef";
+        let prog = ".section .data\n.word 0xdeadbeef\n.byte 0x12";
         let ParseResult {
             reporter,
             sections,
@@ -1222,7 +1222,7 @@ mod tests {
             ..
         } = RiscVParser::<Width32b>::parse_str(0, prog);
         assert!(reporter.is_empty(), insts.is_empty());
-        assert_eq!(sections.data, vec![0x12, 0xef, 0xbe, 0xad, 0xde]);
+        assert_eq!(sections.data, vec![0xef, 0xbe, 0xad, 0xde, 0x12]);
     }
 
     #[test]

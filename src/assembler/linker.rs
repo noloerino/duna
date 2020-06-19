@@ -88,7 +88,7 @@ impl Linker {
         let mut defined_global_labels: HashMap<Label, LabelTarget> = Default::default();
         let mut combined_sections = SectionStore::new();
 
-        for (file_id, program) in programs.into_iter().enumerate() {
+        for program in programs.into_iter() {
             let UnlinkedProgram {
                 insts: mut new_insts,
                 needed_labels: new_needed_labels,
@@ -96,13 +96,12 @@ impl Linker {
                 sections,
                 ..
             } = program;
-            // TODO combine sections (currently just takes first)
-            if file_id == 0 {
-                combined_sections = sections;
-            }
-            let prev_inst_size = all_insts.len();
             // TODO implement for other sections
+            // Ensure that the section is properly aligned for the next file
+            combined_sections.zero_pad_until_doubleword_aligned();
             let prev_data_size = combined_sections.data.len();
+            combined_sections.join(sections);
+            let prev_inst_size = all_insts.len();
             all_insts.append(&mut new_insts);
             for (idx, label) in new_needed_labels.into_iter() {
                 needed_labels.insert(idx + prev_inst_size, label.target);
