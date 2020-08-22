@@ -218,9 +218,7 @@ pub trait IType<T: MachineDataWidth> {
     ) -> RiscVInst<T> {
         let imm_vec = imm.to_bit_str(12);
         RiscVInst {
-            eval: Box::new(move |state| {
-                <Self as IType<T>>::eval(&state.user_state, rd, rs1, imm_vec)
-            }),
+            eval: Box::new(move |state| <Self as IType<T>>::eval(&state, rd, rs1, imm_vec)),
             data: RiscVInstData::I {
                 fields: Self::inst_fields(),
                 rd,
@@ -231,7 +229,7 @@ pub trait IType<T: MachineDataWidth> {
     }
     fn inst_fields() -> IInstFields;
     fn eval(
-        state: &UserState<RiscV<T>, T>,
+        state: &ProgramState<RiscV<T>, T>,
         rd: RiscVRegister,
         rs1: RiscVRegister,
         imm: BitStr32,

@@ -287,17 +287,17 @@ impl<T: MachineDataWidth> IType<T> for Jalr {
     }
 
     fn eval(
-        state: &UserState<RiscV<T>, T>,
+        state: &ProgramState<RiscV<T>, T>,
         rd: RiscVRegister,
         rs1: RiscVRegister,
         imm: BitStr32,
     ) -> InstResult<RiscV<T>, T> {
-        let v1: T::Signed = state.regfile.read(rs1).into();
+        let v1: T::Signed = state.user_state.regfile.read(rs1).into();
         UserDiff::reg_write_op(
-            state,
+            &state.user_state,
             (v1.wrapping_add(&imm.into())).into(),
             rd,
-            state.pc.plus_4().into(),
+            state.user_state.pc.plus_4().into(),
         )
     }
 }

@@ -166,13 +166,13 @@ fn impl_itype_arith_derive(ast: &syn::DeriveInput) -> TokenStream {
             }
 
             fn eval(
-                state: &UserState<RiscV<T>, T>,
+                state: &ProgramState<RiscV<T>, T>,
                 rd: RiscVRegister,
                 rs1: RiscVRegister,
                 imm: BitStr32
             ) -> InstResult<RiscV<T>, T> {
-                let new_rd_val = <#name as ITypeArith<T>>::eval(state.regfile.read(rs1), imm.into());
-                UserDiff::reg_write_pc_p4(state, rd, new_rd_val)
+                let new_rd_val = <#name as ITypeArith<T>>::eval(state.user_state.regfile.read(rs1), imm.into());
+                UserDiff::reg_write_pc_p4(&state.user_state, rd, new_rd_val)
             }
         }
     };
@@ -188,13 +188,13 @@ fn impl_itype_arith_64_derive(ast: &syn::DeriveInput) -> TokenStream {
             }
 
             fn eval(
-                state: &UserState<RiscV<Width64b>, Width64b>,
+                state: &ProgramState<RiscV<Width64b>, Width64b>,
                 rd: RiscVRegister,
                 rs1: RiscVRegister,
                 imm: BitStr32
             ) -> InstResult<RiscV<Width64b>, Width64b> {
-                let new_rd_val = <#name as ITypeArith<Width64b>>::eval(state.regfile.read(rs1), imm.into());
-                UserDiff::reg_write_pc_p4(state, rd, new_rd_val)
+                let new_rd_val = <#name as ITypeArith<Width64b>>::eval(state.user_state.regfile.read(rs1), imm.into());
+                UserDiff::reg_write_pc_p4(&state.user_state, rd, new_rd_val)
             }
         }
     };
@@ -210,17 +210,17 @@ fn impl_itype_load_derive(ast: &syn::DeriveInput) -> TokenStream {
             }
 
             fn eval(
-                state: &UserState<RiscV<T>, T>,
+                state: &ProgramState<RiscV<T>, T>,
                 rd: RiscVRegister,
                 rs1: RiscVRegister,
                 imm: BitStr32
             ) -> InstResult<RiscV<T>, T> {
-                let rs1_val: T::Signed = state.regfile.read(rs1).into();
+                let rs1_val: T::Signed = state.user_state.regfile.read(rs1).into();
                 let addr: T::RegData = (rs1_val + imm.into()).into();
-                let result = <#name as ITypeLoad<T>>::eval(state.memory.as_ref(), addr.into());
+                let result = <#name as ITypeLoad<T>>::eval(state.user_state.memory.as_ref(), addr.into());
                 match result {
-                    Ok(new_rd_val) => UserDiff::reg_write_pc_p4(state, rd, new_rd_val),
-                    Err(fault) => UserDiff::Trap(fault.into()).into_inst_result(),
+                    Ok(new_rd_val) => UserDiff::reg_write_pc_p4(&state.user_state, rd, new_rd_val),
+                    Err(fault) => state.handle_trap(&fault.into()),
                 }
             }
         }
@@ -237,18 +237,18 @@ fn impl_itype_load_64_derive(ast: &syn::DeriveInput) -> TokenStream {
             }
 
             fn eval(
-                state: &UserState<RiscV<Width64b>, Width64b>,
+                state: &ProgramState<RiscV<Width64b>, Width64b>,
                 rd: RiscVRegister,
                 rs1: RiscVRegister,
                 imm: BitStr32
             ) -> InstResult<RiscV<Width64b>, Width64b> {
-                let rs1_val: i64 = state.regfile.read(rs1).into();
+                let rs1_val: i64 = state.user_state.regfile.read(rs1).into();
                 let imm_val: i64 = imm.into();
                 let addr: DataDword = (rs1_val + imm_val).into();
-                let result = <#name as ITypeLoad<Width64b>>::eval(state.memory.as_ref(), addr.into());
+                let result = <#name as ITypeLoad<Width64b>>::eval(state.user_state.memory.as_ref(), addr.into());
                 match result {
-                    Ok(new_rd_val) => UserDiff::reg_write_pc_p4(state, rd, new_rd_val),
-                    Err(fault) => UserDiff::Trap(fault.into()).into_inst_result(),
+                    Ok(new_rd_val) => UserDiff::reg_write_pc_p4(&state.user_state, rd, new_rd_val),
+                    Err(fault) => state.handle_trap(&fault.into()),
                 }
             }
         }
