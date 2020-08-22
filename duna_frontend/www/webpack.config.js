@@ -29,7 +29,7 @@ module.exports = {
   },
   mode: "development",
   plugins: [
-    new CopyWebpackPlugin(['index.html']),
+    new CopyWebpackPlugin({patterns: ['index.html']}),
     new webpack.DefinePlugin({
       BUILD_VERSION: JSON.stringify(version)
     })

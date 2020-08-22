@@ -1,12 +1,13 @@
 mod utils;
 
-use duna::assembler::Assembler;
+use duna::architectures::riscv::RV32;
+use duna::assembler::Linker;
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
 pub struct SimResult {
     stdout: Vec<u8>,
-    pub exit_code: i32,
+    pub exit_code: u8,
 }
 
 #[wasm_bindgen]
@@ -20,7 +21,9 @@ impl SimResult {
 /// Runs the program from start to finish.
 /// Hacky.
 pub fn simulate(program: &str) -> SimResult {
-    let mut program = Assembler::assemble_str(program).unwrap().try_into_program();
+    let mut program = Linker::with_main_str(program)
+        .link::<RV32>(Default::default())
+        .unwrap();
     let result = program.run();
     SimResult {
         stdout: program.state.get_stdout().to_vec(),
