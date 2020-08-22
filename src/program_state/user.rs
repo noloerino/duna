@@ -35,34 +35,34 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> UserState<F, T> {
 
     /// Applies a diff to the user state.
     pub fn apply_diff(&mut self, diff: &UserDiff<F, T>) {
-        match diff {
-            &UserDiff::PcDiff { new_pc, .. } => {
+        match *diff {
+            UserDiff::PcDiff { new_pc, .. } => {
                 self.pc = new_pc;
             }
-            &UserDiff::RegDiff {
+            UserDiff::RegDiff {
                 reg,
                 change: RegDataChange { new_value, .. },
             } => {
                 self.regfile.set(reg, new_value);
             }
-            &UserDiff::MemDiff { addr, new_val, .. } => self.memory.set(addr, new_val).unwrap(),
+            UserDiff::MemDiff { addr, new_val, .. } => self.memory.set(addr, new_val).unwrap(),
             // Trap itself is a noop, but instruction may produce other side effects
-            &UserDiff::Trap(_trap_kind) => {}
+            UserDiff::Trap(_trap_kind) => {}
         }
     }
 
     pub fn revert_diff(&mut self, diff: &UserDiff<F, T>) {
-        match diff {
-            &UserDiff::PcDiff { old_pc, .. } => {
+        match *diff {
+            UserDiff::PcDiff { old_pc, .. } => {
                 self.pc = old_pc;
             }
-            &UserDiff::RegDiff {
+            UserDiff::RegDiff {
                 reg,
                 change: RegDataChange { old_value, .. },
             } => {
                 self.regfile.set(reg, old_value);
             }
-            &UserDiff::MemDiff { addr, old_val, .. } => self.memory.set(addr, old_val).unwrap(),
+            UserDiff::MemDiff { addr, old_val, .. } => self.memory.set(addr, old_val).unwrap(),
             UserDiff::Trap(_trap_kind) => {}
         }
     }

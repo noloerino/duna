@@ -3,7 +3,7 @@
 
 use super::datatypes::*;
 use super::memory::*;
-use super::program::{InstResult, ProgramState, StateDiff, SyscallConvention};
+use super::program::{InstResult, ProgramState, StateDiff};
 use crate::arch::*;
 
 /// Contains program state that is visited only to privileged entities, i.e. a kernel thread.
@@ -15,7 +15,6 @@ pub struct PrivState {
     // file_descriptors: Vec<Vec<u8>>
 }
 
-#[cfg(test)]
 impl Default for PrivState {
     fn default() -> Self {
         PrivState::new()
@@ -43,7 +42,6 @@ impl PrivState {
         diff: &PrivDiff<T>,
     ) -> Result<(), TermCause> {
         use PrivDiff::*;
-        let ret_reg = <F::Syscalls as SyscallConvention<F, T>>::syscall_return_regs()[0];
         match diff {
             FileWrite { fd, data } => {
                 // TODO impl for other files
@@ -80,7 +78,6 @@ impl PrivState {
     pub fn revert_diff<F: ArchFamily<T>, T: MachineDataWidth>(&mut self, diff: &PrivDiff<T>) {
         use PrivDiff::*;
         match diff {
-            NoChange => {}
             // TODO delete last len bytes from fd
             FileWrite { fd: _, data: _ } => {}
             _ => unimplemented!(),

@@ -1,8 +1,7 @@
 use super::datatypes::*;
 use super::memory::*;
-use super::phys::*;
 pub use super::priv_s::*;
-use super::registers::{IRegister, RegFile};
+use super::registers::RegFile;
 pub use super::user::*;
 use crate::arch::*;
 use crate::assembler::{Linker, ParseErrorReport, SectionStore};
