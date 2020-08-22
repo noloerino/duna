@@ -136,10 +136,10 @@ impl<T: MachineDataWidth> UType<T> for Auipc {
     }
 
     fn eval(
-        state: &UserProgState<RiscV<T>, T>,
+        state: &UserState<RiscV<T>, T>,
         rd: RiscVRegister,
         imm: BitStr32,
-    ) -> UserDiff<RiscV<T>, T> {
+    ) -> InstResult<RiscV<T>, T> {
         let pc: T::Signed = state.pc.into();
         UserDiff::reg_write_pc_p4(
             state,
@@ -250,8 +250,8 @@ impl<T: MachineDataWidth> EnvironInst<T> for Ecall {
         }
     }
 
-    fn eval(_state: &ProgramState<RiscV<T>, T>) -> TrapKind<T::ByteAddr> {
-        TrapKind::Ecall
+    fn eval(state: &ProgramState<RiscV<T>, T>) -> InstResult<RiscV<T>, T> {
+        state.handle_trap(&TrapKind::Ecall)
     }
 }
 
@@ -262,10 +262,10 @@ impl<T: MachineDataWidth> JType<T> for Jal {
     }
 
     fn eval(
-        state: &UserProgState<RiscV<T>, T>,
+        state: &UserState<RiscV<T>, T>,
         rd: RiscVRegister,
         imm: BitStr32,
-    ) -> UserDiff<RiscV<T>, T> {
+    ) -> InstResult<RiscV<T>, T> {
         let pc: T::Signed = state.pc.into();
         let offs: T::Signed = imm.into();
         UserDiff::reg_write_op(
@@ -287,18 +287,18 @@ impl<T: MachineDataWidth> IType<T> for Jalr {
     }
 
     fn eval(
-        state: &UserProgState<RiscV<T>, T>,
+        state: &UserState<RiscV<T>, T>,
         rd: RiscVRegister,
         rs1: RiscVRegister,
         imm: BitStr32,
     ) -> InstResult<RiscV<T>, T> {
         let v1: T::Signed = state.regfile.read(rs1).into();
-        InstResult::UserStateChange(UserDiff::reg_write_op(
+        UserDiff::reg_write_op(
             state,
             (v1.wrapping_add(&imm.into())).into(),
             rd,
             state.pc.plus_4().into(),
-        ))
+        )
     }
 }
 
@@ -401,10 +401,10 @@ impl<T: MachineDataWidth> UType<T> for Lui {
     }
 
     fn eval(
-        state: &UserProgState<RiscV<T>, T>,
+        state: &UserState<RiscV<T>, T>,
         rd: RiscVRegister,
         imm: BitStr32,
-    ) -> UserDiff<RiscV<T>, T> {
+    ) -> InstResult<RiscV<T>, T> {
         let imm_val: T::Signed = imm.zero_pad_lsb().into();
         UserDiff::reg_write_pc_p4(state, rd, imm_val.into())
     }
@@ -489,11 +489,11 @@ impl<T: MachineDataWidth> SType<T> for Sb {
     }
 
     fn eval(
-        state: &UserProgState<RiscV<T>, T>,
+        state: &UserState<RiscV<T>, T>,
         rs1: RiscVRegister,
         rs2: RiscVRegister,
         imm: BitStr32,
-    ) -> UserDiff<RiscV<T>, T> {
+    ) -> InstResult<RiscV<T>, T> {
         let base_addr: T::Signed = state.regfile.read(rs1).into();
         let byte_addr: T::ByteAddr = (base_addr.wrapping_add(&imm.into())).into();
         let new_byte = state.regfile.read(rs2).get_byte(0);
@@ -511,11 +511,11 @@ impl SType<Width64b> for Sd {
     }
 
     fn eval(
-        state: &UserProgState<RiscV<Width64b>, Width64b>,
+        state: &UserState<RiscV<Width64b>, Width64b>,
         rs1: RiscVRegister,
         rs2: RiscVRegister,
         imm: BitStr32,
-    ) -> UserDiff<RiscV<Width64b>, Width64b> {
+    ) -> InstResult<RiscV<Width64b>, Width64b> {
         let base_addr: i64 = state.regfile.read(rs1).into();
         let byte_addr: ByteAddr64 = (base_addr.wrapping_add(imm.into())).into();
         let new_dword = state.regfile.read(rs2);
@@ -533,11 +533,11 @@ impl<T: MachineDataWidth> SType<T> for Sh {
     }
 
     fn eval(
-        state: &UserProgState<RiscV<T>, T>,
+        state: &UserState<RiscV<T>, T>,
         rs1: RiscVRegister,
         rs2: RiscVRegister,
         imm: BitStr32,
-    ) -> UserDiff<RiscV<T>, T> {
+    ) -> InstResult<RiscV<T>, T> {
         let base_addr: T::Signed = state.regfile.read(rs1).into();
         let byte_addr: T::ByteAddr = (base_addr.wrapping_add(&imm.into())).into();
         let lower_byte: u8 = state.regfile.read(rs2).get_byte(0).into();
@@ -591,11 +591,11 @@ impl<T: MachineDataWidth> SType<T> for Sw {
     }
 
     fn eval(
-        state: &UserProgState<RiscV<T>, T>,
+        state: &UserState<RiscV<T>, T>,
         rs1: RiscVRegister,
         rs2: RiscVRegister,
         imm: BitStr32,
-    ) -> UserDiff<RiscV<T>, T> {
+    ) -> InstResult<RiscV<T>, T> {
         let base_addr: T::Signed = state.regfile.read(rs1).into();
         let byte_addr: T::ByteAddr = (base_addr.wrapping_add(&imm.into())).into();
         UserDiff::mem_write_op(

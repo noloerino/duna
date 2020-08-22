@@ -152,7 +152,7 @@ impl MemPage {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub struct MemFault<T: ByteAddress> {
     pub user_vaddr: T,
     pub cause: MemFaultCause,
@@ -193,7 +193,7 @@ impl<T: ByteAddress> MemFault<T> {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum MemFaultCause {
     PageFault,
     SegFault,
