@@ -62,14 +62,6 @@ impl PrivState {
                 }
                 Ok(())
             }
-            TryPageIn { addr: _ } => {
-                Ok(())
-                // user_state
-                //     .memory
-                //     .map_page(*addr)
-                //     .map_err(|fault| fault.into()) // converts into termcause
-                //     .map(|_| UserDiff::reg_write_pc_p4(user_state, ret_reg, 0.into()))
-            }
             Terminate(cause) => Err(*cause),
         }
     }
@@ -94,8 +86,6 @@ pub enum PrivDiff<T: MachineDataWidth> {
     /// * fd: the file descriptor
     /// * data: the bytes being written
     FileWrite { fd: T::RegData, data: Vec<u8> },
-    /// Represents an attempt to map memory containing the provided address.
-    TryPageIn { addr: T::ByteAddr },
 }
 
 impl<T: MachineDataWidth> PrivDiff<T> {
