@@ -16,7 +16,6 @@ pub struct UserState<F: ArchFamily<T>, T: MachineDataWidth> {
     pub regfile: RegFile<F::Register, T>,
 }
 
-#[cfg(test)]
 impl<F: ArchFamily<T>, T: MachineDataWidth> Default for UserState<F, T> {
     fn default() -> Self {
         UserState::new()
@@ -138,17 +137,14 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> UserDiff<F, T> {
         UserDiff::reg_write_op(state, state.pc.plus_4(), reg, val)
     }
 
-    /// Performs a memory write operation.
-    /// This may trap to the OS in the event of exceptional events like a page fault.
-    pub fn mem_write_op(
+    pub fn mem_write_pc_p4(
         state: &ProgramState<F, T>,
         addr: T::ByteAddr,
         val: DataEnum,
     ) -> Result<InstResult<F, T>, MemFault<T::ByteAddr>> {
-        Ok(InstResult::new(vec![
-            // TODO
-            UserDiff::pc_p4(state).into_state_diff(),
-        ]))
+        let mut diffs = state.memory_set(addr, val)?.diffs;
+        diffs.push(UserDiff::pc_p4(&state.user_state).into_state_diff());
+        Ok(InstResult::new(diffs))
     }
 }
 

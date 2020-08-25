@@ -49,15 +49,16 @@ impl Default for MemConfig {
 }
 
 impl MemConfig {
-    pub fn build_mem<T: ByteAddress>(&self) -> Box<dyn Memory<T>> {
+    pub fn build_mem<T: ByteAddress>(&self) -> Box<dyn PageTable<T>> {
         use crate::program_state::*;
         let kind = self.kind;
         match kind {
-            MemKind::Simple => Box::new(SimpleMemory::<T>::new()),
-            MemKind::LinearPaged {
-                phys_addr_len,
-                page_offs_len,
-            } => Box::new(LinearPagedMemory::<T>::new(phys_addr_len, page_offs_len)),
+            MemKind::Simple => Box::new(AllMappedPt::<T>::new()),
+            _ => unimplemented!()
+            // MemKind::LinearPaged {
+            //     phys_addr_len,
+            //     page_offs_len,
+            // } => Box::new(LinearPagedMemory::<T>::new(phys_addr_len, page_offs_len)),
         }
     }
 }

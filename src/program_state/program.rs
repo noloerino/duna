@@ -1,5 +1,6 @@
 use super::datatypes::*;
 use super::memory::*;
+pub use super::phys::*;
 pub use super::priv_s::*;
 use super::registers::RegFile;
 pub use super::user::*;
@@ -46,7 +47,7 @@ impl<A: Architecture> Program<A> {
     pub fn new(
         insts: Vec<<A::Family as ArchFamily<A::DataWidth>>::Instruction>,
         sections: SectionStore,
-        mut memory: Box<dyn PageTable<<A::DataWidth as MachineDataWidth>::ByteAddr>>,
+        pt: Box<dyn PageTable<<A::DataWidth as MachineDataWidth>::ByteAddr>>,
     ) -> Self {
         let text_start =
             <A::ProgramBehavior as ProgramBehavior<A::Family, A::DataWidth>>::text_start();
@@ -55,10 +56,10 @@ impl<A: Architecture> Program<A> {
         let data_start =
             <A::ProgramBehavior as ProgramBehavior<A::Family, A::DataWidth>>::data_start();
         // Page in text, stack, and data
-        memory.map_page(text_start).unwrap();
-        memory.map_page(stack_start).unwrap();
-        memory.map_page(data_start).unwrap();
-        let mut state = ProgramState::new(memory);
+        pt.map_page(text_start).unwrap();
+        pt.map_page(stack_start).unwrap();
+        pt.map_page(data_start).unwrap();
+        let mut state = ProgramState::new(pt);
         let mut user_state = &mut state.user_state;
         let sp = <A::ProgramBehavior as ProgramBehavior<A::Family, A::DataWidth>>::sp_register();
         // Initialize SP and PC
@@ -67,9 +68,11 @@ impl<A: Architecture> Program<A> {
         // store instructions
         let mut next_addr: <A::DataWidth as MachineDataWidth>::ByteAddr = user_state.pc;
         for inst in &insts {
-            user_state
-                .memory
-                .set_word(next_addr, DataWord::from(inst.to_machine_code()))
+            state
+                .memory_set(
+                    next_addr,
+                    DataEnum::Word(DataWord::from(inst.to_machine_code())),
+                )
                 .unwrap();
             next_addr = next_addr.plus_4()
         }
@@ -79,7 +82,7 @@ impl<A: Architecture> Program<A> {
         for (offs, byte) in all_data.enumerate() {
             let addr: <A::DataWidth as MachineDataWidth>::ByteAddr =
                 <A::DataWidth as MachineDataWidth>::usize_to_usgn(data_start_usize + offs).into();
-            user_state.memory.set_byte(addr, byte.into()).unwrap()
+            state.memory_set(addr, DataEnum::Byte(byte.into())).unwrap();
         }
         Program { insts, state }
     }
@@ -213,8 +216,9 @@ impl<A: Architecture> ProgramExecutor<A> {
 }
 
 pub struct ProgramState<F: ArchFamily<T>, T: MachineDataWidth> {
-    pub(crate) priv_state: PrivState<T>,
     pub(crate) user_state: UserState<F, T>,
+    pub(crate) priv_state: PrivState<T>,
+    pub(crate) phys_state: PhysState,
 }
 
 impl<F: ArchFamily<T>, T: MachineDataWidth> Default for ProgramState<F, T> {
@@ -263,24 +267,86 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
         self.user_state.pc
     }
 
-    // #[cfg(test)]
-    pub fn memory_get_word(&self, addr: T::ByteAddr) -> DataWord {
-        self.user_state.memory.get_word(addr).unwrap()
+    /// Performs a read from memory with the specified data width.
+    /// Returns the sequence of state updates on success, or a page fault on failure.
+    pub fn memory_get(
+        &self,
+        vaddr: T::ByteAddr,
+        width: DataWidth,
+    ) -> Result<(DataEnum, InstResult<F, T>), MemFault<T::ByteAddr>> {
+        // TODO how do we handle lookups spanning multiple pages?
+        let PteLookupData {
+            diffs: pt_diffs,
+            ppn,
+            offs,
+        } = self.priv_state.page_table.lookup_page(vaddr)?;
+        let diffs: Vec<StateDiff<F, T>> = pt_diffs
+            .into_iter()
+            .map(PteUpdate::into_state_diff)
+            .collect();
+        Ok((
+            self.phys_state.memory_get(ppn, offs, width),
+            InstResult::new(diffs),
+        ))
+    }
+
+    /// Performs a read to memory with the specified data.
+    /// Returns the sequence of state updates on success, or a page fault on failure.
+    pub fn memory_set(
+        &self,
+        vaddr: T::ByteAddr,
+        data: DataEnum,
+    ) -> Result<InstResult<F, T>, MemFault<T::ByteAddr>> {
+        // TODO how do we handle lookups spanning multiple pages?
+        let PteLookupData {
+            diffs: pt_diffs,
+            ppn,
+            offs,
+        } = self.priv_state.page_table.lookup_page(vaddr)?;
+        let mut diffs: Vec<StateDiff<F, T>> = pt_diffs
+            .into_iter()
+            .map(PteUpdate::into_state_diff)
+            .collect();
+        diffs.push(
+            self.phys_state
+                .memory_set(ppn, offs, data)
+                .into_state_diff(),
+        );
+        Ok(InstResult::new(diffs))
+    }
+
+    /// Used to inspect memory. Any page table updates will not be performed.
+    pub fn memory_inspect_word(&self, addr: T::ByteAddr) -> DataWord {
+        let (v, _diffs) = self.memory_get(addr, DataWidth::Word).unwrap();
+        v.into()
+    }
+
+    /// Used for testing only. Any operations applied in this fashion are noninvertible, as the
+    /// history stack only keeps track of full instructions.
+    #[cfg(test)]
+    pub fn memory_get_word(&mut self, addr: T::ByteAddr) -> DataWord {
+        let (v, diffs) = self.memory_get(addr, DataWidth::Word).unwrap();
+        self.apply_inst_result(diffs).unwrap();
+        v.into()
     }
 
     #[cfg(test)]
     pub fn memory_set_word(&mut self, addr: T::ByteAddr, val: DataWord) {
-        self.user_state.memory.set_word(addr, val).unwrap()
+        self.apply_inst_result(self.memory_set(addr, val.kind()).unwrap())
+            .unwrap();
     }
 
     #[cfg(test)]
-    pub fn memory_get_doubleword(&self, addr: T::ByteAddr) -> DataDword {
-        self.user_state.memory.get_doubleword(addr).unwrap()
+    pub fn memory_get_doubleword(&mut self, addr: T::ByteAddr) -> DataDword {
+        let (v, diffs) = self.memory_get(addr, DataWidth::DoubleWord).unwrap();
+        self.apply_inst_result(diffs).unwrap();
+        v.into()
     }
 
     #[cfg(test)]
     pub fn memory_set_doubleword(&mut self, addr: T::ByteAddr, val: DataDword) {
-        self.user_state.memory.set_doubleword(addr, val).unwrap()
+        self.apply_inst_result(self.memory_set(addr, val.kind()).unwrap())
+            .unwrap();
     }
 
     pub fn handle_trap(&self, trap_kind: &TrapKind<T::ByteAddr>) -> InstResult<F, T> {
@@ -326,24 +392,26 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
     /// * buf - pointer to the buffer to be written
     /// * len - the number of bytes to write
     fn syscall_write(&self, fd: T::RegData, buf: T::ByteAddr, len: T::RegData) -> InstResult<F, T> {
-        let user_state = &self.user_state;
-        let memory = &user_state.memory;
         let len_val: T::Unsigned = len.into();
         let count: usize = T::usgn_to_usize(len_val);
         let base_addr: T::Unsigned = buf.into();
         let ret_reg = <F::Syscalls as SyscallConvention<F, T>>::syscall_return_regs()[0];
+        let mut v = Vec::new();
         let bytes: Vec<u8> = (0..count)
             .map(|i| {
-                u8::from(
-                    memory
-                        .get_byte((base_addr + T::usize_to_usgn(i)).into())
-                        .unwrap(),
-                )
+                u8::from({
+                    let (val, inst_result) = self
+                        .memory_get((base_addr + T::usize_to_usgn(i)).into(), DataWidth::Byte)
+                        .unwrap();
+                    let byte: DataByte = val.into();
+                    v.extend(inst_result.diffs);
+                    byte
+                })
             })
             .collect();
         // Awkward here, but changing type sig makes common case less ergonomic
-        let mut v = vec![PrivDiff::FileWrite { fd, data: bytes }.into_state_diff()];
-        v.extend(UserDiff::reg_write_pc_p4(user_state, ret_reg, len).diffs);
+        v.push(PrivDiff::FileWrite { fd, data: bytes }.into_state_diff());
+        v.extend(UserDiff::reg_write_pc_p4(&self.user_state, ret_reg, len).diffs);
         InstResult::new(v)
     }
 
@@ -360,10 +428,12 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
         panic!("Unknown syscall")
     }
 
-    pub fn new(memory: Box<dyn PageTable<T::ByteAddr>>) -> ProgramState<F, T> {
+    pub fn new(pt: Box<dyn PageTable<T::ByteAddr>>) -> ProgramState<F, T> {
         ProgramState {
-            priv_state: PrivState::new(),
-            user_state: UserState::new(memory),
+            user_state: UserState::new(),
+            priv_state: PrivState::new(pt),
+            // TODO make configurable
+            phys_state: Default::default(),
         }
     }
 
@@ -396,8 +466,11 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
                 self.user_state.apply_diff(u);
                 Ok(())
             }
-            StateDiff::Priv(p) => self.priv_state.apply_diff::<F, T>(p),
-            StateDiff::Phys => Ok(()),
+            StateDiff::Priv(p) => self.priv_state.apply_diff::<F>(p),
+            StateDiff::Phys(p) => {
+                self.phys_state.apply_diff(p);
+                Ok(())
+            }
         }
     }
 
@@ -405,8 +478,8 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
     pub fn revert_diff(&mut self, diff: &StateDiff<F, T>) {
         match diff {
             StateDiff::User(u) => self.user_state.revert_diff(u),
-            StateDiff::Priv(p) => self.priv_state.revert_diff::<F, T>(p),
-            _ => {}
+            StateDiff::Priv(p) => self.priv_state.revert_diff::<F>(p),
+            StateDiff::Phys(p) => self.phys_state.revert_diff(p),
         }
     }
 }
@@ -462,7 +535,7 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> InstResult<F, T> {
 pub enum StateDiff<F: ArchFamily<T>, T: MachineDataWidth> {
     User(UserDiff<F, T>),
     Priv(PrivDiff<T>),
-    Phys,
+    Phys(PhysDiff),
 }
 
 #[cfg(test)]

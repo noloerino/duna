@@ -1,6 +1,8 @@
 //! Represents the physical devices accessible to the machine, such as the disk and RAM.
 
 use super::datatypes::*;
+use super::program::StateDiff;
+use crate::arch::*;
 use std::collections::HashMap;
 
 /// Indexes into physical memory. Constrained by the number of pages.
@@ -22,25 +24,84 @@ pub enum PhysDiff {
     },
 }
 
+impl PhysDiff {
+    pub fn into_state_diff<F: ArchFamily<T>, T: MachineDataWidth>(self) -> StateDiff<F, T> {
+        StateDiff::Phys(self)
+    }
+}
+
+impl Default for PhysState {
+    fn default() -> Self {
+        PhysState::new(Endianness::default(), 1, 32)
+    }
+}
+
 impl PhysState {
+    pub fn new(endianness: Endianness, pg_count: usize, pg_ofs_bits: usize) -> Self {
+        PhysState {
+            phys_mem: (0..pg_count)
+                .map(|_| MemPage::new(endianness, pg_ofs_bits))
+                .collect(),
+        }
+    }
+
     pub fn apply_diff(&mut self, diff: &PhysDiff) {
         match diff {
-            PhysDiff::MemSet { ppn, offs, diff } => self.phys_mem[*ppn].set(*offs, diff.old()),
+            PhysDiff::MemSet { ppn, offs, diff } => self.phys_mem[*ppn].set(*offs, diff.old_val()),
         }
     }
 
     pub fn revert_diff(&mut self, diff: &PhysDiff) {
         match diff {
-            PhysDiff::MemSet { ppn, offs, diff } => self.phys_mem[*ppn].set(*offs, diff.new()),
+            PhysDiff::MemSet { ppn, offs, diff } => self.phys_mem[*ppn].set(*offs, diff.new_val()),
+        }
+    }
+
+    pub fn memory_get(&self, ppn: PhysPn, offs: PageOffs, width: DataWidth) -> DataEnum {
+        self.phys_mem[ppn].get(offs, width)
+    }
+
+    // should really find a way type parameterize instead of using an enum
+    pub fn memory_set(&self, ppn: PhysPn, offs: PageOffs, data: DataEnum) -> PhysDiff {
+        let page = &self.phys_mem[ppn];
+        use DataEnumDiff::*;
+        PhysDiff::MemSet {
+            ppn,
+            offs,
+            diff: match data {
+                DataEnum::Byte(new) => Byte {
+                    old: page.get_byte(offs),
+                    new,
+                },
+                DataEnum::Half(new) => Half {
+                    old: page.get_half(offs),
+                    new,
+                },
+                DataEnum::Word(new) => Word {
+                    old: page.get_word(offs),
+                    new,
+                },
+                DataEnum::DoubleWord(new) => DoubleWord {
+                    old: page.get_doubleword(offs),
+                    new,
+                },
+            },
         }
     }
 }
 
 /// Represents the order that bytes in a word are stored.
 /// See https://en.wikipedia.org/wiki/Endianness for more information.
+#[derive(Copy, Clone)]
 pub enum Endianness {
     Big,
     Little,
+}
+
+impl Default for Endianness {
+    fn default() -> Self {
+        Endianness::Little
+    }
 }
 
 /// Represents a page of memory.
@@ -65,7 +126,7 @@ impl Default for MemPage {
 }
 
 impl MemPage {
-    fn new(endianness: Endianness, ofs_bits: usize) -> MemPage {
+    pub(crate) fn new(endianness: Endianness, ofs_bits: usize) -> MemPage {
         MemPage {
             endianness,
             largest_idx: (1usize).wrapping_shl(ofs_bits as u32) - 1,
@@ -73,17 +134,17 @@ impl MemPage {
         }
     }
 
-    fn set_byte(&mut self, offs: PageOffs, value: DataByte) {
+    pub(crate) fn set_byte(&mut self, offs: PageOffs, value: DataByte) {
         assert!(offs <= self.largest_idx);
         self.backing.insert(offs, value.into());
     }
 
-    fn get_byte(&self, offs: PageOffs) -> DataByte {
+    pub(crate) fn get_byte(&self, offs: PageOffs) -> DataByte {
         assert!(offs <= self.largest_idx);
         (*self.backing.get(&offs).unwrap_or(&0)).into()
     }
 
-    fn set_half(&mut self, offs: PageOffs, value: DataHalf) {
+    pub(crate) fn set_half(&mut self, offs: PageOffs, value: DataHalf) {
         let half: u16 = value.into();
         match self.endianness {
             Endianness::Big => {
@@ -97,7 +158,7 @@ impl MemPage {
         }
     }
 
-    fn get_half(&self, offs: PageOffs) -> DataHalf {
+    pub(crate) fn get_half(&self, offs: PageOffs) -> DataHalf {
         let lower: u8 = self.get_byte(offs).into();
         let upper: u8 = self.get_byte(offs + 1).into();
         match self.endianness {
@@ -106,7 +167,7 @@ impl MemPage {
         }
     }
 
-    fn set_word(&mut self, offs: PageOffs, value: DataWord) {
+    pub(crate) fn set_word(&mut self, offs: PageOffs, value: DataWord) {
         let word: u32 = value.into();
         match self.endianness {
             Endianness::Big => {
@@ -120,7 +181,7 @@ impl MemPage {
         }
     }
 
-    fn get_word(&self, offs: PageOffs) -> DataWord {
+    pub(crate) fn get_word(&self, offs: PageOffs) -> DataWord {
         let lower: u16 = self.get_half(offs).into();
         let upper: u16 = self.get_half(offs + 2).into();
         match self.endianness {
@@ -131,7 +192,7 @@ impl MemPage {
 
     /// Note: if you're invoking this function, duna assumes that your word size is 64-bit, meaning
     /// endianness will apply to the whole 64 bits rather than to each 32-bit chunk.
-    fn set_doubleword(&mut self, offs: PageOffs, value: DataDword) {
+    pub(crate) fn set_doubleword(&mut self, offs: PageOffs, value: DataDword) {
         let dword: u64 = value.into();
         match self.endianness {
             Endianness::Big => {
@@ -147,7 +208,7 @@ impl MemPage {
 
     /// Note: if you're invoking this function, duna assumes that your word size is 64-bit, meaning
     /// endianness will apply to the whole 64 bits rather than to each 32-bit chunk.
-    fn get_doubleword(&self, offs: PageOffs) -> DataDword {
+    pub(crate) fn get_doubleword(&self, offs: PageOffs) -> DataDword {
         let lower: u32 = self.get_word(offs).into();
         let upper: u32 = self.get_word(offs + 4).into();
         match self.endianness {
@@ -156,7 +217,7 @@ impl MemPage {
         }
     }
 
-    fn set(&mut self, offs: PageOffs, value: DataEnum) {
+    pub(crate) fn set(&mut self, offs: PageOffs, value: DataEnum) {
         match value {
             DataEnum::Byte(v) => self.set_byte(offs, v),
             DataEnum::Half(v) => self.set_half(offs, v),
@@ -165,7 +226,7 @@ impl MemPage {
         }
     }
 
-    fn get(&self, offs: PageOffs, w: DataWidth) -> DataEnum {
+    pub(crate) fn get(&self, offs: PageOffs, w: DataWidth) -> DataEnum {
         match w {
             DataWidth::Byte => DataEnum::Byte(self.get_byte(offs)),
             DataWidth::Half => DataEnum::Half(self.get_half(offs)),

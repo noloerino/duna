@@ -132,6 +132,42 @@ impl DataEnum {
     }
 }
 
+impl From<DataEnum> for DataByte {
+    fn from(value: DataEnum) -> DataByte {
+        match value {
+            DataEnum::Byte(b) => b,
+            _ => panic!("DataByte was coerced from DataEnum of wrong width"),
+        }
+    }
+}
+
+impl From<DataEnum> for DataHalf {
+    fn from(value: DataEnum) -> DataHalf {
+        match value {
+            DataEnum::Half(h) => h,
+            _ => panic!("DataHalf was coerced from DataEnum of wrong width"),
+        }
+    }
+}
+
+impl From<DataEnum> for DataWord {
+    fn from(value: DataEnum) -> DataWord {
+        match value {
+            DataEnum::Word(w) => w,
+            _ => panic!("DataWord was coerced from DataEnum of wrong width"),
+        }
+    }
+}
+
+impl From<DataEnum> for DataDword {
+    fn from(value: DataEnum) -> DataDword {
+        match value {
+            DataEnum::DoubleWord(d) => d,
+            _ => panic!("DataDword was coerced from DataEnum of wrong width"),
+        }
+    }
+}
+
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum DataEnumDiff {
     Byte { old: DataByte, new: DataByte },
@@ -141,7 +177,7 @@ pub enum DataEnumDiff {
 }
 
 impl DataEnumDiff {
-    pub fn old(self) -> DataEnum {
+    pub fn old_val(self) -> DataEnum {
         use DataEnumDiff::*;
         match self {
             Byte { old, .. } => DataEnum::Byte(old),
@@ -151,7 +187,7 @@ impl DataEnumDiff {
         }
     }
 
-    pub fn new(self) -> DataEnum {
+    pub fn new_val(self) -> DataEnum {
         use DataEnumDiff::*;
         match self {
             Byte { new, .. } => DataEnum::Byte(new),

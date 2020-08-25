@@ -18,13 +18,14 @@ pub struct PrivState<T: MachineDataWidth> {
 
 impl<T: MachineDataWidth> Default for PrivState<T> {
     fn default() -> Self {
-        PrivState::new()
+        PrivState::new(Box::new(AllMappedPt::new()))
     }
 }
 
-impl PrivState {
-    pub fn new() -> Self {
+impl<T: MachineDataWidth> PrivState<T> {
+    pub fn new(page_table: Box<dyn PageTable<T::ByteAddr>>) -> Self {
         PrivState {
+            page_table,
             stdout: Vec::new(),
             stderr: Vec::new(),
         }
@@ -38,10 +39,7 @@ impl PrivState {
     /// and generated an appropriate UserDiff.
     ///
     /// Returns a TermCause if the program is terminated.
-    pub fn apply_diff<F: ArchFamily<T>, T: MachineDataWidth>(
-        &mut self,
-        diff: &PrivDiff<T>,
-    ) -> Result<(), TermCause> {
+    pub fn apply_diff<F: ArchFamily<T>>(&mut self, diff: &PrivDiff<T>) -> Result<(), TermCause> {
         use PrivDiff::*;
         match diff {
             FileWrite { fd, data } => {
@@ -64,17 +62,20 @@ impl PrivState {
                 Ok(())
             }
             Terminate(cause) => Err(*cause),
-            PtUpdate(update) => self.page_table.apply_update(),
+            PtUpdate(update) => {
+                self.page_table.apply_update(update);
+                Ok(())
+            }
         }
     }
 
     /// Reverts a privileged state change.
-    pub fn revert_diff<F: ArchFamily<T>, T: MachineDataWidth>(&mut self, diff: &PrivDiff<T>) {
+    pub fn revert_diff<F: ArchFamily<T>>(&mut self, diff: &PrivDiff<T>) {
         use PrivDiff::*;
         match diff {
             // TODO delete last len bytes from fd
             FileWrite { fd: _, data: _ } => {}
-            PtUpdate(update) => self.page_table.revert_update(),
+            PtUpdate(update) => self.page_table.revert_update(update),
             _ => unimplemented!(),
         }
     }

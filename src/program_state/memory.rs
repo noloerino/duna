@@ -1,7 +1,9 @@
 use super::datatypes::*;
 use super::phys::*;
+use super::priv_s::PrivDiff;
+use super::program::StateDiff;
 use crate::arch::*;
-use std::collections::HashMap;
+// use std::collections::HashMap;
 use std::marker::PhantomData;
 
 type VirtPn = usize;
@@ -27,13 +29,19 @@ pub struct PteUpdate {
     new: PtEntry,
 }
 
+impl PteUpdate {
+    pub fn into_state_diff<F: ArchFamily<T>, T: MachineDataWidth>(self) -> StateDiff<F, T> {
+        StateDiff::Priv(PrivDiff::PtUpdate(self))
+    }
+}
+
 /// Represents the result of a page table lookup.
 /// The diffs vec represents the sequence of page table updates that occurred.
 /// The returned PPN and offset are the result of the lookup.
 pub struct PteLookupData {
-    diffs: Vec<PteUpdate>,
-    ppn: PhysPn,
-    offs: PageOffs,
+    pub diffs: Vec<PteUpdate>,
+    pub ppn: PhysPn,
+    pub offs: PageOffs,
 }
 
 #[derive(Debug, PartialEq, Copy, Clone)]
@@ -88,18 +96,6 @@ pub enum MemFaultCause {
 ///
 /// All operations will return a sequence of diffs on success, and a pagefault on failure.
 pub trait PageTable<T: ByteAddress> {
-    /// Checks whether the provided virtual address is mapped.
-    fn is_mapped(&self, addr: T) -> bool;
-
-    /// Raises a page fault if the page is unmapped.
-    fn fault_if_unmapped(&self, addr: T) -> Result<(), MemFault<T>> {
-        if self.is_mapped(addr) {
-            Ok(())
-        } else {
-            Err(MemFault::pagefault_at_addr(addr))
-        }
-    }
-
     fn apply_update(&mut self, update: &PteUpdate);
 
     fn revert_update(&mut self, update: &PteUpdate);
@@ -108,10 +104,10 @@ pub trait PageTable<T: ByteAddress> {
     /// If the page cannot be mapped, then a MemFault is returned.
     /// If the page was newly mapped successfully, then a sequence of updates will be returned.
     /// If the page was already mapped, then the sequence will be empty.
-    fn map_page(&self, addr: T) -> Result<Vec<PteUpdate>, MemFault<T>>;
+    fn map_page(&self, vaddr: T) -> Result<Vec<PteUpdate>, MemFault<T>>;
 
     /// Looks up the page at the associated address.
-    fn lookup_page(&self, addr: T) -> Result<PteLookupData, MemFault<T>>;
+    fn lookup_page(&self, vaddr: T) -> Result<PteLookupData, MemFault<T>>;
 }
 
 /// A simple memory of a single page; all addresses except the null address are considered to be
@@ -119,40 +115,41 @@ pub trait PageTable<T: ByteAddress> {
 ///
 /// Reads to uninitialized addresses always return 0.
 /// Faults occur on unaligned accesses or accesses to the null pointer.
-pub struct AllMappedPt<T: ByteAddress>;
+pub struct AllMappedPt<T: ByteAddress> {
+    _phantom: PhantomData<T>,
+}
 
 impl<T: ByteAddress> AllMappedPt<T> {
     pub fn new() -> Self {
-        AllMappedPt {}
+        AllMappedPt {
+            _phantom: PhantomData,
+        }
     }
 }
 
 impl<T: ByteAddress> PageTable<T> for AllMappedPt<T> {
-    fn is_mapped(&self, addr: T) -> bool {
-        addr.bits() != 0
-    }
+    fn apply_update(&mut self, _update: &PteUpdate) {}
 
-    fn apply_update(&mut self, update: &PteUpdate) {}
+    fn revert_update(&mut self, _update: &PteUpdate) {}
 
-    fn revert_update(&mut self, update: &PteUpdate) {}
-
-    fn map_page(&mut self, addr: T) -> Result<Vec<PteUpdate>, MemFault<T>> {
-        if self.is_mapped(addr) {
-            Err(MemFault::<T>::segfault_at_addr(addr))
+    fn map_page(&self, vaddr: T) -> Result<Vec<PteUpdate>, MemFault<T>> {
+        if vaddr.bits() == 0 {
+            Err(MemFault::<T>::segfault_at_addr(vaddr))
         } else {
             Ok(vec![])
         }
     }
 
-    fn lookup_page(&self, addr: T) -> Result<PteLookupData, MemFault<T>> {
-        if self.is_mapped(addr) {
+    fn lookup_page(&self, vaddr: T) -> Result<PteLookupData, MemFault<T>> {
+        let bits = vaddr.bits();
+        if bits != 0 {
             Ok(PteLookupData {
                 diffs: vec![],
                 ppn: 0,
-                offs: addr.bits(),
+                offs: bits as usize,
             })
         } else {
-            Err(MemFault::<T>::segfault_at_addr(addr))
+            Err(MemFault::<T>::segfault_at_addr(vaddr))
         }
     }
 }
