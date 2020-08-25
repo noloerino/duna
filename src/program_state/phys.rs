@@ -11,6 +11,7 @@ pub type PhysPn = usize;
 pub type PageOffs = usize;
 
 pub struct PhysState {
+    require_aligned: bool,
     /// Physical memory, indexed by physical page numbers.
     pub phys_mem: Vec<MemPage>,
 }
@@ -36,13 +37,19 @@ impl Default for PhysState {
     /// Since pages are sparsely represented, we don't lose much runtime memory from allocating
     /// this many pages.
     fn default() -> Self {
-        PhysState::new(Endianness::default(), 1, 64)
+        PhysState::new(Endianness::default(), true, 1, 64)
     }
 }
 
 impl PhysState {
-    pub fn new(endianness: Endianness, pg_count: usize, pg_ofs_bits: usize) -> Self {
+    pub fn new(
+        endianness: Endianness,
+        require_aligned: bool,
+        pg_count: usize,
+        pg_ofs_bits: usize,
+    ) -> Self {
         PhysState {
+            require_aligned,
             phys_mem: (0..pg_count)
                 .map(|_| MemPage::new(endianness, pg_ofs_bits))
                 .collect(),
@@ -61,15 +68,32 @@ impl PhysState {
         }
     }
 
-    pub fn memory_get(&self, ppn: PhysPn, offs: PageOffs, width: DataWidth) -> DataEnum {
-        self.phys_mem[ppn].get(offs, width)
+    fn check_alignment(&self, offs: PageOffs, width: DataWidth) -> Result<(), ()> {
+        if !self.require_aligned || ByteAddr32::from(offs as u32).is_aligned_to(width) {
+            Ok(())
+        } else {
+            Err(())
+        }
+    }
+
+    /// Returns the requested value from memory. If alignment is requried and the address is
+    /// unaligned, an error is returned.
+    pub fn memory_get(
+        &self,
+        ppn: PhysPn,
+        offs: PageOffs,
+        width: DataWidth,
+    ) -> Result<DataEnum, ()> {
+        self.check_alignment(offs, width)?;
+        Ok(self.phys_mem[ppn].get(offs, width))
     }
 
     // should really find a way type parameterize instead of using an enum
-    pub fn memory_set(&self, ppn: PhysPn, offs: PageOffs, data: DataEnum) -> PhysDiff {
+    pub fn memory_set(&self, ppn: PhysPn, offs: PageOffs, data: DataEnum) -> Result<PhysDiff, ()> {
+        self.check_alignment(offs, data.width())?;
         let page = &self.phys_mem[ppn];
         use DataEnumDiff::*;
-        PhysDiff::MemSet {
+        Ok(PhysDiff::MemSet {
             ppn,
             offs,
             diff: match data {
@@ -90,7 +114,7 @@ impl PhysState {
                     new,
                 },
             },
-        }
+        })
     }
 }
 
@@ -242,5 +266,43 @@ impl MemPage {
             DataWidth::Word => DataEnum::Word(self.get_word(offs)),
             DataWidth::DoubleWord => DataEnum::DoubleWord(self.get_doubleword(offs)),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Ensures that unaligned loads/stores on a MemPage succeed.
+    #[test]
+    fn test_unaligned_mempage_rw() {
+        let mut mem = MemPage::new(Endianness::Little, 32);
+        // This address is not dword-aligned
+        mem.set_doubleword(0xFFFF_FFF0, 0xFFFF_FFFF_FFFF_FFFFu64.into());
+        mem.set_doubleword(0xFFFF_FFF8, 0xEEEE_EEEE_EEEE_EEEEu64.into());
+        // This should overwrite parts of both previous words
+        mem.set_doubleword(0xFFFF_FFF1, 0xABCD_ABCD_ABCD_ABCDu64.into());
+        assert_eq!(
+            mem.get_doubleword(0xFFFF_FFF1),
+            0xABCD_ABCD_ABCD_ABCDu64.into()
+        );
+        // Assuming little endian, the upper bytes of the lower address were set
+        assert_eq!(
+            mem.get_doubleword(0xFFFF_FFF0),
+            0xCDAB_CDAB_CDAB_CD_FFu64.into()
+        );
+        // Assuming little endian, the lower bytes of the upper address were set
+        assert_eq!(
+            mem.get_doubleword(0xFFFF_FFF8),
+            0xEEEE_EEEE_EEEE_EEABu64.into()
+        );
+    }
+
+    // Ensures that accesing an unaligned address from the physical state abstraction
+    // should fault.
+    #[test]
+    fn test_unaligned_fault() {
+        let state = PhysState::new(Endianness::default(), true, 1, 20);
+        assert!(state.memory_get(0, 1, DataWidth::Word).is_err(),);
     }
 }

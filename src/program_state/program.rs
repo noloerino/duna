@@ -274,7 +274,8 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
         vaddr: T::ByteAddr,
         width: DataWidth,
     ) -> Result<(DataEnum, InstResult<F, T>), MemFault<T::ByteAddr>> {
-        // TODO how do we handle lookups spanning multiple pages?
+        // TODO how do we handle lookups spanning multiple pages? how do we handle a PT update that
+        // failed on memory access due to an alignment error?
         let PtLookupData {
             diffs: pt_diffs,
             ppn,
@@ -285,7 +286,9 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
             .map(PtUpdate::into_state_diff)
             .collect();
         Ok((
-            self.phys_state.memory_get(ppn, offs, width),
+            self.phys_state
+                .memory_get(ppn, offs, width)
+                .map_err(|_| MemFault::buserror_at_addr(vaddr))?,
             InstResult::new(diffs),
         ))
     }
@@ -297,7 +300,7 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
         vaddr: T::ByteAddr,
         data: DataEnum,
     ) -> Result<InstResult<F, T>, MemFault<T::ByteAddr>> {
-        // TODO how do we handle lookups spanning multiple pages?
+        // TODO see memory_get
         let PtLookupData {
             diffs: pt_diffs,
             ppn,
@@ -310,6 +313,7 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
         diffs.push(
             self.phys_state
                 .memory_set(ppn, offs, data)
+                .map_err(|_| MemFault::buserror_at_addr(vaddr))?
                 .into_state_diff(),
         );
         Ok(InstResult::new(diffs))

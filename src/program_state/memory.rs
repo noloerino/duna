@@ -134,9 +134,9 @@ pub trait PageTable<T: ByteAddress> {
     /// to initialize pages for the stack and static segments, and don't care about the intermediate
     /// steps taken.
     fn force_map_page(&mut self, vaddr: T) -> Result<(), MemFault<T>> {
-        self.map_page(vaddr)?
-            .iter()
-            .map(|update| self.apply_update(update));
+        for update in self.map_page(vaddr)? {
+            self.apply_update(&update);
+        }
         Ok(())
     }
 
@@ -361,31 +361,6 @@ mod tests {
         assert!(lookup2.diffs.is_empty());
         assert_eq!(lookup2.ppn, 0);
         assert_eq!(lookup2.offs, 0xC000_0000);
-    }
-
-    /// Ensures that unaligned loads/stores on a MemPage succeed.
-    #[test]
-    fn test_unaligned_mempage_rw() {
-        let mut mem = MemPage::new(Endianness::Little, 32);
-        // This address is not dword-aligned
-        mem.set_doubleword(0xFFFF_FFF0, 0xFFFF_FFFF_FFFF_FFFFu64.into());
-        mem.set_doubleword(0xFFFF_FFF8, 0xEEEE_EEEE_EEEE_EEEEu64.into());
-        // This should overwrite parts of both previous words
-        mem.set_doubleword(0xFFFF_FFF1, 0xABCD_ABCD_ABCD_ABCDu64.into());
-        assert_eq!(
-            mem.get_doubleword(0xFFFF_FFF1),
-            0xABCD_ABCD_ABCD_ABCDu64.into()
-        );
-        // Assuming little endian, the upper bytes of the lower address were set
-        assert_eq!(
-            mem.get_doubleword(0xFFFF_FFF0),
-            0xCDAB_CDAB_CDAB_CD_FFu64.into()
-        );
-        // Assuming little endian, the lower bytes of the upper address were set
-        assert_eq!(
-            mem.get_doubleword(0xFFFF_FFF8),
-            0xEEEE_EEEE_EEEE_EEABu64.into()
-        );
     }
 
     /*
