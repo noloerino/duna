@@ -132,6 +132,36 @@ impl DataEnum {
     }
 }
 
+#[derive(Copy, Clone, PartialEq, Debug)]
+pub enum DataEnumDiff {
+    Byte { old: DataByte, new: DataByte },
+    Half { old: DataHalf, new: DataHalf },
+    Word { old: DataWord, new: DataWord },
+    DoubleWord { old: DataDword, new: DataDword },
+}
+
+impl DataEnumDiff {
+    pub fn old(self) -> DataEnum {
+        use DataEnumDiff::*;
+        match self {
+            Byte { old, .. } => DataEnum::Byte(old),
+            Half { old, .. } => DataEnum::Half(old),
+            Word { old, .. } => DataEnum::Word(old),
+            DoubleWord { old, .. } => DataEnum::DoubleWord(old),
+        }
+    }
+
+    pub fn new(self) -> DataEnum {
+        use DataEnumDiff::*;
+        match self {
+            Byte { new, .. } => DataEnum::Byte(new),
+            Half { new, .. } => DataEnum::Half(new),
+            Word { new, .. } => DataEnum::Word(new),
+            DoubleWord { new, .. } => DataEnum::DoubleWord(new),
+        }
+    }
+}
+
 /// Marker trait for different datatypes.
 pub trait Data: Copy + Clone + PartialEq {
     fn kind(self) -> DataEnum;

@@ -46,7 +46,7 @@ impl<A: Architecture> Program<A> {
     pub fn new(
         insts: Vec<<A::Family as ArchFamily<A::DataWidth>>::Instruction>,
         sections: SectionStore,
-        mut memory: Box<dyn Memory<<A::DataWidth as MachineDataWidth>::ByteAddr>>,
+        mut memory: Box<dyn PageTable<<A::DataWidth as MachineDataWidth>::ByteAddr>>,
     ) -> Self {
         let text_start =
             <A::ProgramBehavior as ProgramBehavior<A::Family, A::DataWidth>>::text_start();
@@ -213,13 +213,13 @@ impl<A: Architecture> ProgramExecutor<A> {
 }
 
 pub struct ProgramState<F: ArchFamily<T>, T: MachineDataWidth> {
-    pub(crate) priv_state: PrivState,
+    pub(crate) priv_state: PrivState<T>,
     pub(crate) user_state: UserState<F, T>,
 }
 
 impl<F: ArchFamily<T>, T: MachineDataWidth> Default for ProgramState<F, T> {
     fn default() -> Self {
-        ProgramState::new(Box::new(SimpleMemory::new()))
+        ProgramState::new(Box::new(AllMappedPt::new()))
     }
 }
 
@@ -360,7 +360,7 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
         panic!("Unknown syscall")
     }
 
-    pub fn new(memory: Box<dyn Memory<T::ByteAddr>>) -> ProgramState<F, T> {
+    pub fn new(memory: Box<dyn PageTable<T::ByteAddr>>) -> ProgramState<F, T> {
         ProgramState {
             priv_state: PrivState::new(),
             user_state: UserState::new(memory),

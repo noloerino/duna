@@ -8,14 +8,15 @@ use crate::arch::*;
 
 /// Contains program state that is visited only to privileged entities, i.e. a kernel thread.
 /// TODO add kernel thread information (tid, file descriptors, etc.)
-pub struct PrivState {
+pub struct PrivState<T: MachineDataWidth> {
+    pub page_table: Box<dyn PageTable<T::ByteAddr>>,
     /// Holds the contents of all bytes that have been printed to stdout (used mostly for testing)
     pub(crate) stdout: Vec<u8>,
     pub(crate) stderr: Vec<u8>,
     // file_descriptors: Vec<Vec<u8>>
 }
 
-impl Default for PrivState {
+impl<T: MachineDataWidth> Default for PrivState<T> {
     fn default() -> Self {
         PrivState::new()
     }
@@ -63,6 +64,7 @@ impl PrivState {
                 Ok(())
             }
             Terminate(cause) => Err(*cause),
+            PtUpdate(update) => self.page_table.apply_update(),
         }
     }
 
@@ -72,6 +74,7 @@ impl PrivState {
         match diff {
             // TODO delete last len bytes from fd
             FileWrite { fd: _, data: _ } => {}
+            PtUpdate(update) => self.page_table.revert_update(),
             _ => unimplemented!(),
         }
     }
@@ -85,7 +88,11 @@ pub enum PrivDiff<T: MachineDataWidth> {
     /// Represents a file write.
     /// * fd: the file descriptor
     /// * data: the bytes being written
-    FileWrite { fd: T::RegData, data: Vec<u8> },
+    FileWrite {
+        fd: T::RegData,
+        data: Vec<u8>,
+    },
+    PtUpdate(PteUpdate),
 }
 
 impl<T: MachineDataWidth> PrivDiff<T> {
