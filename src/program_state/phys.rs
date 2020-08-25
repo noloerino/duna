@@ -101,7 +101,12 @@ impl PhysState {
         offs: PageOffs,
         width: DataWidth,
     ) -> Result<DataEnum, ()> {
-        assert!(ppn < self.pg_count);
+        assert!(
+            ppn < self.pg_count,
+            "PPN was {} but max page count was {}",
+            ppn,
+            self.pg_count
+        );
         self.check_alignment(offs, width)?;
         Ok(self
             .phys_mem
@@ -112,7 +117,12 @@ impl PhysState {
 
     // should really find a way type parameterize instead of using an enum
     pub fn memory_set(&self, ppn: PhysPn, offs: PageOffs, data: DataEnum) -> Result<PhysDiff, ()> {
-        assert!(ppn < self.pg_count);
+        assert!(
+            ppn < self.pg_count,
+            "PPN was {} but max page count was {}",
+            ppn,
+            self.pg_count
+        );
         self.check_alignment(offs, data.width())?;
         use DataEnumDiff::*;
         Ok(PhysDiff::MemSet {

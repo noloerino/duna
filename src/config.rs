@@ -33,17 +33,18 @@ impl Default for MachineConfig {
 /// TODO add options for alignment and default value
 #[derive(Debug)]
 pub struct MemConfig {
+    pub phys_pn_bits: usize,
+    pub pg_ofs_bits: usize,
     pub kind: PtKind,
 }
 
 impl Default for MemConfig {
     fn default() -> Self {
         MemConfig {
+            phys_pn_bits: 10,
+            pg_ofs_bits: 12,
             // 4 KiB page size, 4 MiB physical memory
-            kind: PtKind::FifoLinearPaged {
-                phys_pn_bits: 10,
-                pg_ofs_bits: 12,
-            },
+            kind: PtKind::FifoLinearPaged,
         }
     }
 }
@@ -54,10 +55,9 @@ impl MemConfig {
         let kind = self.kind;
         match kind {
             PtKind::AllMapped => Box::new(AllMappedPt::<T>::new()),
-            PtKind::FifoLinearPaged {
-                phys_pn_bits,
-                pg_ofs_bits,
-            } => Box::new(FifoLinearPt::<T>::new(phys_pn_bits, pg_ofs_bits)),
+            PtKind::FifoLinearPaged => {
+                Box::new(FifoLinearPt::<T>::new(self.phys_pn_bits, self.pg_ofs_bits))
+            }
         }
     }
 }
@@ -65,8 +65,5 @@ impl MemConfig {
 #[derive(Copy, Clone, Debug)]
 pub enum PtKind {
     AllMapped,
-    FifoLinearPaged {
-        phys_pn_bits: usize,
-        pg_ofs_bits: usize,
-    },
+    FifoLinearPaged,
 }

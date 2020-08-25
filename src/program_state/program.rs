@@ -47,6 +47,8 @@ impl<A: Architecture> Program<A> {
     pub fn new(
         insts: Vec<<A::Family as ArchFamily<A::DataWidth>>::Instruction>,
         sections: SectionStore,
+        pg_count: usize,
+        pg_ofs_len: usize,
         page_table: Box<dyn PageTable<<A::DataWidth as MachineDataWidth>::ByteAddr>>,
     ) -> Self {
         let text_start =
@@ -55,7 +57,7 @@ impl<A: Architecture> Program<A> {
             <A::ProgramBehavior as ProgramBehavior<A::Family, A::DataWidth>>::stack_start();
         let data_start =
             <A::ProgramBehavior as ProgramBehavior<A::Family, A::DataWidth>>::data_start();
-        let mut state = ProgramState::new(page_table);
+        let mut state = ProgramState::new(pg_count, pg_ofs_len, page_table);
         let mem = &mut state.phys_state.phys_mem;
         let pt = &mut state.priv_state.page_table;
         // Page in text, stack, and data
@@ -70,12 +72,10 @@ impl<A: Architecture> Program<A> {
         // store instructions
         let mut next_addr: <A::DataWidth as MachineDataWidth>::ByteAddr = user_state.pc;
         for inst in &insts {
-            state
-                .memory_set(
-                    next_addr,
-                    DataEnum::Word(DataWord::from(inst.to_machine_code())),
-                )
-                .unwrap();
+            state.memory_force_set(
+                next_addr,
+                DataEnum::Word(DataWord::from(inst.to_machine_code())),
+            );
             next_addr = next_addr.plus_4()
         }
         // store data
@@ -84,7 +84,7 @@ impl<A: Architecture> Program<A> {
         for (offs, byte) in all_data.enumerate() {
             let addr: <A::DataWidth as MachineDataWidth>::ByteAddr =
                 <A::DataWidth as MachineDataWidth>::usize_to_usgn(data_start_usize + offs).into();
-            state.memory_set(addr, DataEnum::Byte(byte.into())).unwrap();
+            state.memory_force_set(addr, DataEnum::Byte(byte.into()));
         }
         Program { insts, state }
     }
@@ -225,9 +225,11 @@ pub struct ProgramState<F: ArchFamily<T>, T: MachineDataWidth> {
 
 impl<F: ArchFamily<T>, T: MachineDataWidth> Default for ProgramState<F, T> {
     fn default() -> Self {
-        ProgramState::new(Box::new(AllMappedPt::new()))
+        ProgramState::new(1, 64, Box::new(AllMappedPt::new()))
     }
 }
+
+pub type MemGetResult<F, T> = (DataEnum, InstResult<F, T>);
 
 /// TODO put custom types for syscall args
 /// TODO put errno on user state at a thread-local statically known location
@@ -275,7 +277,7 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
         &self,
         vaddr: T::ByteAddr,
         width: DataWidth,
-    ) -> Result<(DataEnum, InstResult<F, T>), MemFault<T::ByteAddr>> {
+    ) -> Result<MemGetResult<F, T>, MemFault<T::ByteAddr>> {
         // TODO how do we handle lookups spanning multiple pages? how do we handle a PT update that
         // failed on memory access due to an alignment error?
         let PtLookupData {
@@ -325,6 +327,14 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
     pub fn memory_inspect_word(&self, addr: T::ByteAddr) -> DataWord {
         let (v, _diffs) = self.memory_get(addr, DataWidth::Word).unwrap();
         v.into()
+    }
+
+    /// Sets the value in memory, performing any page table updates as needed.
+    /// The intermediate diffs are not saved.
+    /// Panics if the operation fails.
+    pub fn memory_force_set(&mut self, addr: T::ByteAddr, data: DataEnum) {
+        self.apply_inst_result(self.memory_set(addr, data).unwrap())
+            .unwrap();
     }
 
     /// Used for testing only. Any operations applied in this fashion are noninvertible, as the
@@ -434,12 +444,16 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
         panic!("Unknown syscall")
     }
 
-    pub fn new(pt: Box<dyn PageTable<T::ByteAddr>>) -> ProgramState<F, T> {
+    pub fn new(
+        phys_pg_count: usize,
+        pg_ofs_len: usize,
+        pt: Box<dyn PageTable<T::ByteAddr>>,
+    ) -> ProgramState<F, T> {
         ProgramState {
             user_state: UserState::new(),
             priv_state: PrivState::new(pt),
-            // TODO make configurable
-            phys_state: Default::default(),
+            // TODO make endianness/alignment configurable
+            phys_state: PhysState::new(Endianness::default(), true, phys_pg_count, pg_ofs_len),
         }
     }
 
