@@ -3,14 +3,14 @@ use super::phys::*;
 use super::priv_s::PrivDiff;
 use super::program::StateDiff;
 use crate::arch::*;
-// use std::collections::HashMap;
+use std::collections::HashMap;
 use std::marker::PhantomData;
 
 type VirtPn = usize;
 
 /// Maps a virtual page to a physical one.
 #[derive(Debug, Copy, Clone, PartialEq)]
-struct PtEntry {
+pub struct PtEntry {
     pub valid: bool,
     /// The virtual page number.
     pub vpn: VirtPn,
@@ -18,30 +18,55 @@ struct PtEntry {
     pub ppn: PhysPn,
 }
 
-/// Represents an operation that updates the page table.
-#[derive(Debug, PartialEq)]
-pub struct PteUpdate {
-    /// The location of the entry in the page table.
-    pte_loc: usize,
-    /// The swap location that the evicted page is placed at. None if this operation isn't
-    /// an eviction.
-    swap_loc: Option<usize>,
-    old: PtEntry,
-    new: PtEntry,
+impl Default for PtEntry {
+    fn default() -> PtEntry {
+        PtEntry {
+            valid: false,
+            vpn: 0,
+            ppn: 0,
+        }
+    }
 }
 
-impl PteUpdate {
+/// Represents an operation that updates the page table.
+pub enum PtUpdate {
+    /// An update to an entry in the page table.
+    Entry {
+        /// The location of the entry in the page table.
+        pte_loc: usize,
+        /// The swap location that the evicted page is placed at. None if this operation isn't
+        /// an eviction.
+        swap_loc: Option<usize>,
+        old: PtEntry,
+        new: PtEntry,
+    },
+    /// An update to replacement policy metadata.
+    Replacement(ReplacementUpdate),
+    /// A page was evicted and placed in the swapfile.
+    SwapAdd { vpn: VirtPn, data: MemPage },
+    /// An entry in the free page bitmap was flipped.
+    BitmapFlip(usize),
+}
+
+impl PtUpdate {
     pub fn into_state_diff<F: ArchFamily<T>, T: MachineDataWidth>(self) -> StateDiff<F, T> {
         StateDiff::Priv(PrivDiff::PtUpdate(self))
     }
 }
 
+#[derive(Debug, PartialEq)]
+pub enum ReplacementUpdate {
+    /// Represents an increment to a clock hand, which can be used to represent either clock or
+    /// FIFO replacement policies. In the case of a clock-based algorithm, this should be used in
+    /// conjunction with a PtUpdate to modify the entry's "used" bit.
+    ClockTick,
+}
+
 /// Represents the result of a page table lookup.
 /// The diffs vec represents the sequence of page table updates that occurred.
 /// The returned PPN and offset are the result of the lookup.
-#[derive(Debug, PartialEq)]
-pub struct PteLookupData {
-    pub diffs: Vec<PteUpdate>,
+pub struct PtLookupData {
+    pub diffs: Vec<PtUpdate>,
     pub ppn: PhysPn,
     pub offs: PageOffs,
 }
@@ -98,25 +123,43 @@ pub enum MemFaultCause {
 ///
 /// All operations will return a sequence of diffs on success, and a pagefault on failure.
 pub trait PageTable<T: ByteAddress> {
-    fn apply_update(&mut self, update: &PteUpdate);
+    fn apply_update(&mut self, update: &PtUpdate);
 
-    fn revert_update(&mut self, update: &PteUpdate);
+    fn revert_update(&mut self, update: &PtUpdate);
+
+    /// Maps a page and updates the state of the page table. The resulting updates are not saved
+    /// anywhere, as they are instantly applied.
+    ///
+    /// This method should be invoked in instances like the loading of the program, where we wish
+    /// to initialize pages for the stack and static segments, and don't care about the intermediate
+    /// steps taken.
+    fn force_map_page(&mut self, vaddr: T) -> Result<(), MemFault<T>> {
+        self.map_page(vaddr)?
+            .iter()
+            .map(|update| self.apply_update(update));
+        Ok(())
+    }
 
     /// Maps a page containing the provided address to physical memory if it is not already mapped.
     /// If the page cannot be mapped, then a MemFault is returned.
     /// If the page was newly mapped successfully, then a sequence of updates will be returned.
-    /// If the page was already mapped, then the sequence will be empty.
-    fn map_page(&self, vaddr: T) -> Result<Vec<PteUpdate>, MemFault<T>>;
+    ///
+    /// If the page was already mapped, then this function will panic. Any updates to state (clock
+    /// bits, SCL, etc.) must be performed through lookup_page.
+    fn map_page(&self, vaddr: T) -> Result<Vec<PtUpdate>, MemFault<T>>;
 
-    /// Looks up the page at the associated address.
-    fn lookup_page(&self, vaddr: T) -> Result<PteLookupData, MemFault<T>>;
+    /// Looks up the page at the associated address. Raises a page fault if not found.
+    ///
+    /// If the page was already mapped, then the sequence will be empty unless touching a page
+    /// updates state, like with a second chance list.
+    fn lookup_page(&self, vaddr: T) -> Result<PtLookupData, MemFault<T>>;
 }
 
 /// A simple memory of a single page; all addresses except the null address are considered to be
 /// paged in. The physical and virtual address spaces are the same size.
 ///
 /// Reads to uninitialized addresses always return 0.
-/// Faults occur on unaligned accesses or accesses to the null pointer.
+/// Faults occur on accesses to the null pointer.
 pub struct AllMappedPt<T: ByteAddress> {
     _phantom: PhantomData<T>,
 }
@@ -130,11 +173,15 @@ impl<T: ByteAddress> AllMappedPt<T> {
 }
 
 impl<T: ByteAddress> PageTable<T> for AllMappedPt<T> {
-    fn apply_update(&mut self, _update: &PteUpdate) {}
+    fn apply_update(&mut self, _update: &PtUpdate) {
+        panic!("Attempted to apply an update, but AllMappedPt should not produce any updates");
+    }
 
-    fn revert_update(&mut self, _update: &PteUpdate) {}
+    fn revert_update(&mut self, _update: &PtUpdate) {
+        panic!("Attempted to revert an update, but AllMappedPt should not produce any updates");
+    }
 
-    fn map_page(&self, vaddr: T) -> Result<Vec<PteUpdate>, MemFault<T>> {
+    fn map_page(&self, vaddr: T) -> Result<Vec<PtUpdate>, MemFault<T>> {
         if vaddr.bits() == 0 {
             Err(MemFault::<T>::segfault_at_addr(vaddr))
         } else {
@@ -142,10 +189,10 @@ impl<T: ByteAddress> PageTable<T> for AllMappedPt<T> {
         }
     }
 
-    fn lookup_page(&self, vaddr: T) -> Result<PteLookupData, MemFault<T>> {
+    fn lookup_page(&self, vaddr: T) -> Result<PtLookupData, MemFault<T>> {
         let bits = vaddr.bits();
         if bits != 0 {
-            Ok(PteLookupData {
+            Ok(PtLookupData {
                 diffs: vec![],
                 ppn: 0,
                 offs: bits as usize,
@@ -162,34 +209,39 @@ impl<T: ByteAddress> Default for AllMappedPt<T> {
     }
 }
 
-/*
-/// A memory with a fully associative LRU linear page table.
+/// A memory with a fully associative FIFO linear page table.
+///
+/// The page table is represented sparsely to save memory, as otherwise a page table for a 32-bit
+/// address space with 4 KiB pages would require 2 ^ (32 - 12) entries.
+///
 /// The zero page is never considered mapped, and all accesses must be aligned.
-pub struct LinearPagedMemory<T: ByteAddress> {
+pub struct FifoLinearPt<T: ByteAddress> {
+    virt_pg_count: usize,
+    phys_pg_count: usize,
     page_offs_len: usize,
-    page_count: usize,
-    page_table: Vec<PtEntry>,
-    phys_mem: HashMap<PhysPn, MemPage>,
-    paged_out: HashMap<VirtPn, MemPage>,
+    page_table: HashMap<VirtPn, PtEntry>,
+    // TODO move swap file to physical state?
+    swapfile: HashMap<VirtPn, MemPage>,
+    // Checks the next index to evict.
+    fifo_ctr: VirtPn,
     _phantom: PhantomData<T>,
 }
 
-impl<T: ByteAddress> LinearPagedMemory<T> {
+impl<T: ByteAddress> FifoLinearPt<T> {
     /// Initializes the memory. The number of pages is computed from the physical address and
     /// page sizes.
-    /// * phys_addr_len: The number of bits in a physical address. The number of bytes of available
-    ///                  physical memory is given by 2 to the power of this number.
-    /// * page_offs_len: The number of bits needed to index a page. The number of bytes in a page is
-    ///                  likewise 2 to the power of this number.
-    pub fn new(phys_addr_len: usize, page_offs_len: usize) -> Self {
-        // TODO add assertions on page table parameters to ensure nothing is invalid
-        let page_count = 1 << (phys_addr_len - page_offs_len);
-        LinearPagedMemory {
-            page_offs_len,
-            page_count,
-            page_table: Vec::with_capacity(page_count),
-            phys_mem: HashMap::new(),
-            paged_out: HashMap::new(),
+    /// * phys_pn_bits: The number of bits needed to address a physical page. The number of pages of
+    ///                 available physical memory is given by 2 to the power of this number.
+    /// * pg_ofs_bits:  The number of bits needed to index a page. The number of bytes in a page is
+    ///                 likewise 2 to the power of this number.
+    pub fn new(phys_pn_bits: usize, pg_ofs_bits: usize) -> Self {
+        FifoLinearPt {
+            virt_pg_count: 1 << (<T as ByteAddress>::bitlen() - pg_ofs_bits),
+            phys_pg_count: 1 << phys_pn_bits,
+            page_offs_len: pg_ofs_bits,
+            page_table: HashMap::new(),
+            swapfile: HashMap::new(),
+            fifo_ctr: 0,
             _phantom: PhantomData,
         }
     }
@@ -205,89 +257,89 @@ impl<T: ByteAddress> LinearPagedMemory<T> {
         let lsb_mask = !((-1i64 as u64) << self.page_offs_len);
         (bits & lsb_mask) as usize
     }
-
-    fn lowest_free_ppn(&self) -> Option<PhysPn> {
-        for i in 0..self.page_count {
-            if !self.page_table.iter().any(|&e| e.ppn == i) {
-                return Some(i);
-            }
-        }
-        None
-    }
-
-    /// Gets a reference the page in which this address occurs.
-    /// Raises a page fault if it is unmapped.
-    ///
-    /// Note: This should page fault instead of segfaulting on an access to the null page, as the
-    /// OS should make a call to map_page to handle the page fault. Only then should the segfault
-    /// occur.
-    fn get_page(&self, addr: T) -> Result<&MemPage, MemFault<T>> {
-        let vpn = self.get_vpn(addr);
-        if let Some(pte) = self.page_table.iter().find(|&e| e.vpn == vpn) {
-            Ok(self.phys_mem.get(&pte.ppn).unwrap())
-        } else {
-            Err(MemFault::pagefault_at_addr(addr))
-        }
-    }
-
-    /// Gets a mutable reference to the page in which this address occurs.
-    /// Raises a page fault if it is unmapped.
-    ///
-    /// Note: This should page fault instead of segfaulting on an access to the null page, as the
-    /// OS should make a call to map_page to handle the page fault. Only then should the segfault
-    /// occur.
-    fn get_mut_page(&mut self, addr: T) -> Result<&mut MemPage, MemFault<T>> {
-        let vpn = self.get_vpn(addr);
-        if let Some(pte) = self.page_table.iter().find(|&e| e.vpn == vpn) {
-            Ok(self.phys_mem.get_mut(&pte.ppn).unwrap())
-        } else {
-            Err(MemFault::pagefault_at_addr(addr))
-        }
-    }
 }
 
-impl<T: ByteAddress> PageTable<T> for LinearPagedMemory<T> {
-    /// Checks whether the provided virtual address is mapped.
-    /// The 0 page is never considered mapped.
-    fn is_mapped(&self, addr: T) -> bool {
-        self.get_page(addr).is_ok()
-    }
+impl<T: ByteAddress> PageTable<T> for FifoLinearPt<T> {
+    fn apply_update(&mut self, update: &PtUpdate) {}
 
-    /// Maps a page to memory if it is not already mapped, evicting other pages if necessary.
-    /// Since we're following an LRU policy, this page is placed at the front of the vec, which
-    /// we couldn't do if we were an actual OS but we're not so who cares.
-    ///
-    /// The 0 page cannot be mapped, and any attempt to do so will cause a segfault.
-    fn map_page(&mut self, addr: T) -> Result<(), MemFault<T>> {
+    fn revert_update(&mut self, update: &PtUpdate) {}
+
+    fn map_page(&self, addr: T) -> Result<Vec<PtUpdate>, MemFault<T>> {
+        /*
         let vpn = self.get_vpn(addr);
         if vpn == 0 {
             return Err(MemFault::<T>::segfault_at_addr(addr));
         }
-        // get a new ppn
-        if let Some(idx) = self.page_table.iter().position(|&e| e.vpn == vpn) {
-            // check if page already mapped
-            // remove and move to front of vec
-            let e = self.page_table.remove(idx);
-            self.page_table.insert(0, e);
-        } else {
-            // create new entry
-            // check if eviction is needed
-            if self.page_table.len() == self.page_count {
-                let evicted = self.page_table.pop().unwrap();
-                self.paged_out
-                    .insert(evicted.vpn, self.phys_mem.remove(&evicted.ppn).unwrap());
+        let old_pte = if let Some(pte) = self.page_table.get(&vpn) {
+            if pte.valid && pte.vpn == vpn {
+                // If page already mapped, panic
+                panic!(
+                    "Attempted to map already-mapped page at VPN {:?}, with existing PTE {:?}",
+                    vpn, pte
+                );
             }
-            let ppn = self.lowest_free_ppn().unwrap();
-            // check if entry was previously paged out
-            let page = self.paged_out.remove(&vpn).unwrap_or_else(MemPage::new);
-            let e = PtEntry { vpn, ppn };
-            self.page_table.insert(0, e);
-            self.phys_mem.insert(ppn, page);
+            pte
+        } else {
+            PtEntry::default()
+        };
+        */
+        let diffs = Vec::<PtUpdate>::new();
+        /*
+        Entry {
+            /// The location of the entry in the page table.
+            pte_loc: usize,
+            /// The swap location that the evicted page is placed at. None if this operation isn't
+            /// an eviction.
+            swap_loc: Option<usize>,
+            old: PtEntry,
+            new: PtEntry,
+        },
+        /// An update to replacement policy metadata.
+        Replacement(ReplacementUpdate),
+        /// A page was evicted and placed in the swapfile.
+        SwapAdd{vpn: VirtPn, data: MemPage}
+        */
+        /*
+        let idx = self.fifo_ctr;
+        // Create new entry and check if eviction is needed
+        if self.page_table.len() == self.page_count {
+            let evicted = self.page_table.pop().unwrap();
+            self.paged_out
+                .insert(evicted.vpn, self.phys_mem.remove(&evicted.ppn).unwrap());
         }
-        Ok(())
+        let ppn = self.lowest_free_ppn().unwrap();
+        // TODO check swapfile
+        let page = self.swapfile.remove(&vpn).unwrap_or_else(MemPage::new);
+        let e = PtEntry {
+            valid: true,
+            vpn,
+            ppn,
+        };
+        self.page_table.insert(0, e);
+        self.phys_mem.insert(ppn, page);*/
+        Ok(vec![])
+    }
+
+    fn lookup_page(&self, vaddr: T) -> Result<PtLookupData, MemFault<T>> {
+        let vpn = self.get_vpn(vaddr);
+        if vpn != 0 {
+            if let Some(pte) = self.page_table.get(&vpn) {
+                if pte.valid {
+                    assert!(vpn == pte.vpn);
+                    let offs = self.get_page_offs(vaddr);
+                    return Ok(PtLookupData {
+                        diffs: vec![],
+                        ppn: pte.ppn,
+                        offs,
+                    });
+                }
+            }
+            Err(MemFault::<T>::pagefault_at_addr(vaddr))
+        } else {
+            Err(MemFault::<T>::segfault_at_addr(vaddr))
+        }
     }
 }
-*/
 
 #[cfg(test)]
 mod tests {
@@ -298,25 +350,17 @@ mod tests {
     fn test_all_mapped() {
         let pt = AllMappedPt::<ByteAddr32>::new();
         let npe: ByteAddr32 = DataWord::zero().into();
-        pt.lookup_page(npe).unwrap_err();
+        assert!(pt.lookup_page(npe).is_err());
         let addr1: ByteAddr32 = DataWord::from(0xFFFF_F000u32).into();
-        assert_eq!(
-            pt.lookup_page(addr1).unwrap(),
-            PteLookupData {
-                diffs: vec![],
-                ppn: 0,
-                offs: 0xFFFF_F000
-            }
-        );
+        let lookup1 = pt.lookup_page(addr1).unwrap();
+        assert!(lookup1.diffs.is_empty());
+        assert_eq!(lookup1.ppn, 0);
+        assert_eq!(lookup1.offs, 0xFFFF_F000);
         let addr2: ByteAddr32 = DataWord::from(0xC000_0000u32).into();
-        assert_eq!(
-            pt.lookup_page(addr2).unwrap(),
-            PteLookupData {
-                diffs: vec![],
-                ppn: 0,
-                offs: 0xC000_0000
-            }
-        );
+        let lookup2 = pt.lookup_page(addr2).unwrap();
+        assert!(lookup2.diffs.is_empty());
+        assert_eq!(lookup2.ppn, 0);
+        assert_eq!(lookup2.offs, 0xC000_0000);
     }
 
     /// Ensures that unaligned loads/stores on a MemPage succeed.
@@ -349,7 +393,7 @@ mod tests {
     #[test]
     fn test_linear_pt() {
         // 4 KiB page size, 1 MiB physical memory
-        let mut mem = LinearPagedMemory::<ByteAddr32>::new(20, 12);
+        let mut mem = FifoLinearPt::<ByteAddr32>::new(20, 12);
         let good_addr: ByteAddr32 = 0xFFFF_EF00u32.into();
         let val: DataDword = 0xDEAD_BEEF_CAFE_0000u64.into();
         // Should pagefault when it's unmapped

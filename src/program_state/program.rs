@@ -275,14 +275,14 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
         width: DataWidth,
     ) -> Result<(DataEnum, InstResult<F, T>), MemFault<T::ByteAddr>> {
         // TODO how do we handle lookups spanning multiple pages?
-        let PteLookupData {
+        let PtLookupData {
             diffs: pt_diffs,
             ppn,
             offs,
         } = self.priv_state.page_table.lookup_page(vaddr)?;
         let diffs: Vec<StateDiff<F, T>> = pt_diffs
             .into_iter()
-            .map(PteUpdate::into_state_diff)
+            .map(PtUpdate::into_state_diff)
             .collect();
         Ok((
             self.phys_state.memory_get(ppn, offs, width),
@@ -298,14 +298,14 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
         data: DataEnum,
     ) -> Result<InstResult<F, T>, MemFault<T::ByteAddr>> {
         // TODO how do we handle lookups spanning multiple pages?
-        let PteLookupData {
+        let PtLookupData {
             diffs: pt_diffs,
             ppn,
             offs,
         } = self.priv_state.page_table.lookup_page(vaddr)?;
         let mut diffs: Vec<StateDiff<F, T>> = pt_diffs
             .into_iter()
-            .map(PteUpdate::into_state_diff)
+            .map(PtUpdate::into_state_diff)
             .collect();
         diffs.push(
             self.phys_state

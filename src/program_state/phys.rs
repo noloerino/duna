@@ -136,10 +136,6 @@ impl MemPage {
         } else {
             (1usize).wrapping_shl(ofs_bits as u32) - 1
         };
-        println!(
-            "INIT: ofs_bits {:?}, largest_idx {:?}",
-            ofs_bits, largest_idx
-        );
         MemPage {
             endianness,
             largest_idx,
@@ -153,7 +149,6 @@ impl MemPage {
     }
 
     pub(crate) fn get_byte(&self, offs: PageOffs) -> DataByte {
-        println!("offs: {:?}, largest: {:?}", offs, self.largest_idx);
         assert!(offs <= self.largest_idx);
         (*self.backing.get(&offs).unwrap_or(&0)).into()
     }

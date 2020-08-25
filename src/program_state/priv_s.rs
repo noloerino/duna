@@ -93,7 +93,7 @@ pub enum PrivDiff<T: MachineDataWidth> {
         fd: T::RegData,
         data: Vec<u8>,
     },
-    PtUpdate(PteUpdate),
+    PtUpdate(PtUpdate),
 }
 
 impl<T: MachineDataWidth> PrivDiff<T> {
