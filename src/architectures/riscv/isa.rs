@@ -1121,6 +1121,11 @@ mod tests_32 {
         let base_addr = 0xFFFF_0004u32;
         let test_data = 0xABCD_EF01u32;
         state.memory_set_word(ByteAddr32::from(base_addr), DataWord::from(test_data));
+        // Make sure the issue isn't with poking the memory
+        assert_eq!(
+            state.memory_get_word(ByteAddr32::from(base_addr)),
+            DataWord::from(test_data)
+        );
         state.regfile_set(T0, DataWord::from(base_addr));
         // signed loads
         state.apply_inst_test(&Lb::new(T1, T0, DataWord::from(0)));

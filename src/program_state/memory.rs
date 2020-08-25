@@ -9,7 +9,7 @@ use std::marker::PhantomData;
 type VirtPn = usize;
 
 /// Maps a virtual page to a physical one.
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 struct PtEntry {
     pub valid: bool,
     /// The virtual page number.
@@ -19,6 +19,7 @@ struct PtEntry {
 }
 
 /// Represents an operation that updates the page table.
+#[derive(Debug, PartialEq)]
 pub struct PteUpdate {
     /// The location of the entry in the page table.
     pte_loc: usize,
@@ -38,6 +39,7 @@ impl PteUpdate {
 /// Represents the result of a page table lookup.
 /// The diffs vec represents the sequence of page table updates that occurred.
 /// The returned PPN and offset are the result of the lookup.
+#[derive(Debug, PartialEq)]
 pub struct PteLookupData {
     pub diffs: Vec<PteUpdate>,
     pub ppn: PhysPn,
@@ -285,15 +287,42 @@ impl<T: ByteAddress> PageTable<T> for LinearPagedMemory<T> {
         Ok(())
     }
 }
+*/
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    /// Ensures that the single-page memory has stuff "mapped" properly.
+    #[test]
+    fn test_all_mapped() {
+        let pt = AllMappedPt::<ByteAddr32>::new();
+        let npe: ByteAddr32 = DataWord::zero().into();
+        pt.lookup_page(npe).unwrap_err();
+        let addr1: ByteAddr32 = DataWord::from(0xFFFF_F000u32).into();
+        assert_eq!(
+            pt.lookup_page(addr1).unwrap(),
+            PteLookupData {
+                diffs: vec![],
+                ppn: 0,
+                offs: 0xFFFF_F000
+            }
+        );
+        let addr2: ByteAddr32 = DataWord::from(0xC000_0000u32).into();
+        assert_eq!(
+            pt.lookup_page(addr2).unwrap(),
+            PteLookupData {
+                diffs: vec![],
+                ppn: 0,
+                offs: 0xC000_0000
+            }
+        );
+    }
+
     /// Ensures that unaligned loads/stores on a MemPage succeed.
     #[test]
     fn test_unaligned_mempage_rw() {
-        let mut mem = MemPage::new();
+        let mut mem = MemPage::new(Endianness::Little, 32);
         // This address is not dword-aligned
         mem.set_doubleword(0xFFFF_FFF0, 0xFFFF_FFFF_FFFF_FFFFu64.into());
         mem.set_doubleword(0xFFFF_FFF8, 0xEEEE_EEEE_EEEE_EEEEu64.into());
@@ -315,6 +344,7 @@ mod tests {
         );
     }
 
+    /*
     /// Tests page faults and basic memory mapping operations.
     #[test]
     fn test_linear_pt() {
@@ -363,5 +393,5 @@ mod tests {
             MemFault::segfault_at_addr(0u32.into())
         );
     }
+    */
 }
-*/

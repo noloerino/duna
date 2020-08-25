@@ -15,6 +15,7 @@ pub struct PhysState {
     pub phys_mem: Vec<MemPage>,
 }
 
+#[derive(Debug, Copy, Clone)]
 pub enum PhysDiff {
     /// Updates the data stored at the specified location. Assumes the ppn exists.
     MemSet {
@@ -31,8 +32,11 @@ impl PhysDiff {
 }
 
 impl Default for PhysState {
+    /// Produces a state with a memory with a 64-bit physical address space.
+    /// Since pages are sparsely represented, we don't lose much runtime memory from allocating
+    /// this many pages.
     fn default() -> Self {
-        PhysState::new(Endianness::default(), 1, 32)
+        PhysState::new(Endianness::default(), 1, 64)
     }
 }
 
@@ -47,13 +51,13 @@ impl PhysState {
 
     pub fn apply_diff(&mut self, diff: &PhysDiff) {
         match diff {
-            PhysDiff::MemSet { ppn, offs, diff } => self.phys_mem[*ppn].set(*offs, diff.old_val()),
+            PhysDiff::MemSet { ppn, offs, diff } => self.phys_mem[*ppn].set(*offs, diff.new_val()),
         }
     }
 
     pub fn revert_diff(&mut self, diff: &PhysDiff) {
         match diff {
-            PhysDiff::MemSet { ppn, offs, diff } => self.phys_mem[*ppn].set(*offs, diff.new_val()),
+            PhysDiff::MemSet { ppn, offs, diff } => self.phys_mem[*ppn].set(*offs, diff.old_val()),
         }
     }
 
@@ -127,9 +131,18 @@ impl Default for MemPage {
 
 impl MemPage {
     pub(crate) fn new(endianness: Endianness, ofs_bits: usize) -> MemPage {
+        let largest_idx = if ofs_bits == 64 {
+            (-1isize) as usize
+        } else {
+            (1usize).wrapping_shl(ofs_bits as u32) - 1
+        };
+        println!(
+            "INIT: ofs_bits {:?}, largest_idx {:?}",
+            ofs_bits, largest_idx
+        );
         MemPage {
             endianness,
-            largest_idx: (1usize).wrapping_shl(ofs_bits as u32) - 1,
+            largest_idx,
             backing: HashMap::new(),
         }
     }
@@ -140,6 +153,7 @@ impl MemPage {
     }
 
     pub(crate) fn get_byte(&self, offs: PageOffs) -> DataByte {
+        println!("offs: {:?}, largest: {:?}", offs, self.largest_idx);
         assert!(offs <= self.largest_idx);
         (*self.backing.get(&offs).unwrap_or(&0)).into()
     }
@@ -234,12 +248,4 @@ impl MemPage {
             DataWidth::DoubleWord => DataEnum::DoubleWord(self.get_doubleword(offs)),
         }
     }
-}
-
-/// Represents a physical memory device chunked into pages.
-/// Each page is represented sparsely in memory by a map.
-pub struct PagedMem {
-    pg_count: usize,
-    pg_size: usize,
-    pages: HashMap<PhysPn, MemPage>,
 }
