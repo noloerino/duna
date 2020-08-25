@@ -113,6 +113,17 @@ pub enum DataWidth {
     DoubleWord,
 }
 
+impl DataWidth {
+    pub fn zero(self) -> DataEnum {
+        match self {
+            DataWidth::Byte => DataEnum::Byte(0u8.into()),
+            DataWidth::Half => DataEnum::Half(0u16.into()),
+            DataWidth::Word => DataEnum::Word(0u32.into()),
+            DataWidth::DoubleWord => DataEnum::DoubleWord(0u64.into()),
+        }
+    }
+}
+
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum DataEnum {
     Byte(DataByte),
@@ -441,6 +452,12 @@ impl From<BitStr32> for DataWord {
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct DataHalf {
     value: u16,
+}
+
+impl DataHalf {
+    pub const fn zero() -> DataHalf {
+        DataHalf { value: 0 }
+    }
 }
 
 impl Data for DataHalf {

@@ -10,10 +10,15 @@ pub type PhysPn = usize;
 /// Indexes into a page. Constrained by the size of the page.
 pub type PageOffs = usize;
 
+pub type PhysMem = HashMap<PhysPn, MemPage>;
+
 pub struct PhysState {
+    endianness: Endianness,
     require_aligned: bool,
+    pg_count: usize,
+    pg_ofs_bits: usize,
     /// Physical memory, indexed by physical page numbers.
-    pub phys_mem: Vec<MemPage>,
+    pub phys_mem: PhysMem,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -49,22 +54,34 @@ impl PhysState {
         pg_ofs_bits: usize,
     ) -> Self {
         PhysState {
+            endianness,
             require_aligned,
-            phys_mem: (0..pg_count)
-                .map(|_| MemPage::new(endianness, pg_ofs_bits))
-                .collect(),
+            pg_count,
+            pg_ofs_bits,
+            phys_mem: HashMap::new(),
         }
     }
 
     pub fn apply_diff(&mut self, diff: &PhysDiff) {
-        match diff {
-            PhysDiff::MemSet { ppn, offs, diff } => self.phys_mem[*ppn].set(*offs, diff.new_val()),
+        match *diff {
+            PhysDiff::MemSet { ppn, offs, diff } => {
+                let endianness = self.endianness;
+                let pg_ofs_bits = self.pg_ofs_bits;
+                self.phys_mem
+                    .entry(ppn)
+                    .or_insert_with(|| MemPage::new(endianness, pg_ofs_bits))
+                    .set(offs, diff.new_val());
+            }
         }
     }
 
     pub fn revert_diff(&mut self, diff: &PhysDiff) {
         match diff {
-            PhysDiff::MemSet { ppn, offs, diff } => self.phys_mem[*ppn].set(*offs, diff.old_val()),
+            PhysDiff::MemSet { ppn, offs, diff } => self
+                .phys_mem
+                .get_mut(ppn)
+                .unwrap()
+                .set(*offs, diff.old_val()),
         }
     }
 
@@ -76,7 +93,7 @@ impl PhysState {
         }
     }
 
-    /// Returns the requested value from memory. If alignment is requried and the address is
+    /// Returns the requested value from memory. If alignment is required and the address is
     /// unaligned, an error is returned.
     pub fn memory_get(
         &self,
@@ -84,33 +101,54 @@ impl PhysState {
         offs: PageOffs,
         width: DataWidth,
     ) -> Result<DataEnum, ()> {
+        assert!(ppn < self.pg_count);
         self.check_alignment(offs, width)?;
-        Ok(self.phys_mem[ppn].get(offs, width))
+        Ok(self
+            .phys_mem
+            .get(&ppn)
+            .map(|e| e.get(offs, width))
+            .unwrap_or_else(|| width.zero()))
     }
 
     // should really find a way type parameterize instead of using an enum
     pub fn memory_set(&self, ppn: PhysPn, offs: PageOffs, data: DataEnum) -> Result<PhysDiff, ()> {
+        assert!(ppn < self.pg_count);
         self.check_alignment(offs, data.width())?;
-        let page = &self.phys_mem[ppn];
         use DataEnumDiff::*;
         Ok(PhysDiff::MemSet {
             ppn,
             offs,
             diff: match data {
                 DataEnum::Byte(new) => Byte {
-                    old: page.get_byte(offs),
+                    old: self
+                        .phys_mem
+                        .get(&ppn)
+                        .map(|page| page.get_byte(offs))
+                        .unwrap_or_else(DataByte::zero),
                     new,
                 },
                 DataEnum::Half(new) => Half {
-                    old: page.get_half(offs),
+                    old: self
+                        .phys_mem
+                        .get(&ppn)
+                        .map(|page| page.get_half(offs))
+                        .unwrap_or_else(DataHalf::zero),
                     new,
                 },
                 DataEnum::Word(new) => Word {
-                    old: page.get_word(offs),
+                    old: self
+                        .phys_mem
+                        .get(&ppn)
+                        .map(|page| page.get_word(offs))
+                        .unwrap_or_else(DataWord::zero),
                     new,
                 },
                 DataEnum::DoubleWord(new) => DoubleWord {
-                    old: page.get_doubleword(offs),
+                    old: self
+                        .phys_mem
+                        .get(&ppn)
+                        .map(|page| page.get_doubleword(offs))
+                        .unwrap_or_else(DataDword::zero),
                     new,
                 },
             },
@@ -134,6 +172,7 @@ impl Default for Endianness {
 
 /// Represents a page of memory.
 /// TODO implement default value (currently 0)
+#[derive(Clone)]
 pub struct MemPage {
     endianness: Endianness,
     /// The address of the last addressable byte in the page. We can't just use the size of the page

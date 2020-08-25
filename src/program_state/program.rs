@@ -47,7 +47,7 @@ impl<A: Architecture> Program<A> {
     pub fn new(
         insts: Vec<<A::Family as ArchFamily<A::DataWidth>>::Instruction>,
         sections: SectionStore,
-        pt: Box<dyn PageTable<<A::DataWidth as MachineDataWidth>::ByteAddr>>,
+        page_table: Box<dyn PageTable<<A::DataWidth as MachineDataWidth>::ByteAddr>>,
     ) -> Self {
         let text_start =
             <A::ProgramBehavior as ProgramBehavior<A::Family, A::DataWidth>>::text_start();
@@ -55,11 +55,13 @@ impl<A: Architecture> Program<A> {
             <A::ProgramBehavior as ProgramBehavior<A::Family, A::DataWidth>>::stack_start();
         let data_start =
             <A::ProgramBehavior as ProgramBehavior<A::Family, A::DataWidth>>::data_start();
+        let mut state = ProgramState::new(page_table);
+        let mem = &mut state.phys_state.phys_mem;
+        let pt = &mut state.priv_state.page_table;
         // Page in text, stack, and data
-        pt.map_page(text_start).unwrap();
-        pt.map_page(stack_start).unwrap();
-        pt.map_page(data_start).unwrap();
-        let mut state = ProgramState::new(pt);
+        pt.force_map_page(mem, text_start).unwrap();
+        pt.force_map_page(mem, stack_start).unwrap();
+        pt.force_map_page(mem, data_start).unwrap();
         let mut user_state = &mut state.user_state;
         let sp = <A::ProgramBehavior as ProgramBehavior<A::Family, A::DataWidth>>::sp_register();
         // Initialize SP and PC
@@ -470,7 +472,9 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
                 self.user_state.apply_diff(u);
                 Ok(())
             }
-            StateDiff::Priv(p) => self.priv_state.apply_diff::<F>(p),
+            StateDiff::Priv(p) => self
+                .priv_state
+                .apply_diff::<F>(&mut self.phys_state.phys_mem, p),
             StateDiff::Phys(p) => {
                 self.phys_state.apply_diff(p);
                 Ok(())
@@ -482,7 +486,9 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
     pub fn revert_diff(&mut self, diff: &StateDiff<F, T>) {
         match diff {
             StateDiff::User(u) => self.user_state.revert_diff(u),
-            StateDiff::Priv(p) => self.priv_state.revert_diff::<F>(p),
+            StateDiff::Priv(p) => self
+                .priv_state
+                .revert_diff::<F>(&mut self.phys_state.phys_mem, p),
             StateDiff::Phys(p) => self.phys_state.revert_diff(p),
         }
     }

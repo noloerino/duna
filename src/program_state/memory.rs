@@ -1,9 +1,11 @@
+use super::bitmap::Bitmap;
 use super::datatypes::*;
 use super::phys::*;
 use super::priv_s::PrivDiff;
 use super::program::StateDiff;
 use crate::arch::*;
 use std::collections::HashMap;
+use std::fmt;
 use std::marker::PhantomData;
 
 type VirtPn = usize;
@@ -12,8 +14,6 @@ type VirtPn = usize;
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct PtEntry {
     pub valid: bool,
-    /// The virtual page number.
-    pub vpn: VirtPn,
     /// The physical page number.
     pub ppn: PhysPn,
 }
@@ -22,7 +22,6 @@ impl Default for PtEntry {
     fn default() -> PtEntry {
         PtEntry {
             valid: false,
-            vpn: 0,
             ppn: 0,
         }
     }
@@ -32,18 +31,16 @@ impl Default for PtEntry {
 pub enum PtUpdate {
     /// An update to an entry in the page table.
     Entry {
-        /// The location of the entry in the page table.
-        pte_loc: usize,
-        /// The swap location that the evicted page is placed at. None if this operation isn't
-        /// an eviction.
-        swap_loc: Option<usize>,
+        vpn: VirtPn,
         old: PtEntry,
         new: PtEntry,
     },
     /// An update to replacement policy metadata.
     Replacement(ReplacementUpdate),
     /// A page was evicted and placed in the swapfile.
-    SwapAdd { vpn: VirtPn, data: MemPage },
+    SwapAdd { vpn: VirtPn, pte: PtEntry },
+    /// A page was removed from the swapfile.
+    SwapRemove { vpn: VirtPn, pte: PtEntry },
     /// An entry in the free page bitmap was flipped.
     BitmapFlip(usize),
 }
@@ -69,6 +66,18 @@ pub struct PtLookupData {
     pub diffs: Vec<PtUpdate>,
     pub ppn: PhysPn,
     pub offs: PageOffs,
+}
+
+impl fmt::Debug for PtLookupData {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "PtLookupData {{ diffs: <{} elements>, ppn: {}, offs: {} }}",
+            self.diffs.len(),
+            self.ppn,
+            self.offs
+        )
+    }
 }
 
 #[derive(Debug, PartialEq, Copy, Clone)]
@@ -123,9 +132,9 @@ pub enum MemFaultCause {
 ///
 /// All operations will return a sequence of diffs on success, and a pagefault on failure.
 pub trait PageTable<T: ByteAddress> {
-    fn apply_update(&mut self, update: &PtUpdate);
+    fn apply_update(&mut self, mem: &mut PhysMem, update: &PtUpdate);
 
-    fn revert_update(&mut self, update: &PtUpdate);
+    fn revert_update(&mut self, mem: &mut PhysMem, update: &PtUpdate);
 
     /// Maps a page and updates the state of the page table. The resulting updates are not saved
     /// anywhere, as they are instantly applied.
@@ -133,9 +142,9 @@ pub trait PageTable<T: ByteAddress> {
     /// This method should be invoked in instances like the loading of the program, where we wish
     /// to initialize pages for the stack and static segments, and don't care about the intermediate
     /// steps taken.
-    fn force_map_page(&mut self, vaddr: T) -> Result<(), MemFault<T>> {
+    fn force_map_page(&mut self, mem: &mut PhysMem, vaddr: T) -> Result<(), MemFault<T>> {
         for update in self.map_page(vaddr)? {
-            self.apply_update(&update);
+            self.apply_update(mem, &update);
         }
         Ok(())
     }
@@ -147,6 +156,11 @@ pub trait PageTable<T: ByteAddress> {
     /// If the page was already mapped, then this function will panic. Any updates to state (clock
     /// bits, SCL, etc.) must be performed through lookup_page.
     fn map_page(&self, vaddr: T) -> Result<Vec<PtUpdate>, MemFault<T>>;
+
+    /// Unmaps the page containing the provided address.
+    /// An implementor may choose to make this a noop, as in the case where all pags are considered
+    /// mapped for simplicity.
+    fn unmap_page(&self, vaddr: T) -> Vec<PtUpdate>;
 
     /// Looks up the page at the associated address. Raises a page fault if not found.
     ///
@@ -173,11 +187,11 @@ impl<T: ByteAddress> AllMappedPt<T> {
 }
 
 impl<T: ByteAddress> PageTable<T> for AllMappedPt<T> {
-    fn apply_update(&mut self, _update: &PtUpdate) {
+    fn apply_update(&mut self, _mem: &mut PhysMem, _update: &PtUpdate) {
         panic!("Attempted to apply an update, but AllMappedPt should not produce any updates");
     }
 
-    fn revert_update(&mut self, _update: &PtUpdate) {
+    fn revert_update(&mut self, _mem: &mut PhysMem, _update: &PtUpdate) {
         panic!("Attempted to revert an update, but AllMappedPt should not produce any updates");
     }
 
@@ -187,6 +201,10 @@ impl<T: ByteAddress> PageTable<T> for AllMappedPt<T> {
         } else {
             Ok(vec![])
         }
+    }
+
+    fn unmap_page(&self, _vaddr: T) -> Vec<PtUpdate> {
+        vec![]
     }
 
     fn lookup_page(&self, vaddr: T) -> Result<PtLookupData, MemFault<T>> {
@@ -216,12 +234,11 @@ impl<T: ByteAddress> Default for AllMappedPt<T> {
 ///
 /// The zero page is never considered mapped, and all accesses must be aligned.
 pub struct FifoLinearPt<T: ByteAddress> {
-    virt_pg_count: usize,
-    phys_pg_count: usize,
     page_offs_len: usize,
     page_table: HashMap<VirtPn, PtEntry>,
+    freemap: Bitmap,
     // TODO move swap file to physical state?
-    swapfile: HashMap<VirtPn, MemPage>,
+    swapfile: HashMap<VirtPn, (PtEntry, MemPage)>,
     // Checks the next index to evict.
     fifo_ctr: VirtPn,
     _phantom: PhantomData<T>,
@@ -235,11 +252,11 @@ impl<T: ByteAddress> FifoLinearPt<T> {
     /// * pg_ofs_bits:  The number of bits needed to index a page. The number of bytes in a page is
     ///                 likewise 2 to the power of this number.
     pub fn new(phys_pn_bits: usize, pg_ofs_bits: usize) -> Self {
+        let phys_pg_count = 1 << phys_pn_bits;
         FifoLinearPt {
-            virt_pg_count: 1 << (<T as ByteAddress>::bitlen() - pg_ofs_bits),
-            phys_pg_count: 1 << phys_pn_bits,
             page_offs_len: pg_ofs_bits,
             page_table: HashMap::new(),
+            freemap: Bitmap::new(phys_pg_count),
             swapfile: HashMap::new(),
             fifo_ctr: 0,
             _phantom: PhantomData,
@@ -260,64 +277,101 @@ impl<T: ByteAddress> FifoLinearPt<T> {
 }
 
 impl<T: ByteAddress> PageTable<T> for FifoLinearPt<T> {
-    fn apply_update(&mut self, update: &PtUpdate) {}
+    fn apply_update(&mut self, mem: &mut PhysMem, update: &PtUpdate) {
+        use PtUpdate::*;
+        match update {
+            &Entry { vpn, new, .. } => {
+                self.page_table.insert(vpn, new);
+            }
+            Replacement(update) => match update {
+                ReplacementUpdate::ClockTick => {
+                    self.fifo_ctr += 1;
+                }
+            },
+            &SwapAdd { vpn, pte } => {
+                self.swapfile.insert(vpn, (pte, mem[&pte.ppn].clone()));
+            }
+            SwapRemove { vpn, pte } => {
+                // The PTE should contain the physical page that we're mapping to
+                mem.insert(pte.ppn, self.swapfile.remove(vpn).unwrap().1);
+            }
+            &BitmapFlip(n) => {
+                self.freemap.flip(n);
+            }
+        }
+    }
 
-    fn revert_update(&mut self, update: &PtUpdate) {}
+    fn revert_update(&mut self, _mem: &mut PhysMem, _update: &PtUpdate) {}
 
     fn map_page(&self, addr: T) -> Result<Vec<PtUpdate>, MemFault<T>> {
-        /*
+        // This isn't really FIFO if pages aren't mapped in vaddr order...
         let vpn = self.get_vpn(addr);
         if vpn == 0 {
             return Err(MemFault::<T>::segfault_at_addr(addr));
         }
         let old_pte = if let Some(pte) = self.page_table.get(&vpn) {
-            if pte.valid && pte.vpn == vpn {
+            if pte.valid {
                 // If page already mapped, panic
                 panic!(
                     "Attempted to map already-mapped page at VPN {:?}, with existing PTE {:?}",
                     vpn, pte
                 );
             }
-            pte
+            *pte
         } else {
             PtEntry::default()
         };
-        */
-        let diffs = Vec::<PtUpdate>::new();
-        /*
-        Entry {
-            /// The location of the entry in the page table.
-            pte_loc: usize,
-            /// The swap location that the evicted page is placed at. None if this operation isn't
-            /// an eviction.
-            swap_loc: Option<usize>,
-            old: PtEntry,
-            new: PtEntry,
-        },
-        /// An update to replacement policy metadata.
-        Replacement(ReplacementUpdate),
-        /// A page was evicted and placed in the swapfile.
-        SwapAdd{vpn: VirtPn, data: MemPage}
-        */
-        /*
-        let idx = self.fifo_ctr;
-        // Create new entry and check if eviction is needed
-        if self.page_table.len() == self.page_count {
-            let evicted = self.page_table.pop().unwrap();
-            self.paged_out
-                .insert(evicted.vpn, self.phys_mem.remove(&evicted.ppn).unwrap());
-        }
-        let ppn = self.lowest_free_ppn().unwrap();
-        // TODO check swapfile
-        let page = self.swapfile.remove(&vpn).unwrap_or_else(MemPage::new);
-        let e = PtEntry {
-            valid: true,
-            vpn,
-            ppn,
+        let mut diffs = Vec::<PtUpdate>::new();
+        let ppn = if let Some(ppn) = self.freemap.get_lowest_zero() {
+            // Mark page as used
+            diffs.push(PtUpdate::BitmapFlip(ppn));
+            ppn
+        } else {
+            let old_pte = self.page_table.get(&self.fifo_ctr).unwrap();
+            // Send old page to swap and claim its ppn instead
+            diffs.push(PtUpdate::SwapAdd {
+                vpn: self.fifo_ctr,
+                pte: *old_pte,
+            });
+            // Advance FIFO counter
+            diffs.push(PtUpdate::Replacement(ReplacementUpdate::ClockTick));
+            // TODO handle case where middle page gets unmapped
+            // or VAS is smaller than phys AS
+            old_pte.ppn
         };
-        self.page_table.insert(0, e);
-        self.phys_mem.insert(ppn, page);*/
-        Ok(vec![])
+        // Check for page in swapfile
+        if self.swapfile.contains_key(&vpn) {
+            diffs.push(PtUpdate::SwapRemove {
+                vpn,
+                pte: PtEntry { valid: true, ppn },
+            })
+        }
+        diffs.push(PtUpdate::Entry {
+            vpn,
+            old: old_pte,
+            new: PtEntry { valid: true, ppn },
+        });
+        Ok(diffs)
+    }
+
+    fn unmap_page(&self, addr: T) -> Vec<PtUpdate> {
+        // This screws up FIFO a little because if we unmap a page in the middle of the VAS
+        // then that page should be evicted later...
+        let mut diffs = Vec::new();
+        let vpn = self.get_vpn(addr);
+        if let Some(old_pte) = self.page_table.get(&vpn) {
+            assert!(old_pte.valid);
+            diffs.push(PtUpdate::Entry {
+                vpn,
+                old: *old_pte,
+                new: PtEntry {
+                    valid: false,
+                    ..*old_pte
+                },
+            });
+            diffs.push(PtUpdate::BitmapFlip(old_pte.ppn));
+        }
+        diffs
     }
 
     fn lookup_page(&self, vaddr: T) -> Result<PtLookupData, MemFault<T>> {
@@ -325,7 +379,6 @@ impl<T: ByteAddress> PageTable<T> for FifoLinearPt<T> {
         if vpn != 0 {
             if let Some(pte) = self.page_table.get(&vpn) {
                 if pte.valid {
-                    assert!(vpn == pte.vpn);
                     let offs = self.get_page_offs(vaddr);
                     return Ok(PtLookupData {
                         diffs: vec![],
@@ -334,10 +387,8 @@ impl<T: ByteAddress> PageTable<T> for FifoLinearPt<T> {
                     });
                 }
             }
-            Err(MemFault::<T>::pagefault_at_addr(vaddr))
-        } else {
-            Err(MemFault::<T>::segfault_at_addr(vaddr))
         }
+        Err(MemFault::<T>::pagefault_at_addr(vaddr))
     }
 }
 
@@ -363,54 +414,44 @@ mod tests {
         assert_eq!(lookup2.offs, 0xC000_0000);
     }
 
-    /*
-    /// Tests page faults and basic memory mapping operations.
+    /// Tests page faults and basic page table lookups.
     #[test]
     fn test_linear_pt() {
         // 4 KiB page size, 1 MiB physical memory
-        let mut mem = FifoLinearPt::<ByteAddr32>::new(20, 12);
+        let mut pt = FifoLinearPt::<ByteAddr32>::new(8, 12);
+        let mut dummy_mem = Default::default();
         let good_addr: ByteAddr32 = 0xFFFF_EF00u32.into();
-        let val: DataDword = 0xDEAD_BEEF_CAFE_0000u64.into();
         // Should pagefault when it's unmapped
         assert_eq!(
-            mem.set_doubleword(good_addr, val).unwrap_err(),
+            pt.lookup_page(good_addr).unwrap_err(),
             MemFault::pagefault_at_addr(good_addr)
         );
         // Trying to map 0xFFFF_EF00 will give the page starting from 0xFFFF_E000 (chop off the
         // lower 12 bits)
-        assert!(mem.map_page(good_addr).is_ok());
-        // Memory set should now succeed
-        mem.set_doubleword(good_addr, val).unwrap();
-        assert_eq!(mem.get_doubleword(good_addr).unwrap(), val);
-        // Memory set at page start should succeed as well
-        mem.set_byte(0xFFFF_E000u32.into(), 0xABu8.into()).unwrap();
-        // The page should be zerod when paged in, so only the lowest byte we just set is returned
-        assert_eq!(mem.get_word(0xFFFF_E000u32.into()).unwrap(), 0xAB.into());
-        // Accessing an unaligned address should pagefault
-        assert_eq!(
-            mem.get_word(0xFFFF_E001u32.into()).unwrap_err(),
-            MemFault::buserror_at_addr(0xFFFF_E001u32.into())
-        );
+        assert!(pt.force_map_page(&mut dummy_mem, good_addr).is_ok());
+        // Lookup should now succeed
+        assert!(pt.lookup_page(good_addr).is_ok());
+        // Lookup at page start should succeed as well
+        assert!(pt.lookup_page(0xFFFF_E000u32.into()).is_ok());
         // Attempting to access a lower address should still incur a page fault
         assert_eq!(
-            mem.get_byte(0xFFFF_DFFFu32.into()).unwrap_err(),
+            pt.lookup_page(0xFFFF_DFFFu32.into()).unwrap_err(),
             MemFault::pagefault_at_addr(0xFFFF_DFFFu32.into())
         );
         // Attempting to access the next page should also incur a page fault
         assert_eq!(
-            mem.get_word(0xFFFF_F000u32.into()).unwrap_err(),
+            pt.lookup_page(0xFFFF_F000u32.into()).unwrap_err(),
             MemFault::pagefault_at_addr(0xFFFF_F000u32.into())
         );
         // Finally, attempting to deref a null pointer is always a pagefault and attempting to map
         // the zero page is a segfault
         assert_eq!(
-            mem.get_word(0u32.into()).unwrap_err(),
-            MemFault::pagefault_at_addr(0u32.into())
-        );
-        assert_eq!(
-            mem.map_page(0u32.into()).unwrap_err(),
+            pt.force_map_page(&mut dummy_mem, 0u32.into()).unwrap_err(),
             MemFault::segfault_at_addr(0u32.into())
         );
+        assert_eq!(
+            pt.lookup_page(0u32.into()).unwrap_err(),
+            MemFault::pagefault_at_addr(0u32.into())
+        );
     }
-    */
 }

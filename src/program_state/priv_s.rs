@@ -3,6 +3,7 @@
 
 use super::datatypes::*;
 use super::memory::*;
+use super::phys::PhysMem;
 use super::program::{InstResult, ProgramState, StateDiff};
 use crate::arch::*;
 
@@ -39,7 +40,11 @@ impl<T: MachineDataWidth> PrivState<T> {
     /// and generated an appropriate UserDiff.
     ///
     /// Returns a TermCause if the program is terminated.
-    pub fn apply_diff<F: ArchFamily<T>>(&mut self, diff: &PrivDiff<T>) -> Result<(), TermCause> {
+    pub fn apply_diff<F: ArchFamily<T>>(
+        &mut self,
+        mem: &mut PhysMem,
+        diff: &PrivDiff<T>,
+    ) -> Result<(), TermCause> {
         use PrivDiff::*;
         match diff {
             FileWrite { fd, data } => {
@@ -63,19 +68,19 @@ impl<T: MachineDataWidth> PrivState<T> {
             }
             Terminate(cause) => Err(*cause),
             PtUpdate(update) => {
-                self.page_table.apply_update(update);
+                self.page_table.apply_update(mem, update);
                 Ok(())
             }
         }
     }
 
     /// Reverts a privileged state change.
-    pub fn revert_diff<F: ArchFamily<T>>(&mut self, diff: &PrivDiff<T>) {
+    pub fn revert_diff<F: ArchFamily<T>>(&mut self, mem: &mut PhysMem, diff: &PrivDiff<T>) {
         use PrivDiff::*;
         match diff {
             // TODO delete last len bytes from fd
             FileWrite { fd: _, data: _ } => {}
-            PtUpdate(update) => self.page_table.revert_update(update),
+            PtUpdate(update) => self.page_table.revert_update(mem, update),
             _ => unimplemented!(),
         }
     }

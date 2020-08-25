@@ -44,7 +44,19 @@ impl Bitmap {
         let bit_idx = idx % 64;
         let mask = 1 << bit_idx;
         let k = idx / 64;
-        self.bits[k] = self.bits[k] ^ mask;
+        self.bits[k] ^= mask;
+    }
+
+    /// Returns the index of the lowest 0 bit, or None if all entries are 1.
+    pub fn get_lowest_zero(&self) -> Option<usize> {
+        // more efficient way would be to loop over vec entries to minimize lookups, but we don't
+        // care that much about performance
+        for i in 0..self.bit_cnt {
+            if !self.read(i) {
+                return Some(i);
+            }
+        }
+        None
     }
 }
 
@@ -56,8 +68,10 @@ mod tests {
     #[test]
     fn test_bitmap_small() {
         let mut bm = Bitmap::new(64);
+        assert_eq!(bm.get_lowest_zero().unwrap(), 0);
         bm.flip(0);
         bm.flip(31);
+        assert_eq!(bm.get_lowest_zero().unwrap(), 1);
         // extra checks ensure no off-by-one errors
         assert_eq!(bm.read(0), true);
         assert_eq!(bm.read(1), false);
@@ -65,6 +79,7 @@ mod tests {
         assert_eq!(bm.read(31), true);
         assert_eq!(bm.read(32), false);
         bm.flip(0);
+        assert_eq!(bm.get_lowest_zero().unwrap(), 0);
         assert_eq!(bm.read(0), false);
         assert_eq!(bm.read(1), false);
     }
@@ -73,22 +88,40 @@ mod tests {
     #[test]
     fn test_bitmap_several() {
         let mut bm = Bitmap::new(256);
-        bm.flip(0);
+        for i in 0..10 {
+            bm.flip(i);
+        }
         bm.flip(31);
         bm.flip(142);
         bm.flip(255);
-        // extra checks ensure no off-by-one errors
-        assert_eq!(bm.read(0), true);
+        assert_eq!(bm.get_lowest_zero().unwrap(), 10);
+        for i in 0..10 {
+            assert_eq!(bm.read(i), true);
+        }
         assert_eq!(bm.read(31), true);
         assert_eq!(bm.read(142), true);
         assert_eq!(bm.read(255), true);
         bm.flip(142);
         assert_eq!(bm.read(142), false);
+        // check that holes work
+        bm.flip(7);
+        assert_eq!(bm.get_lowest_zero().unwrap(), 7);
     }
 
     #[test]
     #[should_panic]
-    fn test_bitmap_cap() {
+    fn test_bitmap_oob() {
         Bitmap::new(128).read(128);
+    }
+
+    #[test]
+    fn test_bitmap_full() {
+        let mut bm = Bitmap::new(8);
+        for i in 0..8 {
+            bm.flip(i);
+        }
+        assert_eq!(bm.get_lowest_zero(), None);
+        bm.flip(2);
+        assert_eq!(bm.get_lowest_zero().unwrap(), 2);
     }
 }
