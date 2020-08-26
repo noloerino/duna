@@ -25,6 +25,7 @@ where
     fn text_start() -> T::ByteAddr;
     fn stack_start() -> T::ByteAddr;
     fn data_start() -> T::ByteAddr;
+    fn heap_start() -> T::ByteAddr;
 }
 
 pub struct Program<A: Architecture> {
@@ -57,7 +58,9 @@ impl<A: Architecture> Program<A> {
             <A::ProgramBehavior as ProgramBehavior<A::Family, A::DataWidth>>::stack_start();
         let data_start =
             <A::ProgramBehavior as ProgramBehavior<A::Family, A::DataWidth>>::data_start();
-        let mut state = ProgramState::new(pg_count, pg_ofs_len, page_table);
+        let heap_start =
+            <A::ProgramBehavior as ProgramBehavior<A::Family, A::DataWidth>>::heap_start();
+        let mut state = ProgramState::new(pg_count, pg_ofs_len, heap_start, page_table);
         let mem = &mut state.phys_state.phys_mem;
         let pt = &mut state.priv_state.page_table;
         // Page in text, stack, and data
@@ -225,7 +228,13 @@ pub struct ProgramState<F: ArchFamily<T>, T: MachineDataWidth> {
 
 impl<F: ArchFamily<T>, T: MachineDataWidth> Default for ProgramState<F, T> {
     fn default() -> Self {
-        ProgramState::new(1, 64, Box::new(AllMappedPt::new()))
+        // Pray that we never test sbrk when we use default
+        ProgramState::new(
+            1,
+            64,
+            <T as MachineDataWidth>::usize_to_usgn(0x4000_0000).into(),
+            Box::new(AllMappedPt::new()),
+        )
     }
 }
 
@@ -395,6 +404,7 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
             match nr {
                 Syscall::Write => self.syscall_write(a0, a1.into(), a2),
                 Syscall::Exit => self.syscall_exit(a0),
+                Syscall::Brk => self.syscall_brk(a0.into()),
                 _ => unimplemented!(),
             }
         } else {
@@ -427,8 +437,55 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
             .collect();
         // Awkward here, but changing type sig makes common case less ergonomic
         v.push(PrivDiff::FileWrite { fd, data: bytes }.into_state_diff());
-        v.extend(UserDiff::reg_write_pc_p4(&self.user_state, ret_reg, len).diffs);
+        v.push(UserDiff::reg_update(&self.user_state, ret_reg, len).into_state_diff());
         InstResult::new(v)
+    }
+
+    /// Attempts to move the "program break" up to the indicated location.
+    /// For us, this means the OS will attempt to page in memory up to the designated address.
+    /// TODO unmap pages if brk goes down, and allocate multiple pages
+    /// TODO change type signature to be increment rather than address, which is what
+    /// actual brk does. also check edge case where brk lands on page boundary
+    /// * addr - the address whose page should be mapped afterwards
+    fn syscall_brk(&self, addr: T::ByteAddr) -> InstResult<F, T> {
+        let old_brk: T::RegData = self.priv_state.brk.into();
+        let ret_reg = <F::Syscalls as SyscallConvention<F, T>>::syscall_return_regs()[0];
+        if let Ok(lookup_result) = self.priv_state.page_table.lookup_page(addr) {
+            let mut diffs: Vec<StateDiff<F, T>> = lookup_result
+                .diffs
+                .into_iter()
+                .map(|u| u.into_state_diff())
+                .collect();
+            diffs.push(
+                PrivDiff::BrkUpdate {
+                    old: old_brk.into(),
+                    new: addr,
+                }
+                .into_state_diff(),
+            );
+            diffs.push(UserDiff::reg_update(&self.user_state, ret_reg, old_brk).into_state_diff());
+            // Update brk, return the old value, and propagate PT state changes
+            InstResult::new(diffs)
+        } else if let Ok(updates) = self.priv_state.page_table.map_page(addr) {
+            let mut diffs: Vec<StateDiff<F, T>> =
+                updates.into_iter().map(|u| u.into_state_diff()).collect();
+            diffs.push(
+                PrivDiff::BrkUpdate {
+                    old: old_brk.into(),
+                    new: addr,
+                }
+                .into_state_diff(),
+            );
+            diffs.push(UserDiff::reg_update(&self.user_state, ret_reg, old_brk).into_state_diff());
+            InstResult::new(diffs)
+        } else {
+            UserDiff::reg_update(
+                &self.user_state,
+                ret_reg,
+                <T as MachineDataWidth>::isize_to_sgn(-1).into(),
+            )
+            .into_inst_result()
+        }
     }
 
     /// Exits the program with the provided 32-bit code.
@@ -447,11 +504,12 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
     pub fn new(
         phys_pg_count: usize,
         pg_ofs_len: usize,
+        heap_start: T::ByteAddr,
         pt: Box<dyn PageTable<T::ByteAddr>>,
     ) -> ProgramState<F, T> {
         ProgramState {
             user_state: UserState::new(),
-            priv_state: PrivState::new(pt),
+            priv_state: PrivState::new(heap_start, pt),
             // TODO make endianness/alignment configurable
             phys_state: PhysState::new(Endianness::default(), true, phys_pg_count, pg_ofs_len),
         }

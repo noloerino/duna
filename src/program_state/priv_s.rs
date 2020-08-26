@@ -10,6 +10,8 @@ use crate::arch::*;
 /// Contains program state that is visited only to privileged entities, i.e. a kernel thread.
 /// TODO add kernel thread information (tid, file descriptors, etc.)
 pub struct PrivState<T: MachineDataWidth> {
+    pub brk: T::ByteAddr,
+    pub heap_start: T::ByteAddr,
     pub page_table: Box<dyn PageTable<T::ByteAddr>>,
     /// Holds the contents of all bytes that have been printed to stdout (used mostly for testing)
     pub(crate) stdout: Vec<u8>,
@@ -17,15 +19,11 @@ pub struct PrivState<T: MachineDataWidth> {
     // file_descriptors: Vec<Vec<u8>>
 }
 
-impl<T: MachineDataWidth> Default for PrivState<T> {
-    fn default() -> Self {
-        PrivState::new(Box::new(AllMappedPt::new()))
-    }
-}
-
 impl<T: MachineDataWidth> PrivState<T> {
-    pub fn new(page_table: Box<dyn PageTable<T::ByteAddr>>) -> Self {
+    pub fn new(heap_start: T::ByteAddr, page_table: Box<dyn PageTable<T::ByteAddr>>) -> Self {
         PrivState {
+            brk: heap_start,
+            heap_start,
             page_table,
             stdout: Vec::new(),
             stderr: Vec::new(),
@@ -71,6 +69,10 @@ impl<T: MachineDataWidth> PrivState<T> {
                 self.page_table.apply_update(mem, update);
                 Ok(())
             }
+            BrkUpdate { new, .. } => {
+                self.brk = *new;
+                Ok(())
+            }
         }
     }
 
@@ -81,6 +83,9 @@ impl<T: MachineDataWidth> PrivState<T> {
             // TODO delete last len bytes from fd
             FileWrite { fd: _, data: _ } => {}
             PtUpdate(update) => self.page_table.revert_update(mem, update),
+            BrkUpdate { old, .. } => {
+                self.brk = *old;
+            }
             _ => unimplemented!(),
         }
     }
@@ -99,6 +104,10 @@ pub enum PrivDiff<T: MachineDataWidth> {
         data: Vec<u8>,
     },
     PtUpdate(PtUpdate),
+    BrkUpdate {
+        old: T::ByteAddr,
+        new: T::ByteAddr,
+    },
 }
 
 impl<T: MachineDataWidth> PrivDiff<T> {

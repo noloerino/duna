@@ -103,6 +103,16 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> UserDiff<F, T> {
         .into_state_diff()])
     }
 
+    pub fn reg_update(state: &UserState<F, T>, reg: F::Register, rd_val: T::RegData) -> Self {
+        UserDiff::RegDiff {
+            reg,
+            change: RegDataChange {
+                old_value: state.regfile.read(reg),
+                new_value: rd_val,
+            },
+        }
+    }
+
     pub fn reg_write_op(
         state: &UserState<F, T>,
         new_pc: T::ByteAddr,

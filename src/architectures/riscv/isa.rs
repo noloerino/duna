@@ -251,7 +251,9 @@ impl<T: MachineDataWidth> EnvironInst<T> for Ecall {
     }
 
     fn eval(state: &ProgramState<RiscV<T>, T>) -> InstResult<RiscV<T>, T> {
-        state.handle_trap(&TrapKind::Ecall)
+        let mut diffs = state.handle_trap(&TrapKind::Ecall).diffs;
+        diffs.push(UserDiff::pc_p4(&state.user_state).into_state_diff());
+        InstResult::new(diffs)
     }
 }
 
