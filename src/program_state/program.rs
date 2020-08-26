@@ -443,9 +443,8 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
 
     /// Attempts to move the "program break" up to the indicated location.
     /// For us, this means the OS will attempt to page in memory up to the designated address.
-    /// TODO unmap pages if brk goes down, and allocate multiple pages
-    /// TODO change type signature to be increment rather than address, which is what
-    /// actual brk does. also check edge case where brk lands on page boundary
+    /// TODO unmap pages if brk goes down, and allocate multiple pages, also check edge case where
+    /// brk lands on page boundary
     /// * addr - the address whose page should be mapped afterwards
     fn syscall_brk(&self, addr: T::ByteAddr) -> InstResult<F, T> {
         let old_brk: T::RegData = self.priv_state.brk.into();
@@ -463,7 +462,14 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
                 }
                 .into_state_diff(),
             );
-            diffs.push(UserDiff::reg_update(&self.user_state, ret_reg, old_brk).into_state_diff());
+            diffs.push(
+                UserDiff::reg_update(
+                    &self.user_state,
+                    ret_reg,
+                    <T as MachineDataWidth>::sgn_zero().into(),
+                )
+                .into_state_diff(),
+            );
             // Update brk, return the old value, and propagate PT state changes
             InstResult::new(diffs)
         } else if let Ok(updates) = self.priv_state.page_table.map_page(addr) {
@@ -476,7 +482,14 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
                 }
                 .into_state_diff(),
             );
-            diffs.push(UserDiff::reg_update(&self.user_state, ret_reg, old_brk).into_state_diff());
+            diffs.push(
+                UserDiff::reg_update(
+                    &self.user_state,
+                    ret_reg,
+                    <T as MachineDataWidth>::sgn_zero().into(),
+                )
+                .into_state_diff(),
+            );
             InstResult::new(diffs)
         } else {
             UserDiff::reg_update(
