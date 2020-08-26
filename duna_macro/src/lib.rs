@@ -217,9 +217,15 @@ fn impl_itype_load_derive(ast: &syn::DeriveInput) -> TokenStream {
             ) -> InstResult<RiscV<T>, T> {
                 let rs1_val: T::Signed = state.user_state.regfile.read(rs1).into();
                 let addr: T::RegData = (rs1_val + imm.into()).into();
-                let result = <#name as ITypeLoad<T>>::eval(state.user_state.memory.as_ref(), addr.into());
+                let result = <#name as ITypeLoad<T>>::eval(state, addr.into());
                 match result {
-                    Ok(new_rd_val) => UserDiff::reg_write_pc_p4(&state.user_state, rd, new_rd_val),
+                    Ok((new_rd_val, mut inst_result)) => {
+                        let mut diffs = inst_result.diffs;
+                        diffs.extend(
+                            UserDiff::reg_write_pc_p4(&state.user_state, rd, new_rd_val).diffs
+                        );
+                        InstResult::new(diffs)
+                    },
                     Err(fault) => state.handle_trap(&fault.into()),
                 }
             }
@@ -245,9 +251,15 @@ fn impl_itype_load_64_derive(ast: &syn::DeriveInput) -> TokenStream {
                 let rs1_val: i64 = state.user_state.regfile.read(rs1).into();
                 let imm_val: i64 = imm.into();
                 let addr: DataDword = (rs1_val + imm_val).into();
-                let result = <#name as ITypeLoad<Width64b>>::eval(state.user_state.memory.as_ref(), addr.into());
+                let result = <#name as ITypeLoad<Width64b>>::eval(state, addr.into());
                 match result {
-                    Ok(new_rd_val) => UserDiff::reg_write_pc_p4(&state.user_state, rd, new_rd_val),
+                    Ok((new_rd_val, mut inst_result)) => {
+                        let mut diffs = inst_result.diffs;
+                        diffs.extend(
+                            UserDiff::reg_write_pc_p4(&state.user_state, rd, new_rd_val).diffs
+                        );
+                        InstResult::new(diffs)
+                    },
                     Err(fault) => state.handle_trap(&fault.into()),
                 }
             }

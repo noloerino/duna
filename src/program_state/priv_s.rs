@@ -3,27 +3,28 @@
 
 use super::datatypes::*;
 use super::memory::*;
+use super::phys::PhysMem;
 use super::program::{InstResult, ProgramState, StateDiff};
 use crate::arch::*;
 
 /// Contains program state that is visited only to privileged entities, i.e. a kernel thread.
 /// TODO add kernel thread information (tid, file descriptors, etc.)
-pub struct PrivState {
+pub struct PrivState<T: MachineDataWidth> {
+    pub brk: T::ByteAddr,
+    pub heap_start: T::ByteAddr,
+    pub page_table: Box<dyn PageTable<T::ByteAddr>>,
     /// Holds the contents of all bytes that have been printed to stdout (used mostly for testing)
     pub(crate) stdout: Vec<u8>,
     pub(crate) stderr: Vec<u8>,
     // file_descriptors: Vec<Vec<u8>>
 }
 
-impl Default for PrivState {
-    fn default() -> Self {
-        PrivState::new()
-    }
-}
-
-impl PrivState {
-    pub fn new() -> Self {
+impl<T: MachineDataWidth> PrivState<T> {
+    pub fn new(heap_start: T::ByteAddr, page_table: Box<dyn PageTable<T::ByteAddr>>) -> Self {
         PrivState {
+            brk: heap_start,
+            heap_start,
+            page_table,
             stdout: Vec::new(),
             stderr: Vec::new(),
         }
@@ -37,8 +38,9 @@ impl PrivState {
     /// and generated an appropriate UserDiff.
     ///
     /// Returns a TermCause if the program is terminated.
-    pub fn apply_diff<F: ArchFamily<T>, T: MachineDataWidth>(
+    pub fn apply_diff<F: ArchFamily<T>>(
         &mut self,
+        mem: &mut PhysMem,
         diff: &PrivDiff<T>,
     ) -> Result<(), TermCause> {
         use PrivDiff::*;
@@ -63,15 +65,27 @@ impl PrivState {
                 Ok(())
             }
             Terminate(cause) => Err(*cause),
+            PtUpdate(update) => {
+                self.page_table.apply_update(mem, update);
+                Ok(())
+            }
+            BrkUpdate { new, .. } => {
+                self.brk = *new;
+                Ok(())
+            }
         }
     }
 
     /// Reverts a privileged state change.
-    pub fn revert_diff<F: ArchFamily<T>, T: MachineDataWidth>(&mut self, diff: &PrivDiff<T>) {
+    pub fn revert_diff<F: ArchFamily<T>>(&mut self, mem: &mut PhysMem, diff: &PrivDiff<T>) {
         use PrivDiff::*;
         match diff {
             // TODO delete last len bytes from fd
             FileWrite { fd: _, data: _ } => {}
+            PtUpdate(update) => self.page_table.revert_update(mem, update),
+            BrkUpdate { old, .. } => {
+                self.brk = *old;
+            }
             _ => unimplemented!(),
         }
     }
@@ -85,7 +99,15 @@ pub enum PrivDiff<T: MachineDataWidth> {
     /// Represents a file write.
     /// * fd: the file descriptor
     /// * data: the bytes being written
-    FileWrite { fd: T::RegData, data: Vec<u8> },
+    FileWrite {
+        fd: T::RegData,
+        data: Vec<u8>,
+    },
+    PtUpdate(PtUpdate),
+    BrkUpdate {
+        old: T::ByteAddr,
+        new: T::ByteAddr,
+    },
 }
 
 impl<T: MachineDataWidth> PrivDiff<T> {

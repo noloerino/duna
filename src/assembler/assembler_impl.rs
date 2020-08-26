@@ -381,6 +381,8 @@ impl<A: Architecture> UnlinkedProgram<A> {
             Ok(Program::<A>::new(
                 insts,
                 self.sections,
+                config.mem_config.phys_pn_bits,
+                config.mem_config.pg_ofs_bits,
                 config.mem_config.build_mem(),
             ))
         } else {

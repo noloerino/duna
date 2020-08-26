@@ -251,7 +251,9 @@ impl<T: MachineDataWidth> EnvironInst<T> for Ecall {
     }
 
     fn eval(state: &ProgramState<RiscV<T>, T>) -> InstResult<RiscV<T>, T> {
-        state.handle_trap(&TrapKind::Ecall)
+        let mut diffs = state.handle_trap(&TrapKind::Ecall).diffs;
+        diffs.push(UserDiff::pc_p4(&state.user_state).into_state_diff());
+        InstResult::new(diffs)
     }
 }
 
@@ -313,10 +315,11 @@ impl<T: MachineDataWidth> ITypeLoad<T> for Lb {
     }
 
     fn eval(
-        mem: &dyn Memory<T::ByteAddr>,
+        state: &ProgramState<RiscV<T>, T>,
         addr: T::ByteAddr,
-    ) -> Result<T::RegData, MemFault<T::ByteAddr>> {
-        Ok(<T::RegData>::sign_ext_from_byte(mem.get_byte(addr)?))
+    ) -> Result<MemReadResult<T>, MemFault<T::ByteAddr>> {
+        let (v, inst_result) = state.memory_get(addr, DataWidth::Byte)?;
+        Ok((<T::RegData>::sign_ext_from_byte(v.into()), inst_result))
     }
 }
 
@@ -331,10 +334,11 @@ impl<T: MachineDataWidth> ITypeLoad<T> for Lbu {
     }
 
     fn eval(
-        mem: &dyn Memory<T::ByteAddr>,
+        state: &ProgramState<RiscV<T>, T>,
         addr: T::ByteAddr,
-    ) -> Result<T::RegData, MemFault<T::ByteAddr>> {
-        Ok(<T::RegData>::zero_pad_from_byte(mem.get_byte(addr)?))
+    ) -> Result<MemReadResult<T>, MemFault<T::ByteAddr>> {
+        let (v, inst_result) = state.memory_get(addr, DataWidth::Byte)?;
+        Ok((<T::RegData>::zero_pad_from_byte(v.into()), inst_result))
     }
 }
 
@@ -349,10 +353,11 @@ impl ITypeLoad<Width64b> for Ld {
     }
 
     fn eval(
-        mem: &dyn Memory<ByteAddr64>,
+        state: &ProgramState<RiscV<Width64b>, Width64b>,
         addr: ByteAddr64,
-    ) -> Result<DataDword, MemFault<ByteAddr64>> {
-        Ok(mem.get_doubleword(addr)?)
+    ) -> Result<MemReadResult<Width64b>, MemFault<ByteAddr64>> {
+        let (v, inst_result) = state.memory_get(addr, DataWidth::DoubleWord)?;
+        Ok((v.into(), inst_result))
     }
 }
 
@@ -367,10 +372,11 @@ impl<T: MachineDataWidth> ITypeLoad<T> for Lh {
     }
 
     fn eval(
-        mem: &dyn Memory<T::ByteAddr>,
+        state: &ProgramState<RiscV<T>, T>,
         addr: T::ByteAddr,
-    ) -> Result<T::RegData, MemFault<T::ByteAddr>> {
-        Ok(<T::RegData>::sign_ext_from_half(mem.get_half(addr)?))
+    ) -> Result<MemReadResult<T>, MemFault<T::ByteAddr>> {
+        let (v, inst_result) = state.memory_get(addr, DataWidth::Half)?;
+        Ok((<T::RegData>::sign_ext_from_half(v.into()), inst_result))
     }
 }
 
@@ -385,10 +391,11 @@ impl<T: MachineDataWidth> ITypeLoad<T> for Lhu {
     }
 
     fn eval(
-        mem: &dyn Memory<T::ByteAddr>,
+        state: &ProgramState<RiscV<T>, T>,
         addr: T::ByteAddr,
-    ) -> Result<T::RegData, MemFault<T::ByteAddr>> {
-        Ok(<T::RegData>::zero_pad_from_half(mem.get_half(addr)?))
+    ) -> Result<MemReadResult<T>, MemFault<T::ByteAddr>> {
+        let (v, inst_result) = state.memory_get(addr, DataWidth::Half)?;
+        Ok((<T::RegData>::zero_pad_from_half(v.into()), inst_result))
     }
 }
 
@@ -421,10 +428,11 @@ impl<T: MachineDataWidth> ITypeLoad<T> for Lw {
     }
 
     fn eval(
-        mem: &dyn Memory<T::ByteAddr>,
+        state: &ProgramState<RiscV<T>, T>,
         addr: T::ByteAddr,
-    ) -> Result<T::RegData, MemFault<T::ByteAddr>> {
-        Ok(<T::RegData>::sign_ext_from_word(mem.get_word(addr)?))
+    ) -> Result<MemReadResult<T>, MemFault<T::ByteAddr>> {
+        let (v, inst_result) = state.memory_get(addr, DataWidth::Word)?;
+        Ok((<T::RegData>::sign_ext_from_word(v.into()), inst_result))
     }
 }
 
@@ -439,10 +447,11 @@ impl ITypeLoad<Width64b> for Lwu {
     }
 
     fn eval(
-        mem: &dyn Memory<ByteAddr64>,
+        state: &ProgramState<RiscV<Width64b>, Width64b>,
         addr: ByteAddr64,
-    ) -> Result<DataDword, MemFault<ByteAddr64>> {
-        Ok(DataDword::sign_ext_from_word(mem.get_word(addr)?))
+    ) -> Result<MemReadResult<Width64b>, MemFault<ByteAddr64>> {
+        let (v, inst_result) = state.memory_get(addr, DataWidth::Word)?;
+        Ok((DataDword::sign_ext_from_word(v.into()), inst_result))
     }
 }
 
@@ -489,15 +498,15 @@ impl<T: MachineDataWidth> SType<T> for Sb {
     }
 
     fn eval(
-        state: &UserState<RiscV<T>, T>,
+        state: &ProgramState<RiscV<T>, T>,
         rs1: RiscVRegister,
         rs2: RiscVRegister,
         imm: BitStr32,
     ) -> InstResult<RiscV<T>, T> {
-        let base_addr: T::Signed = state.regfile.read(rs1).into();
+        let base_addr: T::Signed = state.user_state.regfile.read(rs1).into();
         let byte_addr: T::ByteAddr = (base_addr.wrapping_add(&imm.into())).into();
-        let new_byte = state.regfile.read(rs2).get_byte(0);
-        UserDiff::mem_write_op(state, byte_addr, DataEnum::Byte(new_byte)).unwrap()
+        let new_byte = state.user_state.regfile.read(rs2).get_byte(0);
+        UserDiff::mem_write_pc_p4(state, byte_addr, DataEnum::Byte(new_byte)).unwrap()
     }
 }
 
@@ -511,15 +520,15 @@ impl SType<Width64b> for Sd {
     }
 
     fn eval(
-        state: &UserState<RiscV<Width64b>, Width64b>,
+        state: &ProgramState<RiscV<Width64b>, Width64b>,
         rs1: RiscVRegister,
         rs2: RiscVRegister,
         imm: BitStr32,
     ) -> InstResult<RiscV<Width64b>, Width64b> {
-        let base_addr: i64 = state.regfile.read(rs1).into();
+        let base_addr: i64 = state.user_state.regfile.read(rs1).into();
         let byte_addr: ByteAddr64 = (base_addr.wrapping_add(imm.into())).into();
-        let new_dword = state.regfile.read(rs2);
-        UserDiff::mem_write_op(state, byte_addr, DataEnum::DoubleWord(new_dword)).unwrap()
+        let new_dword = state.user_state.regfile.read(rs2);
+        UserDiff::mem_write_pc_p4(state, byte_addr, DataEnum::DoubleWord(new_dword)).unwrap()
     }
 }
 
@@ -533,17 +542,17 @@ impl<T: MachineDataWidth> SType<T> for Sh {
     }
 
     fn eval(
-        state: &UserState<RiscV<T>, T>,
+        state: &ProgramState<RiscV<T>, T>,
         rs1: RiscVRegister,
         rs2: RiscVRegister,
         imm: BitStr32,
     ) -> InstResult<RiscV<T>, T> {
-        let base_addr: T::Signed = state.regfile.read(rs1).into();
+        let base_addr: T::Signed = state.user_state.regfile.read(rs1).into();
         let byte_addr: T::ByteAddr = (base_addr.wrapping_add(&imm.into())).into();
-        let lower_byte: u8 = state.regfile.read(rs2).get_byte(0).into();
-        let upper_byte: u8 = state.regfile.read(rs2).get_byte(1).into();
+        let lower_byte: u8 = state.user_state.regfile.read(rs2).get_byte(0).into();
+        let upper_byte: u8 = state.user_state.regfile.read(rs2).get_byte(1).into();
         let full: u16 = ((upper_byte as u16) << 8) | (lower_byte as u16);
-        UserDiff::mem_write_op(state, byte_addr, DataEnum::Half(full.into())).unwrap()
+        UserDiff::mem_write_pc_p4(state, byte_addr, DataEnum::Half(full.into())).unwrap()
     }
 }
 
@@ -591,17 +600,17 @@ impl<T: MachineDataWidth> SType<T> for Sw {
     }
 
     fn eval(
-        state: &UserState<RiscV<T>, T>,
+        state: &ProgramState<RiscV<T>, T>,
         rs1: RiscVRegister,
         rs2: RiscVRegister,
         imm: BitStr32,
     ) -> InstResult<RiscV<T>, T> {
-        let base_addr: T::Signed = state.regfile.read(rs1).into();
+        let base_addr: T::Signed = state.user_state.regfile.read(rs1).into();
         let byte_addr: T::ByteAddr = (base_addr.wrapping_add(&imm.into())).into();
-        UserDiff::mem_write_op(
+        UserDiff::mem_write_pc_p4(
             state,
             byte_addr,
-            DataEnum::Word(state.regfile.read(rs2).get_lower_word()),
+            DataEnum::Word(state.user_state.regfile.read(rs2).get_lower_word()),
         )
         .unwrap()
     }
@@ -1114,6 +1123,11 @@ mod tests_32 {
         let base_addr = 0xFFFF_0004u32;
         let test_data = 0xABCD_EF01u32;
         state.memory_set_word(ByteAddr32::from(base_addr), DataWord::from(test_data));
+        // Make sure the issue isn't with poking the memory
+        assert_eq!(
+            state.memory_get_word(ByteAddr32::from(base_addr)),
+            DataWord::from(test_data)
+        );
         state.regfile_set(T0, DataWord::from(base_addr));
         // signed loads
         state.apply_inst_test(&Lb::new(T1, T0, DataWord::from(0)));

@@ -6,7 +6,7 @@
 
 use super::datatypes::*;
 use super::memory::*;
-use super::program::{InstResult, RegDataChange, StateDiff};
+use super::program::{InstResult, ProgramState, RegDataChange, StateDiff};
 use super::registers::*;
 use crate::arch::*;
 
@@ -14,22 +14,19 @@ use crate::arch::*;
 pub struct UserState<F: ArchFamily<T>, T: MachineDataWidth> {
     pub pc: T::ByteAddr,
     pub regfile: RegFile<F::Register, T>,
-    pub memory: Box<dyn Memory<T::ByteAddr>>,
 }
 
-#[cfg(test)]
 impl<F: ArchFamily<T>, T: MachineDataWidth> Default for UserState<F, T> {
     fn default() -> Self {
-        UserState::new(Box::new(SimpleMemory::new()))
+        UserState::new()
     }
 }
 
 impl<F: ArchFamily<T>, T: MachineDataWidth> UserState<F, T> {
-    pub fn new(memory: Box<dyn Memory<T::ByteAddr>>) -> Self {
+    pub fn new() -> Self {
         UserState {
             pc: T::sgn_zero().into(),
             regfile: RegFile::new(),
-            memory,
         }
     }
 
@@ -45,7 +42,6 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> UserState<F, T> {
             } => {
                 self.regfile.set(reg, new_value);
             }
-            UserDiff::MemDiff { addr, new_val, .. } => self.memory.set(addr, new_val).unwrap(),
             // Trap itself is a noop, but instruction may produce other side effects
             UserDiff::Trap(_trap_kind) => {}
         }
@@ -62,7 +58,6 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> UserState<F, T> {
             } => {
                 self.regfile.set(reg, old_value);
             }
-            UserDiff::MemDiff { addr, old_val, .. } => self.memory.set(addr, old_val).unwrap(),
             UserDiff::Trap(_trap_kind) => {}
         }
     }
@@ -79,11 +74,6 @@ pub enum UserDiff<F: ArchFamily<T>, T: MachineDataWidth> {
     RegDiff {
         reg: F::Register,
         change: RegDataChange<T>,
-    },
-    MemDiff {
-        addr: T::ByteAddr,
-        old_val: DataEnum,
-        new_val: DataEnum,
     },
     Trap(TrapKind<T::ByteAddr>),
 }
@@ -111,6 +101,16 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> UserDiff<F, T> {
             new_pc,
         }
         .into_state_diff()])
+    }
+
+    pub fn reg_update(state: &UserState<F, T>, reg: F::Register, rd_val: T::RegData) -> Self {
+        UserDiff::RegDiff {
+            reg,
+            change: RegDataChange {
+                old_value: state.regfile.read(reg),
+                new_value: rd_val,
+            },
+        }
     }
 
     pub fn reg_write_op(
@@ -147,26 +147,14 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> UserDiff<F, T> {
         UserDiff::reg_write_op(state, state.pc.plus_4(), reg, val)
     }
 
-    /// Performs a memory write operation.
-    /// This may trap to the OS in the event of exceptional events like a page fault.
-    pub fn mem_write_op(
-        state: &UserState<F, T>,
+    pub fn mem_write_pc_p4(
+        state: &ProgramState<F, T>,
         addr: T::ByteAddr,
         val: DataEnum,
     ) -> Result<InstResult<F, T>, MemFault<T::ByteAddr>> {
-        Ok(InstResult::new(
-            vec![
-                UserDiff::MemDiff {
-                    addr,
-                    old_val: state.memory.get(addr, val.width())?,
-                    new_val: val,
-                },
-                UserDiff::pc_p4(state),
-            ]
-            .into_iter()
-            .map(|diff| diff.into_state_diff())
-            .collect(),
-        ))
+        let mut diffs = state.memory_set(addr, val)?.diffs;
+        diffs.push(UserDiff::pc_p4(&state.user_state).into_state_diff());
+        Ok(InstResult::new(diffs))
     }
 }
 

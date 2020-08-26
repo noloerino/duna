@@ -33,40 +33,37 @@ impl Default for MachineConfig {
 /// TODO add options for alignment and default value
 #[derive(Debug)]
 pub struct MemConfig {
-    pub kind: MemKind,
+    pub phys_pn_bits: usize,
+    pub pg_ofs_bits: usize,
+    pub kind: PtKind,
 }
 
 impl Default for MemConfig {
     fn default() -> Self {
         MemConfig {
+            phys_pn_bits: 10,
+            pg_ofs_bits: 12,
             // 4 KiB page size, 4 MiB physical memory
-            kind: MemKind::LinearPaged {
-                phys_addr_len: 22,
-                page_offs_len: 12,
-            },
+            kind: PtKind::FifoLinearPaged,
         }
     }
 }
 
 impl MemConfig {
-    pub fn build_mem<T: ByteAddress>(&self) -> Box<dyn Memory<T>> {
+    pub fn build_mem<T: ByteAddress>(&self) -> Box<dyn PageTable<T>> {
         use crate::program_state::*;
         let kind = self.kind;
         match kind {
-            MemKind::Simple => Box::new(SimpleMemory::<T>::new()),
-            MemKind::LinearPaged {
-                phys_addr_len,
-                page_offs_len,
-            } => Box::new(LinearPagedMemory::<T>::new(phys_addr_len, page_offs_len)),
+            PtKind::AllMapped => Box::new(AllMappedPt::<T>::new()),
+            PtKind::FifoLinearPaged => {
+                Box::new(FifoLinearPt::<T>::new(self.phys_pn_bits, self.pg_ofs_bits))
+            }
         }
     }
 }
 
 #[derive(Copy, Clone, Debug)]
-pub enum MemKind {
-    Simple,
-    LinearPaged {
-        phys_addr_len: usize,
-        page_offs_len: usize,
-    },
+pub enum PtKind {
+    AllMapped,
+    FifoLinearPaged,
 }

@@ -244,12 +244,14 @@ pub(crate) trait ITypeArith<T: MachineDataWidth>: IType<T> {
     ) -> <T as MachineDataWidth>::RegData;
 }
 
+pub(crate) type MemReadResult<T> = (<T as MachineDataWidth>::RegData, InstResult<RiscV<T>, T>);
+
 pub(crate) trait ITypeLoad<T: MachineDataWidth>: IType<T> {
     fn inst_fields() -> IInstFields;
     fn eval(
-        mem: &dyn Memory<T::ByteAddr>,
+        state: &ProgramState<RiscV<T>, T>,
         addr: <T as MachineDataWidth>::ByteAddr,
-    ) -> Result<<T as MachineDataWidth>::RegData, MemFault<T::ByteAddr>>;
+    ) -> Result<MemReadResult<T>, MemFault<T::ByteAddr>>;
 }
 
 pub trait EnvironInst<T: MachineDataWidth> {
@@ -277,7 +279,7 @@ pub trait SType<T: MachineDataWidth> {
     ) -> RiscVInst<T> {
         let imm_vec = imm.to_bit_str(12);
         RiscVInst {
-            eval: Box::new(move |state| Self::eval(&state.user_state, rs1, rs2, imm_vec)),
+            eval: Box::new(move |state| Self::eval(&state, rs1, rs2, imm_vec)),
             data: RiscVInstData::S {
                 fields: Self::inst_fields(),
                 rs1,
@@ -288,7 +290,7 @@ pub trait SType<T: MachineDataWidth> {
     }
     fn inst_fields() -> SInstFields;
     fn eval(
-        state: &UserState<RiscV<T>, T>,
+        state: &ProgramState<RiscV<T>, T>,
         rs1: RiscVRegister,
         rs2: RiscVRegister,
         imm: BitStr32,

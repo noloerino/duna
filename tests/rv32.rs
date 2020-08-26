@@ -171,7 +171,7 @@ fn test_bad_unaligned_word() {
 }
 
 /// Tests the brk syscall, which should map a page.
-// #[test]
+#[test]
 fn test_brk_single_page() {
     check_a0_at_end("brk_single_page.s", 0xDEAD_BEEFu32);
 }
@@ -196,6 +196,7 @@ fn test_jump_to_la() {
 }
 
 /// Tests that data directives preserve appropriate alignment, even across files.
+/// Assumes the data segment starts at 0x2000_0000.
 #[test]
 fn test_aligned_directive_labels() {
     let mut program = Linker::with_main(&get_full_test_path("aligned_directive_labels_0.s"))
@@ -204,16 +205,16 @@ fn test_aligned_directive_labels() {
         .unwrap();
     program.dump_insts();
     println!(
-        "at 18 , i found {:#X}",
-        u32::from(program.state.memory_get_word(0x2000_0018.into()))
+        "at 18, I found {:#X}",
+        u32::from(program.state.memory_inspect_word(0x2000_0018.into()))
     );
     println!(
-        "at 14 , i found {:#X}",
-        u32::from(program.state.memory_get_word(0x2000_0014.into()))
+        "at 14, I found {:#X}",
+        u32::from(program.state.memory_inspect_word(0x2000_0014.into()))
     );
     println!(
-        "at 0x10 , i found {:#X}",
-        u32::from(program.state.memory_get_word(0x2000_0010.into()))
+        "at 0x10, I found {:#X}",
+        u32::from(program.state.memory_inspect_word(0x2000_0010.into()))
     );
     program.run();
     use RiscVRegister::*;
