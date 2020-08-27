@@ -352,7 +352,6 @@ impl<T: ByteAddress> PageTable<T> for FifoLinearPt<T> {
             old: old_pte,
             new: PtEntry { valid: true, ppn },
         });
-        println!("Mapping entry for VPN {:X} to PPN {}", vpn, ppn);
         Ok(diffs)
     }
 
@@ -382,7 +381,6 @@ impl<T: ByteAddress> PageTable<T> for FifoLinearPt<T> {
             if let Some(pte) = self.page_table.get(&vpn) {
                 if pte.valid {
                     let offs = self.get_page_offs(vaddr);
-                    println!("Found entry for VPN {:0X} (PPN {})", vpn, pte.ppn);
                     return Ok(PtLookupData {
                         diffs: vec![],
                         ppn: pte.ppn,

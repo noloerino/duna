@@ -29,10 +29,6 @@ impl ProgramBehavior<RiscV<Width32b>, Width32b> for RiscVProgramBehavior<Width32
     fn data_start() -> ByteAddr32 {
         0x2000_0000.into()
     }
-
-    fn heap_start() -> ByteAddr32 {
-        0x4000_0000.into()
-    }
 }
 
 impl ProgramBehavior<RiscV<Width64b>, Width64b> for RiscVProgramBehavior<Width64b> {
@@ -54,10 +50,6 @@ impl ProgramBehavior<RiscV<Width64b>, Width64b> for RiscVProgramBehavior<Width64
 
     fn data_start() -> ByteAddr64 {
         0x2000_0000_0000_0000u64.into()
-    }
-
-    fn heap_start() -> ByteAddr64 {
-        0x4000_0000_0000_0000u64.into()
     }
 }
 

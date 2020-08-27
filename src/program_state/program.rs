@@ -25,7 +25,6 @@ where
     fn text_start() -> T::ByteAddr;
     fn stack_start() -> T::ByteAddr;
     fn data_start() -> T::ByteAddr;
-    fn heap_start() -> T::ByteAddr;
 }
 
 pub struct Program<A: Architecture> {
@@ -58,9 +57,7 @@ impl<A: Architecture> Program<A> {
             <A::ProgramBehavior as ProgramBehavior<A::Family, A::DataWidth>>::stack_start();
         let data_start =
             <A::ProgramBehavior as ProgramBehavior<A::Family, A::DataWidth>>::data_start();
-        let heap_start =
-            <A::ProgramBehavior as ProgramBehavior<A::Family, A::DataWidth>>::heap_start();
-        let mut state = ProgramState::new(pg_count, pg_ofs_len, heap_start, page_table);
+        let mut state = ProgramState::new(pg_count, pg_ofs_len, page_table);
         let mem = &mut state.phys_state.phys_mem;
         let pt = &mut state.priv_state.page_table;
         // Page in text, stack, and data
@@ -84,11 +81,24 @@ impl<A: Architecture> Program<A> {
         // store data
         let all_data = sections.data.into_iter().chain(sections.rodata.into_iter());
         let data_start_usize = <A::DataWidth as MachineDataWidth>::usgn_to_usize(data_start.into());
+        let mut end_of_data: usize = data_start_usize;
         for (offs, byte) in all_data.enumerate() {
             let addr: <A::DataWidth as MachineDataWidth>::ByteAddr =
                 <A::DataWidth as MachineDataWidth>::usize_to_usgn(data_start_usize + offs).into();
             state.memory_force_set(addr, DataEnum::Byte(byte.into()));
+            end_of_data = data_start_usize + offs;
         }
+        // Round up to next page
+        let heap_start = ((end_of_data >> pg_ofs_len) + 1) << 1;
+        // Can't reuse variables for lifetime reasons
+        state
+            .priv_state
+            .page_table
+            .force_map_page(
+                &mut state.phys_state.phys_mem,
+                <A::DataWidth as MachineDataWidth>::usize_to_usgn(heap_start).into(),
+            )
+            .unwrap();
         Program { insts, state }
     }
 
@@ -229,12 +239,7 @@ pub struct ProgramState<F: ArchFamily<T>, T: MachineDataWidth> {
 impl<F: ArchFamily<T>, T: MachineDataWidth> Default for ProgramState<F, T> {
     fn default() -> Self {
         // Pray that we never test sbrk when we use default
-        ProgramState::new(
-            1,
-            64,
-            <T as MachineDataWidth>::usize_to_usgn(0x4000_0000).into(),
-            Box::new(AllMappedPt::new()),
-        )
+        ProgramState::new(1, 64, Box::new(AllMappedPt::new()))
     }
 }
 
@@ -517,12 +522,12 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
     pub fn new(
         phys_pg_count: usize,
         pg_ofs_len: usize,
-        heap_start: T::ByteAddr,
         pt: Box<dyn PageTable<T::ByteAddr>>,
     ) -> ProgramState<F, T> {
         ProgramState {
             user_state: UserState::new(),
-            priv_state: PrivState::new(heap_start, pt),
+            // Initialize heap to zero (program initialization will set it properly)
+            priv_state: PrivState::new(<T::RegData as RegSize>::zero().into(), pt),
             // TODO make endianness/alignment configurable
             phys_state: PhysState::new(Endianness::default(), true, phys_pg_count, pg_ofs_len),
         }
