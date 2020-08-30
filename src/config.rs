@@ -1,3 +1,4 @@
+use crate::arch::MachineDataWidth;
 use crate::program_state::*;
 
 /// Options for the assembler.
@@ -15,15 +16,50 @@ impl Default for AsmConfig {
     }
 }
 
+/// Configures the start of the text, stack, and data segments.
+#[derive(Debug, Copy, Clone)]
+pub struct SegmentStarts {
+    pub text_start: usize,
+    pub stack_start: usize,
+    pub data_start: usize,
+}
+
+impl Default for SegmentStarts {
+    fn default() -> Self {
+        // TODO configure boundaries for 64 vs 32-bit
+        SegmentStarts {
+            text_start: 0x1000_0000,
+            stack_start: 0x7FFF_FFFF0,
+            data_start: 0x2000_0000,
+        }
+    }
+}
+
+impl SegmentStarts {
+    pub fn text<T: MachineDataWidth>(&self) -> T::ByteAddr {
+        <T as MachineDataWidth>::usize_to_usgn(self.text_start).into()
+    }
+
+    pub fn data<T: MachineDataWidth>(&self) -> T::ByteAddr {
+        <T as MachineDataWidth>::usize_to_usgn(self.data_start).into()
+    }
+
+    pub fn stack<T: MachineDataWidth>(&self) -> T::ByteAddr {
+        <T as MachineDataWidth>::usize_to_usgn(self.stack_start).into()
+    }
+}
+
 /// Configuration for the machine being emulated.
 #[derive(Debug)]
 pub struct MachineConfig {
+    pub segment_starts: SegmentStarts,
     pub mem_config: MemConfig,
 }
 
 impl Default for MachineConfig {
     fn default() -> Self {
         MachineConfig {
+            segment_starts: Default::default(),
             mem_config: Default::default(),
         }
     }

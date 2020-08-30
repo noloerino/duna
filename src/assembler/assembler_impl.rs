@@ -4,7 +4,7 @@ use super::parser::{Label, LabelDef, LabelRef, ParseResult, Parser};
 use super::partial_inst::{PartialInst, PartialInstType};
 use crate::arch::*;
 use crate::config::*;
-use crate::program_state::{DataEnum, Program, ProgramBehavior};
+use crate::program_state::{DataEnum, Program};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 
@@ -318,11 +318,11 @@ impl<A: Architecture> UnlinkedProgram<A> {
                         // (DATA_START + y), then we can compute the offset to be
                         // (DATA_START - TEXT_START + y - x)
                         // TODO make this more configurable
-                        // TODO for now assuming, data
+                        let segment_starts = SegmentStarts::default();
                         let text_start: <A::DataWidth as MachineDataWidth>::Signed =
-                            <A::ProgramBehavior as ProgramBehavior<A::Family, A::DataWidth>>::text_start().into();
+                            segment_starts.text::<A::DataWidth>().into();
                         let data_start: <A::DataWidth as MachineDataWidth>::Signed =
-                            <A::ProgramBehavior as ProgramBehavior<A::Family, A::DataWidth>>::data_start().into();
+                            segment_starts.data::<A::DataWidth>().into();
                         if section != ProgramSection::Data {
                             unimplemented!()
                         }
@@ -380,6 +380,7 @@ impl<A: Architecture> UnlinkedProgram<A> {
         if reporter.is_empty() {
             Ok(Program::<A>::new(
                 insts,
+                config.segment_starts,
                 self.sections,
                 config.mem_config.phys_pn_bits,
                 config.mem_config.pg_ofs_bits,

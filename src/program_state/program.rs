@@ -6,6 +6,7 @@ use super::registers::RegFile;
 pub use super::user::*;
 use crate::arch::*;
 use crate::assembler::{Linker, ParseErrorReport, SectionStore};
+use crate::config::SegmentStarts;
 use crate::instruction::ConcreteInst;
 use num_traits::cast::AsPrimitive;
 use num_traits::ops::wrapping::WrappingSub;
@@ -21,15 +22,12 @@ where
     fn sp_register() -> F::Register;
     /// Returns the register that holds function return values.
     fn return_register() -> F::Register;
-    /// Start addresses for text, stack, and data sections. TODO make these configurable
-    fn text_start() -> T::ByteAddr;
-    fn stack_start() -> T::ByteAddr;
-    fn data_start() -> T::ByteAddr;
 }
 
 pub struct Program<A: Architecture> {
     pub insts: Vec<<A::Family as ArchFamily<A::DataWidth>>::Instruction>,
     pub state: ProgramState<A::Family, A::DataWidth>,
+    text_start: <A::DataWidth as MachineDataWidth>::ByteAddr,
 }
 
 impl<A: Architecture> Program<A> {
@@ -46,17 +44,17 @@ impl<A: Architecture> Program<A> {
     /// no guarantees on read-onliness are enforced.
     pub fn new(
         insts: Vec<<A::Family as ArchFamily<A::DataWidth>>::Instruction>,
+        segment_starts: SegmentStarts,
         sections: SectionStore,
         pg_count: usize,
         pg_ofs_len: usize,
         page_table: Box<dyn PageTable<<A::DataWidth as MachineDataWidth>::ByteAddr>>,
     ) -> Self {
-        let text_start =
-            <A::ProgramBehavior as ProgramBehavior<A::Family, A::DataWidth>>::text_start();
-        let stack_start =
-            <A::ProgramBehavior as ProgramBehavior<A::Family, A::DataWidth>>::stack_start();
-        let data_start =
-            <A::ProgramBehavior as ProgramBehavior<A::Family, A::DataWidth>>::data_start();
+        let text_start = segment_starts.text::<A::DataWidth>();
+        let stack_start: <A::DataWidth as MachineDataWidth>::ByteAddr =
+            segment_starts.stack::<A::DataWidth>();
+        let data_start: <A::DataWidth as MachineDataWidth>::ByteAddr =
+            segment_starts.data::<A::DataWidth>();
         let mut state = ProgramState::new(pg_count, pg_ofs_len, page_table);
         let mem = &mut state.phys_state.phys_mem;
         let pt = &mut state.priv_state.page_table;
@@ -99,7 +97,11 @@ impl<A: Architecture> Program<A> {
                 <A::DataWidth as MachineDataWidth>::usize_to_usgn(heap_start).into(),
             )
             .unwrap();
-        Program { insts, state }
+        Program {
+            insts,
+            state,
+            text_start,
+        }
     }
 
     /// Prints out all the instructions that this program contains.
@@ -128,8 +130,7 @@ impl<A: Architecture> Program<A> {
     }
 
     fn get_pc_word_index(&self) -> usize {
-        let pc_start: <A::DataWidth as MachineDataWidth>::ByteAddr =
-            <A::ProgramBehavior as ProgramBehavior<A::Family, A::DataWidth>>::text_start();
+        let pc_start: <A::DataWidth as MachineDataWidth>::ByteAddr = self.text_start;
         // all this logic calculates the next address (very verbose due to generic types)
         let curr_pc: <A::DataWidth as MachineDataWidth>::Unsigned = self.state.user_state.pc.into();
         let orig_pc: <A::DataWidth as MachineDataWidth>::Unsigned = pc_start.into();

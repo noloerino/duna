@@ -17,18 +17,6 @@ impl ProgramBehavior<RiscV<Width32b>, Width32b> for RiscVProgramBehavior<Width32
     fn return_register() -> RiscVRegister {
         RiscVRegister::A0
     }
-
-    fn text_start() -> ByteAddr32 {
-        0x1000_0000.into()
-    }
-
-    fn stack_start() -> ByteAddr32 {
-        0x7FFF_FFF0.into()
-    }
-
-    fn data_start() -> ByteAddr32 {
-        0x2000_0000.into()
-    }
 }
 
 impl ProgramBehavior<RiscV<Width64b>, Width64b> for RiscVProgramBehavior<Width64b> {
@@ -38,18 +26,6 @@ impl ProgramBehavior<RiscV<Width64b>, Width64b> for RiscVProgramBehavior<Width64
 
     fn return_register() -> RiscVRegister {
         RiscVRegister::A0
-    }
-
-    fn text_start() -> ByteAddr64 {
-        0x1000_0000_0000_0000u64.into()
-    }
-
-    fn stack_start() -> ByteAddr64 {
-        0x7FFF_FFF0_0000_0000u64.into()
-    }
-
-    fn data_start() -> ByteAddr64 {
-        0x2000_0000_0000_0000u64.into()
     }
 }
 
