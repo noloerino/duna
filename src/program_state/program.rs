@@ -154,6 +154,15 @@ pub struct ProgramExecutor<A: Architecture> {
     /// Represents the history of instructions executed by the program.
     /// The diffs in each instruction should be executed in sequence.
     pub inst_stack: Vec<InstResult<A::Family, A::DataWidth>>,
+    /// Represents the index of the next InstResult to be applied.
+    /// For example, when this value is 1, the 0th InstResult was applied, and advancing
+    /// to the next InstResult would either fail or apply the 1th InstResult.
+    ///
+    /// If some but not all of an InstResult's diffs were applied, then this value is one after the
+    /// index of the InstResult currently being applied.
+    pub curr_inst_idx: usize,
+    /// Represents the index of the next StateDiff to be applied within the current InstResult.
+    pub curr_step_idx: usize,
 }
 
 impl<A: Architecture> ProgramExecutor<A> {
@@ -161,41 +170,77 @@ impl<A: Architecture> ProgramExecutor<A> {
         ProgramExecutor {
             program,
             inst_stack: Vec::new(),
+            curr_inst_idx: 0,
+            curr_step_idx: 0,
         }
     }
 
     /// Runs the next instruction of the program.
     /// Returns the exit code if the program terminates, and None otherwise.
     pub fn step(&mut self) -> Option<u8> {
+        assert!(self.curr_inst_idx <= self.inst_stack.len());
         let program = &mut self.program;
-        // TODO gracefully handle out of bounds instructions
-        // for now, if we reach an oob instruction just report the return value
-        if let Some(inst) = program.insts.get(program.get_pc_word_index()) {
-            let exec_result = program.state.apply_inst(&inst);
-            match exec_result {
-                Ok(inst_result) => {
-                    self.inst_stack.push(inst_result);
-                    None
+        let rv = if self.curr_inst_idx == self.inst_stack.len() {
+            assert!(self.curr_step_idx == 0);
+            // If the inst_stack was exhausted, apply a new instruction
+            // TODO gracefully handle out of bounds instructions
+            // for now, if we reach an oob instruction just report the return value
+            if let Some(inst) = program.insts.get(program.get_pc_word_index()) {
+                let exec_result = program.state.apply_inst(&inst);
+                match exec_result {
+                    Ok(inst_result) => {
+                        self.inst_stack.push(inst_result);
+                        None
+                    }
+                    Err(cause) => Some(cause.handle_exit(&mut program.state)),
                 }
-                Err(cause) => Some(cause.handle_exit(&mut program.state)),
+            } else {
+                let a0 =
+                    <A::ProgramBehavior as ProgramBehavior<A::Family, A::DataWidth>>::return_register();
+                let a0_val: <A::DataWidth as MachineDataWidth>::Unsigned =
+                    program.state.regfile_read(a0).into();
+                // For a non-abnormal exit, downcast to u8 and set upper bit to 0
+                let val_u8 = a0_val.as_();
+                Some(val_u8 & 0b0111_1111)
             }
         } else {
-            let a0 =
-                <A::ProgramBehavior as ProgramBehavior<A::Family, A::DataWidth>>::return_register();
-            let a0_val: <A::DataWidth as MachineDataWidth>::Unsigned =
-                program.state.regfile_read(a0).into();
-            // For a non-abnormal exit, downcast to u8 and set upper bit to 0
-            let val_u8 = a0_val.as_();
-            Some(val_u8 & 0b0111_1111)
+            // Run current inst to completion
+            let inst_result = &self.inst_stack[self.curr_inst_idx];
+            for i in self.curr_step_idx..inst_result.diffs.len() {
+                self.program
+                    .state
+                    .apply_diff(&inst_result.diffs[i])
+                    // TODO
+                    .unwrap();
+            }
+            None
+        };
+        // hack to get around the fact that exists aren't stored
+        if rv == None {
+            self.curr_inst_idx += 1;
         }
+        self.curr_step_idx = 0;
+        rv
     }
 
     /// Reverts one step of exeuction. Returns None if there are no steps to revert.
     pub fn revert(&mut self) -> Option<()> {
-        let inst_result = self.inst_stack.pop()?;
-        for diff in inst_result.diffs.iter().rev() {
-            self.program.state.revert_diff(&diff);
+        // When curr_inst_idx == 1, we either fully or partially applied InstResult 0.
+        // When curr_inst_idx == 0, we have applied no InstResults
+        if self.curr_inst_idx == 0 {
+            return None;
         }
+        assert!(self.curr_inst_idx <= self.inst_stack.len());
+        if self.curr_step_idx == 0 {
+            // Go back one instruction
+            self.curr_step_idx = self.inst_stack[self.curr_inst_idx - 1].diffs.len();
+        }
+        let inst_result = &self.inst_stack[self.curr_inst_idx - 1];
+        for i in (0..self.curr_step_idx).rev() {
+            self.program.state.revert_diff(&inst_result.diffs[i]);
+        }
+        self.curr_inst_idx -= 1;
+        self.curr_step_idx = 0;
         Some(())
     }
 
