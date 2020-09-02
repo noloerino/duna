@@ -226,3 +226,16 @@ fn test_aligned_directive_labels() {
     assert_eq!(u32::from(program.state.regfile_read(A5)), 0xFEDC);
     assert_eq!(u32::from(program.state.regfile_read(A6)), 0x9876_5432);
 }
+
+/// Tests that labels can start with a dot
+#[test]
+fn test_dot_label() {
+    let mut program = program_from_file("dot_label.s");
+    // should have written 12 bytes
+    let result = program.run();
+    assert_eq!(result, 12);
+    assert_eq!(
+        String::from_utf8(program.state.get_stdout().to_vec()),
+        Ok("hello world\n".to_string())
+    );
+}

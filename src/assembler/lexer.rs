@@ -152,6 +152,7 @@ impl<'a> LineLexer<'a> {
                 // sike, it's a label
                 if c == ':' {
                     self.iter.next();
+                    cs.insert(0, b'.');
                     return Ok(TokenType::LabelDef(string_from_utf8(cs)));
                 }
                 break;
@@ -526,8 +527,8 @@ mod tests {
         }
     }
 
-    #[test]
     /// Tests that a bad immediate is max munched.
+    #[test]
     fn test_bad_imm_report() {
         let line = "addi x1 0xggg1, x2";
         let mut reporter = get_test_reporter();
@@ -540,10 +541,10 @@ mod tests {
         assert!(tokens.is_empty());
     }
 
-    #[test]
     /// Tests that if there are multiple malformed immediates on the same line, all are reported.
     /// Though no instruction requires multiple immediates, this is implemented to check if in
     /// general, the presence of multiple syntax errors is handled properly.
+    #[test]
     fn test_multi_bad_imm_report() {
         let line = "addi x1 1ggg1, 12kjkj03";
         let mut reporter = get_test_reporter();
@@ -583,5 +584,20 @@ mod tests {
             toks[1].data,
             TokenType::StringLiteral("howdy world\n".to_string())
         );
+    }
+
+    /// Tests labels that start with a period to make sure that they don't get parsed
+    /// as directives by mistake.
+    #[test]
+    fn test_label_leading_period() {
+        let line = ".L1:";
+        let LexResult {
+            lines, reporter, ..
+        } = Lexer::lex_str(0, line);
+        assert!(reporter.is_empty());
+        assert_eq!(lines.len(), 1);
+        let toks = &lines[0];
+        assert_eq!(toks.len(), 1);
+        assert_eq!(toks[0].data, TokenType::LabelDef(".L1".to_string()));
     }
 }

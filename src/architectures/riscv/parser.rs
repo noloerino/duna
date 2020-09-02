@@ -480,7 +480,9 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
         for left in (0..n).rev() {
             match self.iter.next() {
                 Some(tok) => match tok.data {
-                    Name(..) | Immediate(..) => {
+                    // It might make more semantic sense to lex directives as names instead
+                    // but we need to stll be able to treat them as labels
+                    Name(..) | Immediate(..) | Directive(..) => {
                         // Allow single comma, except when trailing
                         if left > 0 {
                             if let Some(tok2) = self.iter.peek() {
@@ -624,16 +626,24 @@ impl<'a, T: MachineDataWidth> InstParser<'a, T> {
         max_imm_len: u8,
         token: Token,
     ) -> Result<ImmOrLabelRef<T::RegData>, ParseError> {
-        if let TokenType::Name(name) = &token.data {
-            // label case
-            Ok(ImmOrLabelRef::LabelRef(LabelRef::new(
-                name.clone(),
-                token.location,
-            )))
-        } else {
-            // imm case
-            Ok(ImmOrLabelRef::Imm(self.try_parse_imm(max_imm_len, token)?))
-        }
+        Ok(match &token.data {
+            TokenType::Name(name) => {
+                // label case
+                ImmOrLabelRef::LabelRef(LabelRef::new(name.clone(), token.location))
+            }
+            TokenType::Directive(name) => {
+                // if an item is lexed starting with a period in this position,
+                // it's actually a name, so we have to special case this
+                // and add the leading period
+                let mut with_period: String = ".".to_owned();
+                with_period.push_str(name);
+                ImmOrLabelRef::LabelRef(LabelRef::new(with_period, token.location))
+            }
+            _ => {
+                // imm case
+                ImmOrLabelRef::Imm(self.try_parse_imm(max_imm_len, token)?)
+            }
+        })
     }
 
     /// Expands an instruction that is known to be in the expansion table.
