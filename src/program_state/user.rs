@@ -6,7 +6,7 @@
 
 use super::datatypes::*;
 use super::memory::*;
-use super::program::{InstResult, ProgramState, RegDataChange, StateDiff};
+use super::program::{DiffStack, ProgramState, RegDataChange, StateDiff};
 use super::registers::*;
 use crate::arch::*;
 
@@ -83,8 +83,8 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> UserDiff<F, T> {
         StateDiff::User(self)
     }
 
-    pub fn into_inst_result(self) -> InstResult<F, T> {
-        InstResult::new(vec![self.into_state_diff()])
+    pub fn into_diff_stack(self) -> DiffStack<F, T> {
+        vec![self.into_state_diff()]
     }
 
     /// Advances the program counter by 4.
@@ -95,12 +95,12 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> UserDiff<F, T> {
         }
     }
 
-    pub fn pc_update_op(state: &UserState<F, T>, new_pc: T::ByteAddr) -> InstResult<F, T> {
-        InstResult::new(vec![UserDiff::PcDiff {
+    pub fn pc_update_op(state: &UserState<F, T>, new_pc: T::ByteAddr) -> DiffStack<F, T> {
+        vec![UserDiff::PcDiff {
             old_pc: state.pc,
             new_pc,
         }
-        .into_state_diff()])
+        .into_state_diff()]
     }
 
     pub fn reg_update(state: &UserState<F, T>, reg: F::Register, rd_val: T::RegData) -> Self {
@@ -118,32 +118,30 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> UserDiff<F, T> {
         new_pc: T::ByteAddr,
         reg: F::Register,
         rd_val: T::RegData,
-    ) -> InstResult<F, T> {
-        InstResult::new(
-            vec![
-                UserDiff::RegDiff {
-                    reg,
-                    change: RegDataChange {
-                        old_value: state.regfile.read(reg),
-                        new_value: rd_val,
-                    },
+    ) -> DiffStack<F, T> {
+        vec![
+            UserDiff::RegDiff {
+                reg,
+                change: RegDataChange {
+                    old_value: state.regfile.read(reg),
+                    new_value: rd_val,
                 },
-                UserDiff::PcDiff {
-                    old_pc: state.pc,
-                    new_pc,
-                },
-            ]
-            .into_iter()
-            .map(|diff| diff.into_state_diff())
-            .collect(),
-        )
+            },
+            UserDiff::PcDiff {
+                old_pc: state.pc,
+                new_pc,
+            },
+        ]
+        .into_iter()
+        .map(|diff| diff.into_state_diff())
+        .collect()
     }
 
     pub fn reg_write_pc_p4(
         state: &UserState<F, T>,
         reg: F::Register,
         val: T::RegData,
-    ) -> InstResult<F, T> {
+    ) -> DiffStack<F, T> {
         UserDiff::reg_write_op(state, state.pc.plus_4(), reg, val)
     }
 
@@ -151,10 +149,10 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> UserDiff<F, T> {
         state: &ProgramState<F, T>,
         addr: T::ByteAddr,
         val: DataEnum,
-    ) -> Result<InstResult<F, T>, MemFault<T::ByteAddr>> {
-        let mut diffs = state.memory_set(addr, val)?.diffs;
+    ) -> Result<DiffStack<F, T>, MemFault<T::ByteAddr>> {
+        let mut diffs = state.memory_set(addr, val)?;
         diffs.push(UserDiff::pc_p4(&state.user_state).into_state_diff());
-        Ok(InstResult::new(diffs))
+        Ok(diffs)
     }
 }
 

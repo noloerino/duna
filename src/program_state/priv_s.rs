@@ -4,7 +4,7 @@
 use super::datatypes::*;
 use super::memory::*;
 use super::phys::PhysMem;
-use super::program::{InstResult, ProgramState, StateDiff};
+use super::program::{DiffStack, ProgramState, StateDiff};
 use crate::arch::*;
 
 /// Contains program state that is visited only to privileged entities, i.e. a kernel thread.
@@ -115,8 +115,8 @@ impl<T: MachineDataWidth> PrivDiff<T> {
         StateDiff::Priv(self)
     }
 
-    pub fn into_inst_result<F: ArchFamily<T>>(self) -> InstResult<F, T> {
-        InstResult::new(vec![self.into_state_diff()])
+    pub fn into_diff_stack<F: ArchFamily<T>>(self) -> DiffStack<F, T> {
+        vec![self.into_state_diff()]
     }
 }
 

@@ -139,7 +139,7 @@ impl<T: MachineDataWidth> UType<T> for Auipc {
         state: &UserState<RiscV<T>, T>,
         rd: RiscVRegister,
         imm: BitStr32,
-    ) -> InstResult<RiscV<T>, T> {
+    ) -> DiffStack<RiscV<T>, T> {
         let pc: T::Signed = state.pc.into();
         UserDiff::reg_write_pc_p4(
             state,
@@ -251,9 +251,9 @@ impl<T: MachineDataWidth> EnvironInst<T> for Ecall {
     }
 
     fn eval(state: &ProgramState<RiscV<T>, T>) -> InstResult<RiscV<T>, T> {
-        let mut diffs = state.handle_trap(&TrapKind::Ecall).diffs;
+        let mut diffs = state.handle_trap(&TrapKind::Ecall)?;
         diffs.push(UserDiff::pc_p4(&state.user_state).into_state_diff());
-        InstResult::new(diffs)
+        Ok(diffs)
     }
 }
 
@@ -267,7 +267,7 @@ impl<T: MachineDataWidth> JType<T> for Jal {
         state: &UserState<RiscV<T>, T>,
         rd: RiscVRegister,
         imm: BitStr32,
-    ) -> InstResult<RiscV<T>, T> {
+    ) -> DiffStack<RiscV<T>, T> {
         let pc: T::Signed = state.pc.into();
         let offs: T::Signed = imm.into();
         UserDiff::reg_write_op(
@@ -295,12 +295,12 @@ impl<T: MachineDataWidth> IType<T> for Jalr {
         imm: BitStr32,
     ) -> InstResult<RiscV<T>, T> {
         let v1: T::Signed = state.user_state.regfile.read(rs1).into();
-        UserDiff::reg_write_op(
+        Ok(UserDiff::reg_write_op(
             &state.user_state,
             (v1.wrapping_add(&imm.into())).into(),
             rd,
             state.user_state.pc.plus_4().into(),
-        )
+        ))
     }
 }
 
@@ -318,8 +318,8 @@ impl<T: MachineDataWidth> ITypeLoad<T> for Lb {
         state: &ProgramState<RiscV<T>, T>,
         addr: T::ByteAddr,
     ) -> Result<MemReadResult<T>, MemFault<T::ByteAddr>> {
-        let (v, inst_result) = state.memory_get(addr, DataWidth::Byte)?;
-        Ok((<T::RegData>::sign_ext_from_byte(v.into()), inst_result))
+        let (v, diffs) = state.memory_get(addr, DataWidth::Byte)?;
+        Ok((<T::RegData>::sign_ext_from_byte(v.into()), diffs))
     }
 }
 
@@ -337,8 +337,8 @@ impl<T: MachineDataWidth> ITypeLoad<T> for Lbu {
         state: &ProgramState<RiscV<T>, T>,
         addr: T::ByteAddr,
     ) -> Result<MemReadResult<T>, MemFault<T::ByteAddr>> {
-        let (v, inst_result) = state.memory_get(addr, DataWidth::Byte)?;
-        Ok((<T::RegData>::zero_pad_from_byte(v.into()), inst_result))
+        let (v, diffs) = state.memory_get(addr, DataWidth::Byte)?;
+        Ok((<T::RegData>::zero_pad_from_byte(v.into()), diffs))
     }
 }
 
@@ -356,8 +356,8 @@ impl ITypeLoad<Width64b> for Ld {
         state: &ProgramState<RiscV<Width64b>, Width64b>,
         addr: ByteAddr64,
     ) -> Result<MemReadResult<Width64b>, MemFault<ByteAddr64>> {
-        let (v, inst_result) = state.memory_get(addr, DataWidth::DoubleWord)?;
-        Ok((v.into(), inst_result))
+        let (v, diffs) = state.memory_get(addr, DataWidth::DoubleWord)?;
+        Ok((v.into(), diffs))
     }
 }
 
@@ -375,8 +375,8 @@ impl<T: MachineDataWidth> ITypeLoad<T> for Lh {
         state: &ProgramState<RiscV<T>, T>,
         addr: T::ByteAddr,
     ) -> Result<MemReadResult<T>, MemFault<T::ByteAddr>> {
-        let (v, inst_result) = state.memory_get(addr, DataWidth::Half)?;
-        Ok((<T::RegData>::sign_ext_from_half(v.into()), inst_result))
+        let (v, diffs) = state.memory_get(addr, DataWidth::Half)?;
+        Ok((<T::RegData>::sign_ext_from_half(v.into()), diffs))
     }
 }
 
@@ -394,8 +394,8 @@ impl<T: MachineDataWidth> ITypeLoad<T> for Lhu {
         state: &ProgramState<RiscV<T>, T>,
         addr: T::ByteAddr,
     ) -> Result<MemReadResult<T>, MemFault<T::ByteAddr>> {
-        let (v, inst_result) = state.memory_get(addr, DataWidth::Half)?;
-        Ok((<T::RegData>::zero_pad_from_half(v.into()), inst_result))
+        let (v, diffs) = state.memory_get(addr, DataWidth::Half)?;
+        Ok((<T::RegData>::zero_pad_from_half(v.into()), diffs))
     }
 }
 
@@ -411,7 +411,7 @@ impl<T: MachineDataWidth> UType<T> for Lui {
         state: &UserState<RiscV<T>, T>,
         rd: RiscVRegister,
         imm: BitStr32,
-    ) -> InstResult<RiscV<T>, T> {
+    ) -> DiffStack<RiscV<T>, T> {
         let imm_val: T::Signed = imm.zero_pad_lsb().into();
         UserDiff::reg_write_pc_p4(state, rd, imm_val.into())
     }
@@ -431,8 +431,8 @@ impl<T: MachineDataWidth> ITypeLoad<T> for Lw {
         state: &ProgramState<RiscV<T>, T>,
         addr: T::ByteAddr,
     ) -> Result<MemReadResult<T>, MemFault<T::ByteAddr>> {
-        let (v, inst_result) = state.memory_get(addr, DataWidth::Word)?;
-        Ok((<T::RegData>::sign_ext_from_word(v.into()), inst_result))
+        let (v, diffs) = state.memory_get(addr, DataWidth::Word)?;
+        Ok((<T::RegData>::sign_ext_from_word(v.into()), diffs))
     }
 }
 
@@ -450,8 +450,8 @@ impl ITypeLoad<Width64b> for Lwu {
         state: &ProgramState<RiscV<Width64b>, Width64b>,
         addr: ByteAddr64,
     ) -> Result<MemReadResult<Width64b>, MemFault<ByteAddr64>> {
-        let (v, inst_result) = state.memory_get(addr, DataWidth::Word)?;
-        Ok((DataDword::sign_ext_from_word(v.into()), inst_result))
+        let (v, diffs) = state.memory_get(addr, DataWidth::Word)?;
+        Ok((DataDword::sign_ext_from_word(v.into()), diffs))
     }
 }
 
@@ -506,7 +506,8 @@ impl<T: MachineDataWidth> SType<T> for Sb {
         let base_addr: T::Signed = state.user_state.regfile.read(rs1).into();
         let byte_addr: T::ByteAddr = (base_addr.wrapping_add(&imm.into())).into();
         let new_byte = state.user_state.regfile.read(rs2).get_byte(0);
-        UserDiff::mem_write_pc_p4(state, byte_addr, DataEnum::Byte(new_byte)).unwrap()
+        UserDiff::mem_write_pc_p4(state, byte_addr, DataEnum::Byte(new_byte))
+            .map_err(TermCause::from)
     }
 }
 
@@ -528,7 +529,8 @@ impl SType<Width64b> for Sd {
         let base_addr: i64 = state.user_state.regfile.read(rs1).into();
         let byte_addr: ByteAddr64 = (base_addr.wrapping_add(imm.into())).into();
         let new_dword = state.user_state.regfile.read(rs2);
-        UserDiff::mem_write_pc_p4(state, byte_addr, DataEnum::DoubleWord(new_dword)).unwrap()
+        UserDiff::mem_write_pc_p4(state, byte_addr, DataEnum::DoubleWord(new_dword))
+            .map_err(TermCause::from)
     }
 }
 
@@ -552,7 +554,8 @@ impl<T: MachineDataWidth> SType<T> for Sh {
         let lower_byte: u8 = state.user_state.regfile.read(rs2).get_byte(0).into();
         let upper_byte: u8 = state.user_state.regfile.read(rs2).get_byte(1).into();
         let full: u16 = ((upper_byte as u16) << 8) | (lower_byte as u16);
-        UserDiff::mem_write_pc_p4(state, byte_addr, DataEnum::Half(full.into())).unwrap()
+        UserDiff::mem_write_pc_p4(state, byte_addr, DataEnum::Half(full.into()))
+            .map_err(TermCause::from)
     }
 }
 
@@ -612,7 +615,7 @@ impl<T: MachineDataWidth> SType<T> for Sw {
             byte_addr,
             DataEnum::Word(state.user_state.regfile.read(rs2).get_lower_word()),
         )
-        .unwrap()
+        .map_err(TermCause::from)
     }
 }
 

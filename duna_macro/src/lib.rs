@@ -172,7 +172,7 @@ fn impl_itype_arith_derive(ast: &syn::DeriveInput) -> TokenStream {
                 imm: BitStr32
             ) -> InstResult<RiscV<T>, T> {
                 let new_rd_val = <#name as ITypeArith<T>>::eval(state.user_state.regfile.read(rs1), imm.into());
-                UserDiff::reg_write_pc_p4(&state.user_state, rd, new_rd_val)
+                Ok(UserDiff::reg_write_pc_p4(&state.user_state, rd, new_rd_val))
             }
         }
     };
@@ -194,7 +194,7 @@ fn impl_itype_arith_64_derive(ast: &syn::DeriveInput) -> TokenStream {
                 imm: BitStr32
             ) -> InstResult<RiscV<Width64b>, Width64b> {
                 let new_rd_val = <#name as ITypeArith<Width64b>>::eval(state.user_state.regfile.read(rs1), imm.into());
-                UserDiff::reg_write_pc_p4(&state.user_state, rd, new_rd_val)
+                Ok(UserDiff::reg_write_pc_p4(&state.user_state, rd, new_rd_val))
             }
         }
     };
@@ -219,12 +219,11 @@ fn impl_itype_load_derive(ast: &syn::DeriveInput) -> TokenStream {
                 let addr: T::RegData = (rs1_val + imm.into()).into();
                 let result = <#name as ITypeLoad<T>>::eval(state, addr.into());
                 match result {
-                    Ok((new_rd_val, mut inst_result)) => {
-                        let mut diffs = inst_result.diffs;
+                    Ok((new_rd_val, mut diffs)) => {
                         diffs.extend(
-                            UserDiff::reg_write_pc_p4(&state.user_state, rd, new_rd_val).diffs
+                            UserDiff::reg_write_pc_p4(&state.user_state, rd, new_rd_val)
                         );
-                        InstResult::new(diffs)
+                        Ok(diffs)
                     },
                     Err(fault) => state.handle_trap(&fault.into()),
                 }
@@ -253,12 +252,11 @@ fn impl_itype_load_64_derive(ast: &syn::DeriveInput) -> TokenStream {
                 let addr: DataDword = (rs1_val + imm_val).into();
                 let result = <#name as ITypeLoad<Width64b>>::eval(state, addr.into());
                 match result {
-                    Ok((new_rd_val, mut inst_result)) => {
-                        let mut diffs = inst_result.diffs;
+                    Ok((new_rd_val, mut diffs)) => {
                         diffs.extend(
-                            UserDiff::reg_write_pc_p4(&state.user_state, rd, new_rd_val).diffs
+                            UserDiff::reg_write_pc_p4(&state.user_state, rd, new_rd_val)
                         );
-                        InstResult::new(diffs)
+                        Ok(diffs)
                     },
                     Err(fault) => state.handle_trap(&fault.into()),
                 }

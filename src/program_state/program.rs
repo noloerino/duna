@@ -153,7 +153,7 @@ pub struct ProgramExecutor<A: Architecture> {
     pub program: Program<A>,
     /// Represents the history of instructions executed by the program.
     /// The diffs in each instruction should be executed in sequence.
-    pub inst_stack: Vec<InstResult<A::Family, A::DataWidth>>,
+    pub inst_stack: Vec<DiffStack<A::Family, A::DataWidth>>,
     /// Represents the index of the next InstResult to be applied.
     /// For example, when this value is 1, the 0th InstResult was applied, and advancing
     /// to the next InstResult would either fail or apply the 1th InstResult.
@@ -205,11 +205,11 @@ impl<A: Architecture> ProgramExecutor<A> {
             }
         } else {
             // Run current inst to completion
-            let inst_result = &self.inst_stack[self.curr_inst_idx];
-            for i in self.curr_step_idx..inst_result.diffs.len() {
+            let curr_diffs = &self.inst_stack[self.curr_inst_idx];
+            for curr_diff in curr_diffs.iter().skip(self.curr_step_idx) {
                 self.program
                     .state
-                    .apply_diff(&inst_result.diffs[i])
+                    .apply_diff(&curr_diff)
                     // TODO
                     .unwrap();
             }
@@ -233,11 +233,11 @@ impl<A: Architecture> ProgramExecutor<A> {
         assert!(self.curr_inst_idx <= self.inst_stack.len());
         if self.curr_step_idx == 0 {
             // Go back one instruction
-            self.curr_step_idx = self.inst_stack[self.curr_inst_idx - 1].diffs.len();
+            self.curr_step_idx = self.inst_stack[self.curr_inst_idx - 1].len();
         }
-        let inst_result = &self.inst_stack[self.curr_inst_idx - 1];
+        let curr_diffs = &self.inst_stack[self.curr_inst_idx - 1];
         for i in (0..self.curr_step_idx).rev() {
-            self.program.state.revert_diff(&inst_result.diffs[i]);
+            self.program.state.revert_diff(&curr_diffs[i]);
         }
         self.curr_inst_idx -= 1;
         self.curr_step_idx = 0;
@@ -289,7 +289,7 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> Default for ProgramState<F, T> {
     }
 }
 
-pub type MemGetResult<F, T> = (DataEnum, InstResult<F, T>);
+pub type MemGetResult<F, T> = (DataEnum, DiffStack<F, T>);
 
 /// TODO put custom types for syscall args
 /// TODO put errno on user state at a thread-local statically known location
@@ -353,7 +353,7 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
             self.phys_state
                 .memory_get(ppn, offs, width)
                 .map_err(|_| MemFault::buserror_at_addr(vaddr))?,
-            InstResult::new(diffs),
+            diffs,
         ))
     }
 
@@ -363,7 +363,7 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
         &self,
         vaddr: T::ByteAddr,
         data: DataEnum,
-    ) -> Result<InstResult<F, T>, MemFault<T::ByteAddr>> {
+    ) -> Result<DiffStack<F, T>, MemFault<T::ByteAddr>> {
         // TODO see memory_get
         let PtLookupData {
             diffs: pt_diffs,
@@ -380,7 +380,7 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
                 .map_err(|_| MemFault::buserror_at_addr(vaddr))?
                 .into_state_diff(),
         );
-        Ok(InstResult::new(diffs))
+        Ok(diffs)
     }
 
     /// Used to inspect memory. Any page table updates will not be performed.
@@ -393,7 +393,7 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
     /// The intermediate diffs are not saved.
     /// Panics if the operation fails.
     pub fn memory_force_set(&mut self, addr: T::ByteAddr, data: DataEnum) {
-        self.apply_inst_result(self.memory_set(addr, data).unwrap())
+        self.apply_diff_stack(self.memory_set(addr, data).unwrap())
             .unwrap();
     }
 
@@ -402,26 +402,26 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
     #[cfg(test)]
     pub fn memory_get_word(&mut self, addr: T::ByteAddr) -> DataWord {
         let (v, diffs) = self.memory_get(addr, DataWidth::Word).unwrap();
-        self.apply_inst_result(diffs).unwrap();
+        self.apply_diff_stack(diffs).unwrap();
         v.into()
     }
 
     #[cfg(test)]
     pub fn memory_set_word(&mut self, addr: T::ByteAddr, val: DataWord) {
-        self.apply_inst_result(self.memory_set(addr, val.kind()).unwrap())
+        self.apply_diff_stack(self.memory_set(addr, val.kind()).unwrap())
             .unwrap();
     }
 
     #[cfg(test)]
     pub fn memory_get_doubleword(&mut self, addr: T::ByteAddr) -> DataDword {
         let (v, diffs) = self.memory_get(addr, DataWidth::DoubleWord).unwrap();
-        self.apply_inst_result(diffs).unwrap();
+        self.apply_diff_stack(diffs).unwrap();
         v.into()
     }
 
     #[cfg(test)]
     pub fn memory_set_doubleword(&mut self, addr: T::ByteAddr, val: DataDword) {
-        self.apply_inst_result(self.memory_set(addr, val.kind()).unwrap())
+        self.apply_diff_stack(self.memory_set(addr, val.kind()).unwrap())
             .unwrap();
     }
 
@@ -431,14 +431,14 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
             TrapKind::MemFault(MemFault {
                 user_vaddr: _,
                 cause,
-            }) => match cause {
+            }) => Ok(match cause {
                 // even though the OS could attempt to map the page,
                 // we requite the user to manually call brk/sbrk/mmap etc.
                 MemFaultCause::PageFault => PrivDiff::Terminate(TermCause::SegFault),
                 MemFaultCause::SegFault => PrivDiff::Terminate(TermCause::SegFault),
                 MemFaultCause::BusError => PrivDiff::Terminate(TermCause::BusError),
             }
-            .into_inst_result(),
+            .into_diff_stack()),
         }
     }
 
@@ -477,11 +477,11 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
         let bytes: Vec<u8> = (0..count)
             .map(|i| {
                 u8::from({
-                    let (val, inst_result) = self
+                    let (val, diffs) = self
                         .memory_get((base_addr + T::usize_to_usgn(i)).into(), DataWidth::Byte)
                         .unwrap();
                     let byte: DataByte = val.into();
-                    v.extend(inst_result.diffs);
+                    v.extend(diffs);
                     byte
                 })
             })
@@ -489,7 +489,7 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
         // Awkward here, but changing type sig makes common case less ergonomic
         v.push(PrivDiff::FileWrite { fd, data: bytes }.into_state_diff());
         v.push(UserDiff::reg_update(&self.user_state, ret_reg, len).into_state_diff());
-        InstResult::new(v)
+        Ok(v)
     }
 
     /// Attempts to move the "program break" up to the indicated location.
@@ -522,7 +522,7 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
                 .into_state_diff(),
             );
             // Update brk, return the old value, and propagate PT state changes
-            InstResult::new(diffs)
+            Ok(diffs)
         } else if let Ok(updates) = self.priv_state.page_table.map_page(addr) {
             let mut diffs: Vec<StateDiff<F, T>> =
                 updates.into_iter().map(|u| u.into_state_diff()).collect();
@@ -541,14 +541,14 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
                 )
                 .into_state_diff(),
             );
-            InstResult::new(diffs)
+            Ok(diffs)
         } else {
-            UserDiff::reg_update(
+            Ok(UserDiff::reg_update(
                 &self.user_state,
                 ret_reg,
                 <T as MachineDataWidth>::isize_to_sgn(-1).into(),
             )
-            .into_inst_result()
+            .into_diff_stack())
         }
     }
 
@@ -557,7 +557,7 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
     fn syscall_exit(&self, code: T::RegData) -> InstResult<F, T> {
         // downcast to u32 no matter what
         let val: T::Unsigned = code.into();
-        PrivDiff::Terminate(TermCause::Exit(T::usgn_to_usize(val) as u32)).into_inst_result()
+        Ok(PrivDiff::Terminate(TermCause::Exit(T::usgn_to_usize(val) as u32)).into_diff_stack())
     }
 
     /// Handles an unknown syscall.
@@ -579,27 +579,24 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
         }
     }
 
-    pub fn apply_inst(&mut self, inst: &F::Instruction) -> Result<InstResult<F, T>, TermCause> {
-        self.apply_inst_result(inst.apply(self))
+    pub fn apply_inst(&mut self, inst: &F::Instruction) -> InstResult<F, T> {
+        self.apply_diff_stack(inst.apply(self)?)
     }
 
     /// Asserts that applying the instruction does not fail.
     #[cfg(test)]
     pub fn apply_inst_test(&mut self, inst: &F::Instruction) {
-        self.apply_inst_result(inst.apply(self)).unwrap();
+        self.apply_diff_stack(inst.apply(self).unwrap()).unwrap();
     }
 
     /// Performs the provided instruction. Returns the applied instruction for ownership reasons.
     /// TODO maybe there's a bug here because if the inst terminates, what happens to the
     /// popped instresult?
-    pub fn apply_inst_result(
-        &mut self,
-        inst_result: InstResult<F, T>,
-    ) -> Result<InstResult<F, T>, TermCause> {
-        for diff in &inst_result.diffs {
+    pub fn apply_diff_stack(&mut self, diffs: DiffStack<F, T>) -> InstResult<F, T> {
+        for diff in &diffs {
             self.apply_diff(&diff)?;
         }
-        Ok(inst_result)
+        Ok(diffs)
     }
 
     pub fn apply_diff(&mut self, diff: &StateDiff<F, T>) -> Result<(), TermCause> {
@@ -660,20 +657,11 @@ pub struct RegDataChange<T: MachineDataWidth> {
     pub new_value: T::RegData,
 }
 
+/// Represents a sequence of diffs produced by a single insruction.
+pub type DiffStack<F, T> = Vec<StateDiff<F, T>>;
+
 /// Represents the result of an instruction in terms of its actions on the machine state.
-pub struct InstResult<F: ArchFamily<T>, T: MachineDataWidth> {
-    pub diffs: Vec<StateDiff<F, T>>,
-}
-
-impl<F: ArchFamily<T>, T: MachineDataWidth> InstResult<F, T> {
-    pub fn new(diffs: Vec<StateDiff<F, T>>) -> Self {
-        InstResult { diffs }
-    }
-
-    pub fn add(mut self, diff: StateDiff<F, T>) {
-        self.diffs.push(diff);
-    }
-}
+pub type InstResult<F, T> = Result<DiffStack<F, T>, TermCause>;
 
 /// Represents an individual atomic change in the state of the machine.
 ///

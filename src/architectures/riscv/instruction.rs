@@ -189,7 +189,7 @@ pub trait RType<T: MachineDataWidth> {
                 let user_state = &state.user_state;
                 let new_rd_val =
                     Self::eval(user_state.regfile.read(rs1), user_state.regfile.read(rs2));
-                UserDiff::reg_write_pc_p4(user_state, rd, new_rd_val)
+                Ok(UserDiff::reg_write_pc_p4(user_state, rd, new_rd_val))
             }),
             data: RiscVInstData::R {
                 fields: Self::inst_fields(),
@@ -244,7 +244,7 @@ pub(crate) trait ITypeArith<T: MachineDataWidth>: IType<T> {
     ) -> <T as MachineDataWidth>::RegData;
 }
 
-pub(crate) type MemReadResult<T> = (<T as MachineDataWidth>::RegData, InstResult<RiscV<T>, T>);
+pub(crate) type MemReadResult<T> = (<T as MachineDataWidth>::RegData, DiffStack<RiscV<T>, T>);
 
 pub(crate) trait ITypeLoad<T: MachineDataWidth>: IType<T> {
     fn inst_fields() -> IInstFields;
@@ -311,9 +311,9 @@ pub trait BType<T: MachineDataWidth> {
                     let pc: <T as MachineDataWidth>::Signed = user_state.pc.into();
                     let offs: <T as MachineDataWidth>::Signed = imm_vec.into();
                     let new_pc: <T as MachineDataWidth>::Signed = pc + offs;
-                    UserDiff::pc_update_op(user_state, new_pc.into())
+                    Ok(UserDiff::pc_update_op(user_state, new_pc.into()))
                 } else {
-                    UserDiff::pc_p4(user_state).into_inst_result()
+                    Ok(UserDiff::pc_p4(user_state).into_diff_stack())
                 }
             }),
             data: RiscVInstData::B {
@@ -338,7 +338,7 @@ pub trait UType<T: MachineDataWidth> {
     fn new(rd: RiscVRegister, imm: <T as MachineDataWidth>::RegData) -> RiscVInst<T> {
         let imm_vec = imm.to_bit_str(20);
         RiscVInst {
-            eval: Box::new(move |state| Self::eval(&state.user_state, rd, imm_vec)),
+            eval: Box::new(move |state| Ok(Self::eval(&state.user_state, rd, imm_vec))),
             data: RiscVInstData::U {
                 fields: Self::inst_fields(),
                 rd,
@@ -352,14 +352,14 @@ pub trait UType<T: MachineDataWidth> {
         state: &UserState<RiscV<T>, T>,
         rd: RiscVRegister,
         imm: BitStr32,
-    ) -> InstResult<RiscV<T>, T>;
+    ) -> DiffStack<RiscV<T>, T>;
 }
 
 pub trait JType<T: MachineDataWidth> {
     fn new(rd: RiscVRegister, imm: <T as MachineDataWidth>::RegData) -> RiscVInst<T> {
         let imm_vec = imm.to_bit_str(20);
         RiscVInst {
-            eval: Box::new(move |state| Self::eval(&state.user_state, rd, imm_vec)),
+            eval: Box::new(move |state| Ok(Self::eval(&state.user_state, rd, imm_vec))),
             data: RiscVInstData::J {
                 fields: Self::inst_fields(),
                 rd,
@@ -372,5 +372,5 @@ pub trait JType<T: MachineDataWidth> {
         state: &UserState<RiscV<T>, T>,
         rd: RiscVRegister,
         imm: BitStr32,
-    ) -> InstResult<RiscV<T>, T>;
+    ) -> DiffStack<RiscV<T>, T>;
 }
