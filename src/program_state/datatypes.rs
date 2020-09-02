@@ -1,6 +1,7 @@
 use crate::arch::RegSize;
 use duna_macro::*;
 use num_traits::cast;
+use std::cmp::{max, min};
 use std::fmt;
 use std::hash::Hash;
 use std::num::Wrapping;
@@ -35,10 +36,9 @@ impl BitStr32 {
     }
 
     /// Extracts a the bits between start and end, inclusive.
-    pub const fn slice(self, start: u8, end: u8) -> BitStr32 {
-        // std max/min aren't yet stable as const as of 1.46.0
-        let high = if start > end { start } else { end };
-        let low = if start > end { end } else { start };
+    pub fn slice(self, start: u8, end: u8) -> BitStr32 {
+        let high = max(start, end);
+        let low = min(start, end);
         let len = high - low + 1;
         BitStr32::new(self.value >> low as u32, len)
     }
@@ -55,13 +55,13 @@ impl BitStr32 {
     }
 
     /// Sign extends the value and stores it in a DataWord.
-    pub const fn to_sgn_data_word(self) -> DataWord {
+    pub fn to_sgn_data_word(self) -> DataWord {
         // Prevent overflow
         if self.len == 32 {
-            return DataWord::new(self.value);
+            return DataWord::from(self.value);
         }
         let sign_mask = u32::max_value() << self.len as u32;
-        DataWord::new(if self.index(self.len - 1).value == 1 {
+        DataWord::from(if self.index(self.len - 1).value == 1 {
             self.value | sign_mask
         } else {
             self.value
@@ -133,7 +133,7 @@ pub enum DataEnum {
 }
 
 impl DataEnum {
-    pub const fn width(self) -> DataWidth {
+    pub fn width(self) -> DataWidth {
         match self {
             DataEnum::Byte(_) => DataWidth::Byte,
             DataEnum::Half(_) => DataWidth::Half,
@@ -188,7 +188,7 @@ pub enum DataEnumDiff {
 }
 
 impl DataEnumDiff {
-    pub const fn old_val(self) -> DataEnum {
+    pub fn old_val(self) -> DataEnum {
         use DataEnumDiff::*;
         match self {
             Byte { old, .. } => DataEnum::Byte(old),
@@ -198,7 +198,7 @@ impl DataEnumDiff {
         }
     }
 
-    pub const fn new_val(self) -> DataEnum {
+    pub fn new_val(self) -> DataEnum {
         use DataEnumDiff::*;
         match self {
             Byte { new, .. } => DataEnum::Byte(new),
@@ -232,16 +232,18 @@ impl Data for DataDword {
 }
 
 impl DataDword {
-    const fn new(value: u64) -> DataDword {
+    fn new(value: u64) -> DataDword {
         DataDword { value }
     }
 
-    pub const fn from_words(lower: DataWord, upper: DataWord) -> DataDword {
-        DataDword::new(((upper.value as u64) << 32) | (lower.value as u64))
+    pub fn from_words(lower: DataWord, upper: DataWord) -> DataDword {
+        DataDword {
+            value: ((upper.value as u64) << 32) | (lower.value as u64),
+        }
     }
 
-    pub const fn get_upper_word(self) -> DataWord {
-        DataWord::new((self.value >> 32) as u32)
+    pub fn get_upper_word(self) -> DataWord {
+        DataWord::from((self.value >> 32) as u32)
     }
 }
 
@@ -348,7 +350,7 @@ impl Data for DataWord {
 }
 
 impl DataWord {
-    const fn new(value: u32) -> DataWord {
+    fn new(value: u32) -> DataWord {
         DataWord { value }
     }
 }
@@ -574,7 +576,7 @@ pub struct ByteAddr64 {
 }
 
 impl ByteAddr64 {
-    const fn new(value: u64) -> ByteAddr64 {
+    fn new(value: u64) -> ByteAddr64 {
         ByteAddr64 { value }
     }
 }
@@ -625,7 +627,7 @@ pub struct ByteAddr32 {
 }
 
 impl ByteAddr32 {
-    const fn new(value: u32) -> ByteAddr32 {
+    fn new(value: u32) -> ByteAddr32 {
         ByteAddr32 { value }
     }
 }
