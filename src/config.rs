@@ -29,7 +29,7 @@ impl Default for SegmentStarts {
         // TODO configure boundaries for 64 vs 32-bit
         SegmentStarts {
             text_start: 0x1000_0000,
-            stack_start: 0x7FFF_FFFF0,
+            stack_start: 0x7FFF_FFF0,
             data_start: 0x2000_0000,
         }
     }

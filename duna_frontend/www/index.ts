@@ -1,5 +1,5 @@
 import { init, simulate } from "duna_frontend";
-import { memory } from "duna_frontend/duna_frontend_bg";
+import { memory } from "duna_frontend/duna_frontend_bg.wasm";
 
 init();
 
