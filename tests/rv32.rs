@@ -227,7 +227,7 @@ fn test_aligned_directive_labels() {
     assert_eq!(u32::from(program.state.regfile_read(A6)), 0x9876_5432);
 }
 
-/// Tests that labels can start with a dot
+/// Tests that labels can start with a dot.
 #[test]
 fn test_dot_label() {
     let mut program = program_from_file("dot_label.s");
@@ -238,4 +238,21 @@ fn test_dot_label() {
         String::from_utf8(program.state.get_stdout().to_vec()),
         Ok("hello world\n".to_string())
     );
+}
+
+/// Tests the behavior of the global main label.
+#[test]
+fn test_global_main() {
+    check_a0_at_end("global_main.s", 100);
+}
+
+/// Tests that a main label declared in data is illegal.
+#[test]
+fn test_bad_data_main() {
+    let report = err_report_from_files("bad_data_main.s", vec![]);
+    let errs = report.get_errs();
+    assert_eq!(errs.len(), 1);
+    let report_string = format!("{:?}", report);
+    assert!(report_string.contains("bad_data_main.s:5:0"));
+    assert!(report_string.contains("main"));
 }

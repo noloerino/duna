@@ -34,16 +34,17 @@ impl<A: Architecture> Program<A> {
     /// Initializes a new program instance from the provided instructions.
     ///
     /// The instructions are loaded into memory at the start of the instruction section,
-    /// which defaults to TEXT_START to avoid any accidental null pointer derefs.
+    /// which is specified in SEGMENT_STARTS.
     ///
-    /// The stack pointer is initialized to STACK_START.
+    /// The program counter is initialized to point to the instruction specified by START_INST_IDX.
     ///
-    /// The data given in SectionStore is used to initialize the data and rodata sections.
+    /// The data given in SECTIONS is used to initialize the data and rodata sections.
     ///
     /// Until paged memory is implemented, rodata is placed sequentially with data, and
     /// no guarantees on read-onliness are enforced.
     pub fn new(
         insts: Vec<<A::Family as ArchFamily<A::DataWidth>>::Instruction>,
+        start_inst_idx: usize,
         segment_starts: SegmentStarts,
         sections: SectionStore,
         pg_count: usize,
@@ -66,7 +67,9 @@ impl<A: Architecture> Program<A> {
         let sp = <A::ProgramBehavior as ProgramBehavior<A::Family, A::DataWidth>>::sp_register();
         // Initialize SP and PC
         user_state.regfile.set(sp, stack_start.into());
-        user_state.pc = text_start;
+        user_state.pc = (<A::DataWidth as MachineDataWidth>::Unsigned::from(text_start)
+            + <A::DataWidth as MachineDataWidth>::usize_to_usgn(4 * start_inst_idx))
+        .into();
         // store instructions
         let mut next_addr: <A::DataWidth as MachineDataWidth>::ByteAddr = user_state.pc;
         for inst in &insts {

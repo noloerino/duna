@@ -377,9 +377,24 @@ impl<A: Architecture> UnlinkedProgram<A> {
                 },
             )
             .collect();
+        // TODO configure _start`
+        // For now, the initial PC is set to the location of the global main label
+        // or else the location of the first instruction
+        let main_inst_idx: usize = if let Some(tgt) = self.defined_global_labels.get("main") {
+            match *tgt {
+                LabelTarget::Inst { idx, .. } => idx,
+                LabelTarget::Data { location, .. } => {
+                    reporter.add_error(ParseError::bad_main_def(&location));
+                    0
+                }
+            }
+        } else {
+            0
+        };
         if reporter.is_empty() {
             Ok(Program::<A>::new(
                 insts,
+                main_inst_idx,
                 config.segment_starts,
                 self.sections,
                 config.mem_config.phys_pn_bits,

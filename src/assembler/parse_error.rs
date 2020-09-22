@@ -177,6 +177,8 @@ enum ParseErrorType {
     RedefinedLabelRef(String),
     /// A referenced label was not defined by any file.
     UndefinedLabelRef(String),
+    /// A global main label was inappropriately defined.
+    BadMainDef,
 }
 
 impl fmt::Display for ParseErrorType {
@@ -257,6 +259,7 @@ impl fmt::Display for ParseErrorType {
             UndefinedLabelRef(label) => {
                 write!(f, "label '{}' was declared but never defined", label)
             }
+            BadMainDef => write!(f, "the 'main' label must be used to refer to code"),
         }
     }
 }
@@ -417,6 +420,13 @@ impl ParseError {
         ParseError {
             errloc: ErrMetadata::new(&label.location),
             tpe: ParseErrorType::UndefinedLabelRef(label.target.clone()),
+        }
+    }
+
+    pub fn bad_main_def(loc: &Location) -> Self {
+        ParseError {
+            errloc: ErrMetadata::new(loc),
+            tpe: ParseErrorType::BadMainDef,
         }
     }
 }
