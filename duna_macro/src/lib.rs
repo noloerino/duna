@@ -50,6 +50,8 @@ pub fn itype_load_64_derive(input: TokenStream) -> TokenStream {
 fn impl_convert_int64_derive(ast: &syn::DeriveInput) -> TokenStream {
     let name = &ast.ident;
     let gen = quote! {
+        use std::num::Wrapping;
+
         impl From<u64> for #name {
             fn from(value: u64) -> #name {
                 #name::new(value)
