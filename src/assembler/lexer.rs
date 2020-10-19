@@ -412,13 +412,7 @@ impl<'a> LineLexer<'a> {
             toks
         } else {
             toks.into_iter()
-                .filter(|tok| {
-                    if let TokenType::LabelDef(..) = tok.data {
-                        true
-                    } else {
-                        false
-                    }
-                })
+                .filter(|tok| matches!(tok.data, TokenType::LabelDef(..)))
                 .collect()
         }
     }
