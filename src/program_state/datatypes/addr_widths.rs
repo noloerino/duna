@@ -1,10 +1,23 @@
 use super::*;
+use crate::arch::RegSize;
 use duna_macro::{ConvertInt32, ConvertInt64};
 use num_traits::cast;
+use num_traits::int;
+use num_traits::sign;
 use std::fmt;
 use std::hash::Hash;
 
 pub trait ByteAddress: Clone + Copy + Sized + fmt::Debug + fmt::Display + 'static {
+    type Signed: int::PrimInt + sign::Signed;
+    type Unsigned: int::PrimInt + sign::Unsigned;
+    type RegData: RegSize;
+
+    fn as_unsigned(self) -> Self::Unsigned;
+
+    fn as_signed(self) -> Self::Signed;
+
+    fn as_reg_data(self) -> Self::RegData;
+
     type WordAddress: Hash + Eq + Copy + Clone + cast::AsPrimitive<usize>;
 
     /// Gets the number of bits in this address type.
@@ -45,6 +58,22 @@ impl ByteAddr64 {
 }
 
 impl ByteAddress for ByteAddr64 {
+    type Signed = i64;
+    type Unsigned = u64;
+    type RegData = DataDword;
+
+    fn as_unsigned(self) -> Self::Unsigned {
+        u64::from(self)
+    }
+
+    fn as_signed(self) -> Self::Signed {
+        i64::from(self)
+    }
+
+    fn as_reg_data(self) -> Self::RegData {
+        DataDword::from(self)
+    }
+
     type WordAddress = u64;
 
     fn bitlen() -> usize {
@@ -96,6 +125,22 @@ impl ByteAddr32 {
 }
 
 impl ByteAddress for ByteAddr32 {
+    type Signed = i32;
+    type Unsigned = u32;
+    type RegData = DataWord;
+
+    fn as_unsigned(self) -> Self::Unsigned {
+        u32::from(self)
+    }
+
+    fn as_signed(self) -> Self::Signed {
+        i32::from(self)
+    }
+
+    fn as_reg_data(self) -> Self::RegData {
+        DataWord::from(self)
+    }
+
     type WordAddress = u32;
 
     fn bitlen() -> usize {

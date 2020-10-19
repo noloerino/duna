@@ -27,6 +27,10 @@ pub trait ArchFamily<T: MachineDataWidth>: Sized {
 /// Any size must implement conversion from i64 and BitStr32 in order to accomodate immediates
 /// produced from parsing.
 pub trait RegSize: Copy + Clone + PartialEq + fmt::Display + From<BitStr32> + From<i64> {
+    type Signed: int::PrimInt + sign::Signed;
+    type Unsigned: int::PrimInt + sign::Unsigned;
+    type ByteAddr: ByteAddress;
+
     fn zero() -> Self;
 
     /// Returns a copy of the value with the ith byte set to val.
@@ -37,6 +41,10 @@ pub trait RegSize: Copy + Clone + PartialEq + fmt::Display + From<BitStr32> + Fr
 
     /// Converts this into a bit string, truncating if necessary.
     fn to_bit_str(self, len: u8) -> BitStr32;
+
+    fn as_byte_addr(self) -> Self::ByteAddr;
+    fn as_signed(self) -> Self::Signed;
+    fn as_unsigned(self) -> Self::Unsigned;
 
     fn zero_pad_from_byte(b: DataByte) -> Self;
     fn sign_ext_from_byte(b: DataByte) -> Self;

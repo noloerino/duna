@@ -36,6 +36,22 @@ impl DataDword {
 }
 
 impl RegSize for DataDword {
+    type Signed = i64;
+    type Unsigned = u64;
+    type ByteAddr = ByteAddr64;
+
+    fn as_byte_addr(self) -> Self::ByteAddr {
+        ByteAddr64::from(self)
+    }
+
+    fn as_signed(self) -> Self::Signed {
+        i64::from(self)
+    }
+
+    fn as_unsigned(self) -> Self::Unsigned {
+        u64::from(self)
+    }
+
     fn zero() -> DataDword {
         DataDword { value: 0 }
     }
@@ -144,6 +160,22 @@ impl DataWord {
 }
 
 impl RegSize for DataWord {
+    type Signed = i32;
+    type Unsigned = u32;
+    type ByteAddr = ByteAddr32;
+
+    fn as_byte_addr(self) -> Self::ByteAddr {
+        ByteAddr32::from(self)
+    }
+
+    fn as_signed(self) -> Self::Signed {
+        i32::from(self)
+    }
+
+    fn as_unsigned(self) -> Self::Unsigned {
+        u32::from(self)
+    }
+
     /// Returns a DataWord of zero.
     fn zero() -> DataWord {
         DataWord { value: 0 }
