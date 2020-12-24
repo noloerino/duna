@@ -1,4 +1,4 @@
-use crate::arch::*;
+use crate::program_state::*;
 use std::fmt;
 use std::fmt::Display;
 use std::marker::PhantomData;
@@ -11,33 +11,33 @@ pub trait IRegister: Copy + Clone + PartialEq + From<u8> + fmt::Debug + fmt::Dis
 }
 
 const REGFILE_SIZE: usize = 32;
-pub struct RegFile<R: IRegister, T: MachineDataWidth> {
-    store: [T::RegData; REGFILE_SIZE],
+pub struct RegFile<R: IRegister, S: Data> {
+    store: [RegValue<S>; REGFILE_SIZE],
     _phantom: PhantomData<R>,
 }
 
-impl<R: IRegister, T: MachineDataWidth> RegFile<R, T> {
-    pub(in crate::program_state) fn new() -> RegFile<R, T> {
+impl<R: IRegister, S: Data> RegFile<R, S> {
+    pub(in crate::program_state) fn new() -> RegFile<R, S> {
         RegFile {
-            store: [T::RegData::zero(); REGFILE_SIZE],
+            store: [RegValue::<S>::zero(); REGFILE_SIZE],
             _phantom: PhantomData,
         }
     }
 
-    pub fn set(&mut self, rd: R, val: T::RegData) {
+    pub fn set(&mut self, rd: R, val: RegValue<S>) {
         let idx = rd.to_usize();
         if idx != 0 {
             self.store[rd.to_usize()] = val;
         }
     }
 
-    pub fn read(&self, rs: R) -> T::RegData {
+    pub fn read(&self, rs: R) -> RegValue<S> {
         self.store[rs.to_usize()]
     }
 }
 
 /// Dumps the contents of the register file.
-impl<R: IRegister, T: MachineDataWidth> Display for RegFile<R, T> {
+impl<R: IRegister, S: Data> Display for RegFile<R, S> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for i in 0..REGFILE_SIZE {
             let reg: R = (i as u8).into();

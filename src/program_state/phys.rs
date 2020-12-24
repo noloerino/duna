@@ -32,7 +32,7 @@ pub enum PhysDiff {
 }
 
 impl PhysDiff {
-    pub fn into_state_diff<F: ArchFamily<T>, T: MachineDataWidth>(self) -> StateDiff<F, T> {
+    pub fn into_state_diff<F: ArchFamily<S>, S: Data>(self) -> StateDiff<F, S> {
         StateDiff::Phys(self)
     }
 }
@@ -150,7 +150,7 @@ impl PhysState {
                         .phys_mem
                         .get(&ppn)
                         .map(|page| page.get_word(offs))
-                        .unwrap_or_else(DataWord::zero),
+                        .unwrap_or_else(DataLword::zero),
                     new,
                 },
                 DataEnum::DoubleWord(new) => DoubleWord {
@@ -249,7 +249,7 @@ impl MemPage {
         }
     }
 
-    pub(crate) fn set_word(&mut self, offs: PageOffs, value: DataWord) {
+    pub(crate) fn set_word(&mut self, offs: PageOffs, value: DataLword) {
         let word: u32 = value.into();
         match self.endianness {
             Endianness::Big => {
@@ -263,12 +263,12 @@ impl MemPage {
         }
     }
 
-    pub(crate) fn get_word(&self, offs: PageOffs) -> DataWord {
+    pub(crate) fn get_word(&self, offs: PageOffs) -> DataLword {
         let lower: u16 = self.get_half(offs).into();
         let upper: u16 = self.get_half(offs + 2).into();
         match self.endianness {
-            Endianness::Big => DataWord::from(((lower as u32) << 16) | (upper as u32)),
-            Endianness::Little => DataWord::from(((upper as u32) << 16) | (lower as u32)),
+            Endianness::Big => DataLword::from(((lower as u32) << 16) | (upper as u32)),
+            Endianness::Little => DataLword::from(((upper as u32) << 16) | (lower as u32)),
         }
     }
 

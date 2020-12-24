@@ -13,10 +13,9 @@ use num_traits::ops::wrapping::WrappingSub;
 use std::str::FromStr;
 
 /// Defines architecture-specific behavior that defines the execution of a program.
-pub trait ProgramBehavior<F, T>
+pub trait ProgramBehavior<F, S>
 where
-    F: ArchFamily<T>,
-    T: MachineDataWidth,
+    F: ArchFamily<S>,
 {
     /// Returns the register that holds the stack pointer.
     fn sp_register() -> F::Register;
@@ -27,7 +26,7 @@ where
 pub struct Program<A: Architecture> {
     pub insts: Vec<<A::Family as ArchFamily<A::DataWidth>>::Instruction>,
     pub state: ProgramState<A::Family, A::DataWidth>,
-    text_start: <A::DataWidth as MachineDataWidth>::ByteAddr,
+    text_start: ByteAddrValue<A::DataWidth>,
 }
 
 impl<A: Architecture> Program<A> {
@@ -49,13 +48,11 @@ impl<A: Architecture> Program<A> {
         sections: SectionStore,
         pg_count: usize,
         pg_ofs_len: usize,
-        page_table: Box<dyn PageTable<<A::DataWidth as MachineDataWidth>::ByteAddr>>,
+        page_table: Box<dyn PageTable<A::DataWidth>>,
     ) -> Self {
         let text_start = segment_starts.text::<A::DataWidth>();
-        let stack_start: <A::DataWidth as MachineDataWidth>::ByteAddr =
-            segment_starts.stack::<A::DataWidth>();
-        let data_start: <A::DataWidth as MachineDataWidth>::ByteAddr =
-            segment_starts.data::<A::DataWidth>();
+        let stack_start: ByteAddrValue<A::DataWidth> = segment_starts.stack::<A::DataWidth>();
+        let data_start: ByteAddrValue<A::DataWidth> = segment_starts.data::<A::DataWidth>();
         let mut state = ProgramState::new(pg_count, pg_ofs_len, page_table);
         let mem = &mut state.phys_state.phys_mem;
         let pt = &mut state.priv_state.page_table;
@@ -67,25 +64,25 @@ impl<A: Architecture> Program<A> {
         let sp = <A::ProgramBehavior as ProgramBehavior<A::Family, A::DataWidth>>::sp_register();
         // Initialize SP and PC
         user_state.regfile.set(sp, stack_start.into());
-        user_state.pc = (<A::DataWidth as MachineDataWidth>::Unsigned::from(text_start)
-            + <A::DataWidth as MachineDataWidth>::usize_to_usgn(4 * start_inst_idx))
+        user_state.pc = (UnsignedValue::<A::DataWidth>::from(text_start).raw()
+            + (UnsignedValue::<A::DataWidth>::from4 * start_inst_idx).raw())
         .into();
         // store instructions
-        let mut next_addr: <A::DataWidth as MachineDataWidth>::ByteAddr = user_state.pc;
+        let mut next_addr: ByteAddrValue<A::DataWidth> = user_state.pc;
         for inst in &insts {
             state.memory_force_set(
                 next_addr,
-                DataEnum::Word(DataWord::from(inst.to_machine_code())),
+                DataEnum::Word(DataLword::from(inst.to_machine_code())),
             );
             next_addr = next_addr.plus_4()
         }
         // store data
         let all_data = sections.data.into_iter().chain(sections.rodata.into_iter());
-        let data_start_usize = <A::DataWidth as MachineDataWidth>::usgn_to_usize(data_start.into());
+        let data_start_usize = data_start.as_unsigned().raw() as usize;
         let mut end_of_data: usize = data_start_usize;
         for (offs, byte) in all_data.enumerate() {
-            let addr: <A::DataWidth as MachineDataWidth>::ByteAddr =
-                <A::DataWidth as MachineDataWidth>::usize_to_usgn(data_start_usize + offs).into();
+            let addr: ByteAddrValue<A::DataWidth> =
+                UnsignedValue::<A::DataWidth>::from(data_start_usize + offs).into();
             state.memory_force_set(addr, DataEnum::Byte(byte.into()));
             end_of_data = data_start_usize + offs;
         }
@@ -97,7 +94,7 @@ impl<A: Architecture> Program<A> {
             .page_table
             .force_map_page(
                 &mut state.phys_state.phys_mem,
-                <A::DataWidth as MachineDataWidth>::usize_to_usgn(heap_start).into(),
+                UnsignedValue::<A::DataWidth>::from(heap_start).into(),
             )
             .unwrap();
         Program {
@@ -133,12 +130,11 @@ impl<A: Architecture> Program<A> {
     }
 
     fn get_pc_word_index(&self) -> usize {
-        let pc_start: <A::DataWidth as MachineDataWidth>::ByteAddr = self.text_start;
+        let pc_start: ByteAddrValue<A::DataWidth> = self.text_start;
         // all this logic calculates the next address (very verbose due to generic types)
-        let curr_pc: <A::DataWidth as MachineDataWidth>::Unsigned = self.state.user_state.pc.into();
-        let orig_pc: <A::DataWidth as MachineDataWidth>::Unsigned = pc_start.into();
-        let offs: <A::DataWidth as MachineDataWidth>::ByteAddr =
-            curr_pc.wrapping_sub(&orig_pc).into();
+        let curr_pc: UnsignedValue<A::DataWidth> = self.state.user_state.pc.into();
+        let orig_pc: UnsignedValue<A::DataWidth> = pc_start.into();
+        let offs: ByteAddrValue<A::DataWidth> = curr_pc.wrapping_sub(&orig_pc).into();
         let idx: usize = offs.to_word_address().as_();
         idx
     }
@@ -200,8 +196,7 @@ impl<A: Architecture> ProgramExecutor<A> {
             } else {
                 let a0 =
                     <A::ProgramBehavior as ProgramBehavior<A::Family, A::DataWidth>>::return_register();
-                let a0_val: <A::DataWidth as MachineDataWidth>::Unsigned =
-                    program.state.regfile_read(a0).into();
+                let a0_val: UnsignedValue<A::DataWidth> = program.state.regfile_read(a0).into();
                 // For a non-abnormal exit, downcast to u8 and set upper bit to 0
                 let val_u8 = a0_val.as_();
                 Some(val_u8 & 0b0111_1111)
@@ -271,32 +266,31 @@ impl<A: Architecture> ProgramExecutor<A> {
         }
         let a0 =
             <A::ProgramBehavior as ProgramBehavior<A::Family, A::DataWidth>>::return_register();
-        let a0_val: <A::DataWidth as MachineDataWidth>::Unsigned =
-            program.state.regfile_read(a0).into();
+        let a0_val: UnsignedValue<A::DataWidth> = program.state.regfile_read(a0).into();
         // For a non-abnormal exit, downcast to u8 and set upper bit to 0
         let val_u8 = a0_val.as_();
         val_u8 & 0b0111_1111
     }
 }
 
-pub struct ProgramState<F: ArchFamily<T>, T: MachineDataWidth> {
-    pub(crate) user_state: UserState<F, T>,
-    pub(crate) priv_state: PrivState<T>,
+pub struct ProgramState<F: ArchFamily<S>, S: Data> {
+    pub(crate) user_state: UserState<F, S>,
+    pub(crate) priv_state: PrivState<S>,
     pub(crate) phys_state: PhysState,
 }
 
-impl<F: ArchFamily<T>, T: MachineDataWidth> Default for ProgramState<F, T> {
+impl<F: ArchFamily<S>, S: Data> Default for ProgramState<F, S> {
     fn default() -> Self {
         // Pray that we never test sbrk when we use default
         ProgramState::new(1, 64, Box::new(AllMappedPt::new()))
     }
 }
 
-pub type MemGetResult<F, T> = (DataEnum, DiffStack<F, T>);
+pub type MemGetResult<F, S> = (DataEnum, DiffStack<F, S>);
 
 /// TODO put custom types for syscall args
 /// TODO put errno on user state at a thread-local statically known location
-impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
+impl<F: ArchFamily<S>, S: Data> ProgramState<F, S> {
     pub fn get_stdout(&self) -> &[u8] {
         self.priv_state.stdout.as_slice()
     }
@@ -310,27 +304,27 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
         eprint!("{}", string);
     }
 
-    pub fn get_user_pc(&self) -> T::ByteAddr {
+    pub fn get_user_pc(&self) -> ByteAddrValue<S> {
         self.user_state.pc
     }
 
-    pub fn set_user_pc(&mut self, addr: T::ByteAddr) {
+    pub fn set_user_pc(&mut self, addr: ByteAddrValue<S>) {
         self.user_state.pc = addr
     }
 
-    pub fn regfile_read(&self, reg: F::Register) -> T::RegData {
+    pub fn regfile_read(&self, reg: F::Register) -> RegValue<S> {
         self.user_state.regfile.read(reg)
     }
 
-    pub fn regfile_set(&mut self, reg: F::Register, val: T::RegData) {
+    pub fn regfile_set(&mut self, reg: F::Register, val: RegValue<S>) {
         self.user_state.regfile.set(reg, val);
     }
 
-    pub fn regfile(&mut self) -> &RegFile<F::Register, T> {
+    pub fn regfile(&mut self) -> &RegFile<F::Register, S> {
         &self.user_state.regfile
     }
 
-    pub fn get_pc(&mut self) -> T::ByteAddr {
+    pub fn get_pc(&mut self) -> ByteAddrValue<S> {
         self.user_state.pc
     }
 
@@ -338,9 +332,9 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
     /// Returns the sequence of state updates on success, or a page fault on failure.
     pub fn memory_get(
         &self,
-        vaddr: T::ByteAddr,
+        vaddr: ByteAddrValue<S>,
         width: DataWidth,
-    ) -> Result<MemGetResult<F, T>, MemFault<T::ByteAddr>> {
+    ) -> Result<MemGetResult<F, S>, MemFault<ByteAddrValue<S>>> {
         // TODO how do we handle lookups spanning multiple pages? how do we handle a PT update that
         // failed on memory access due to an alignment error?
         let PtLookupData {
@@ -348,7 +342,7 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
             ppn,
             offs,
         } = self.priv_state.page_table.lookup_page(vaddr)?;
-        let diffs: Vec<StateDiff<F, T>> = pt_diffs
+        let diffs: Vec<StateDiff<F, S>> = pt_diffs
             .into_iter()
             .map(PtUpdate::into_state_diff)
             .collect();
@@ -364,16 +358,16 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
     /// Returns the sequence of state updates on success, or a page fault on failure.
     pub fn memory_set(
         &self,
-        vaddr: T::ByteAddr,
+        vaddr: ByteAddrValue<S>,
         data: DataEnum,
-    ) -> Result<DiffStack<F, T>, MemFault<T::ByteAddr>> {
+    ) -> Result<DiffStack<F, S>, MemFault<S>> {
         // TODO see memory_get
         let PtLookupData {
             diffs: pt_diffs,
             ppn,
             offs,
         } = self.priv_state.page_table.lookup_page(vaddr)?;
-        let mut diffs: Vec<StateDiff<F, T>> = pt_diffs
+        let mut diffs: Vec<StateDiff<F, S>> = pt_diffs
             .into_iter()
             .map(PtUpdate::into_state_diff)
             .collect();
@@ -387,7 +381,7 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
     }
 
     /// Used to inspect memory. Any page table updates will not be performed.
-    pub fn memory_inspect_word(&self, addr: T::ByteAddr) -> DataWord {
+    pub fn memory_inspect_word(&self, addr: ByteAddrValue<S>) -> DataLword {
         let (v, _diffs) = self.memory_get(addr, DataWidth::Word).unwrap();
         v.into()
     }
@@ -395,7 +389,7 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
     /// Sets the value in memory, performing any page table updates as needed.
     /// The intermediate diffs are not saved.
     /// Panics if the operation fails.
-    pub fn memory_force_set(&mut self, addr: T::ByteAddr, data: DataEnum) {
+    pub fn memory_force_set(&mut self, addr: ByteAddrValue<S>, data: DataEnum) {
         self.apply_diff_stack(self.memory_set(addr, data).unwrap())
             .unwrap();
     }
@@ -403,32 +397,32 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
     /// Used for testing only. Any operations applied in this fashion are noninvertible, as the
     /// history stack only keeps track of full instructions.
     #[cfg(test)]
-    pub fn memory_get_word(&mut self, addr: T::ByteAddr) -> DataWord {
+    pub fn memory_get_word(&mut self, addr: ByteAddrValue<S>) -> DataWord {
         let (v, diffs) = self.memory_get(addr, DataWidth::Word).unwrap();
         self.apply_diff_stack(diffs).unwrap();
         v.into()
     }
 
     #[cfg(test)]
-    pub fn memory_set_word(&mut self, addr: T::ByteAddr, val: DataWord) {
+    pub fn memory_set_word(&mut self, addr: ByteAddrValue<S>, val: DataWord) {
         self.apply_diff_stack(self.memory_set(addr, val.kind()).unwrap())
             .unwrap();
     }
 
     #[cfg(test)]
-    pub fn memory_get_doubleword(&mut self, addr: T::ByteAddr) -> DataDword {
+    pub fn memory_get_doubleword(&mut self, addr: ByteAddrValue<S>) -> DataDword {
         let (v, diffs) = self.memory_get(addr, DataWidth::DoubleWord).unwrap();
         self.apply_diff_stack(diffs).unwrap();
         v.into()
     }
 
     #[cfg(test)]
-    pub fn memory_set_doubleword(&mut self, addr: T::ByteAddr, val: DataDword) {
+    pub fn memory_set_doubleword(&mut self, addr: ByteAddrValue<S>, val: DataDword) {
         self.apply_diff_stack(self.memory_set(addr, val.kind()).unwrap())
             .unwrap();
     }
 
-    pub fn handle_trap(&self, trap_kind: &TrapKind<T::ByteAddr>) -> InstResult<F, T> {
+    pub fn handle_trap(&self, trap_kind: &TrapKind<S>) -> InstResult<F, S> {
         match trap_kind {
             TrapKind::Ecall => self.dispatch_syscall(),
             TrapKind::MemFault(MemFault {
@@ -445,14 +439,14 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
         }
     }
 
-    pub fn dispatch_syscall(&self) -> InstResult<F, T> {
+    pub fn dispatch_syscall(&self) -> InstResult<F, S> {
         let rf = &self.user_state.regfile;
-        let syscall_number_reg = <F::Syscalls as SyscallConvention<F, T>>::syscall_number_reg();
-        let arg_regs = <F::Syscalls as SyscallConvention<F, T>>::syscall_arg_regs();
+        let syscall_number_reg = <F::Syscalls as SyscallConvention<F, S>>::syscall_number_reg();
+        let arg_regs = <F::Syscalls as SyscallConvention<F, S>>::syscall_arg_regs();
         let a0 = rf.read(arg_regs[0]);
         let a1 = rf.read(arg_regs[1]);
         let a2 = rf.read(arg_regs[2]);
-        if let Some(nr) = <F::Syscalls as SyscallConvention<F, T>>::number_to_syscall(
+        if let Some(nr) = <F::Syscalls as SyscallConvention<F, S>>::number_to_syscall(
             self.user_state.regfile.read(syscall_number_reg).into(),
         ) {
             match nr {
@@ -471,17 +465,25 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
     /// * fd - file descriptor
     /// * buf - pointer to the buffer to be written
     /// * len - the number of bytes to write
-    fn syscall_write(&self, fd: T::RegData, buf: T::ByteAddr, len: T::RegData) -> InstResult<F, T> {
-        let len_val: T::Unsigned = len.into();
-        let count: usize = T::usgn_to_usize(len_val);
-        let base_addr: T::Unsigned = buf.into();
-        let ret_reg = <F::Syscalls as SyscallConvention<F, T>>::syscall_return_regs()[0];
+    fn syscall_write(
+        &self,
+        fd: RegValue<S>,
+        buf: ByteAddrValue<S>,
+        len: RegValue<S>,
+    ) -> InstResult<F, S> {
+        let len_val: UnsignedValue<S> = len.into();
+        let count: usize = UnsignedValue::<S>::from(len_val);
+        let base_addr: UnsignedValue<S> = buf.into();
+        let ret_reg = <F::Syscalls as SyscallConvention<F, S>>::syscall_return_regs()[0];
         let mut v = Vec::new();
         let bytes: Vec<u8> = (0..count)
             .map(|i| {
                 u8::from({
                     let (val, diffs) = self
-                        .memory_get((base_addr + T::usize_to_usgn(i)).into(), DataWidth::Byte)
+                        .memory_get(
+                            (base_addr + UnsignedValue::<S>::from(i)).into(),
+                            DataWidth::Byte,
+                        )
                         .unwrap();
                     let byte: DataByte = val.into();
                     v.extend(diffs);
@@ -500,11 +502,11 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
     /// TODO unmap pages if brk goes down, and allocate multiple pages, also check edge case where
     /// brk lands on page boundary
     /// * addr - the address whose page should be mapped afterwards
-    fn syscall_brk(&self, addr: T::ByteAddr) -> InstResult<F, T> {
-        let old_brk: T::RegData = self.priv_state.brk.into();
-        let ret_reg = <F::Syscalls as SyscallConvention<F, T>>::syscall_return_regs()[0];
+    fn syscall_brk(&self, addr: ByteAddrValue<S>) -> InstResult<F, S> {
+        let old_brk: RegValue<S> = self.priv_state.brk.into();
+        let ret_reg = <F::Syscalls as SyscallConvention<F, S>>::syscall_return_regs()[0];
         if let Ok(lookup_result) = self.priv_state.page_table.lookup_page(addr) {
-            let mut diffs: Vec<StateDiff<F, T>> = lookup_result
+            let mut diffs: Vec<StateDiff<F, S>> = lookup_result
                 .diffs
                 .into_iter()
                 .map(|u| u.into_state_diff())
@@ -517,17 +519,13 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
                 .into_state_diff(),
             );
             diffs.push(
-                UserDiff::reg_update(
-                    &self.user_state,
-                    ret_reg,
-                    <T as MachineDataWidth>::sgn_zero().into(),
-                )
-                .into_state_diff(),
+                UserDiff::reg_update(&self.user_state, ret_reg, SignedValue::<S>::zero().into())
+                    .into_state_diff(),
             );
             // Update brk, return the old value, and propagate PT state changes
             Ok(diffs)
         } else if let Ok(updates) = self.priv_state.page_table.map_page(addr) {
-            let mut diffs: Vec<StateDiff<F, T>> =
+            let mut diffs: Vec<StateDiff<F, S>> =
                 updates.into_iter().map(|u| u.into_state_diff()).collect();
             diffs.push(
                 PrivDiff::BrkUpdate {
@@ -537,52 +535,46 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
                 .into_state_diff(),
             );
             diffs.push(
-                UserDiff::reg_update(
-                    &self.user_state,
-                    ret_reg,
-                    <T as MachineDataWidth>::sgn_zero().into(),
-                )
-                .into_state_diff(),
+                UserDiff::reg_update(&self.user_state, ret_reg, SignedValue::<S>::zero().into())
+                    .into_state_diff(),
             );
             Ok(diffs)
         } else {
-            Ok(UserDiff::reg_update(
-                &self.user_state,
-                ret_reg,
-                <T as MachineDataWidth>::isize_to_sgn(-1).into(),
+            Ok(
+                UserDiff::reg_update(&self.user_state, ret_reg, SignedValue::from(-1isize).into())
+                    .into_diff_stack(),
             )
-            .into_diff_stack())
         }
     }
 
     /// Exits the program with the provided 32-bit code.
     /// Note that the shell will only see the lower 7-bits.
-    fn syscall_exit(&self, code: T::RegData) -> InstResult<F, T> {
+    fn syscall_exit(&self, code: RegValue<S>) -> InstResult<F, S> {
         // downcast to u32 no matter what
-        let val: T::Unsigned = code.into();
-        Ok(PrivDiff::Terminate(TermCause::Exit(T::usgn_to_usize(val) as u32)).into_diff_stack())
+        let val: UnsignedValue<S> = code.into();
+        Ok(PrivDiff::Terminate(TermCause::Exit(val.raw() as u32)).into_diff_stack())
     }
 
     /// Handles an unknown syscall.
-    fn syscall_unknown(&self) -> InstResult<F, T> {
+    fn syscall_unknown(&self) -> InstResult<F, S> {
         panic!("Unknown syscall")
     }
 
     pub fn new(
         phys_pg_count: usize,
         pg_ofs_len: usize,
-        pt: Box<dyn PageTable<T::ByteAddr>>,
-    ) -> ProgramState<F, T> {
+        pt: Box<dyn PageTable<S>>,
+    ) -> ProgramState<F, S> {
         ProgramState {
             user_state: UserState::new(),
             // Initialize heap to zero (program initialization will set it properly)
-            priv_state: PrivState::new(<T::RegData as RegSize>::zero().into(), pt),
+            priv_state: PrivState::new(RegValue::<S>::zero().into(), pt),
             // TODO make endianness/alignment configurable
             phys_state: PhysState::new(Endianness::default(), true, phys_pg_count, pg_ofs_len),
         }
     }
 
-    pub fn apply_inst(&mut self, inst: &F::Instruction) -> InstResult<F, T> {
+    pub fn apply_inst(&mut self, inst: &F::Instruction) -> InstResult<F, S> {
         self.apply_diff_stack(inst.apply(self)?)
     }
 
@@ -595,14 +587,14 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
     /// Performs the provided instruction. Returns the applied instruction for ownership reasons.
     /// TODO maybe there's a bug here because if the inst terminates, what happens to the
     /// popped instresult?
-    pub fn apply_diff_stack(&mut self, diffs: DiffStack<F, T>) -> InstResult<F, T> {
+    pub fn apply_diff_stack(&mut self, diffs: DiffStack<F, S>) -> InstResult<F, S> {
         for diff in &diffs {
             self.apply_diff(&diff)?;
         }
         Ok(diffs)
     }
 
-    pub fn apply_diff(&mut self, diff: &StateDiff<F, T>) -> Result<(), TermCause> {
+    pub fn apply_diff(&mut self, diff: &StateDiff<F, S>) -> Result<(), TermCause> {
         match diff {
             StateDiff::User(u) => {
                 self.user_state.apply_diff(u);
@@ -619,7 +611,7 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
     }
 
     /// Reverts the described operation.
-    pub fn revert_diff(&mut self, diff: &StateDiff<F, T>) {
+    pub fn revert_diff(&mut self, diff: &StateDiff<F, S>) {
         match diff {
             StateDiff::User(u) => self.user_state.revert_diff(u),
             StateDiff::Priv(p) => self
@@ -630,11 +622,11 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> ProgramState<F, T> {
     }
 }
 
-pub trait SyscallConvention<F: ArchFamily<T>, T: MachineDataWidth> {
+pub trait SyscallConvention<F: ArchFamily<S>, S: Data> {
     /// Returns the syscall identified by number N, or none if no such syscall exists.
-    fn number_to_syscall(n: T::Signed) -> Option<Syscall>;
+    fn number_to_syscall(n: SignedValue<S>) -> Option<Syscall>;
     /// Returns the number corresponding to the syscall, or -1 if it is unimplemented.
-    fn syscall_to_number(syscall: Syscall) -> T::RegData;
+    fn syscall_to_number(syscall: Syscall) -> RegValue<S>;
     /// Returns which register is used to pass the syscall number.
     fn syscall_number_reg() -> F::Register;
     /// Returns which registers are used to pass arguments to syscalls.
@@ -655,23 +647,23 @@ pub enum Syscall {
 }
 
 #[derive(Copy, Clone)]
-pub struct RegDataChange<T: MachineDataWidth> {
-    pub old_value: T::RegData,
-    pub new_value: T::RegData,
+pub struct RegDataChange<S: Data> {
+    pub old_value: RegValue<S>,
+    pub new_value: RegValue<S>,
 }
 
 /// Represents a sequence of diffs produced by a single insruction.
-pub type DiffStack<F, T> = Vec<StateDiff<F, T>>;
+pub type DiffStack<F, S> = Vec<StateDiff<F, S>>;
 
 /// Represents the result of an instruction in terms of its actions on the machine state.
-pub type InstResult<F, T> = Result<DiffStack<F, T>, TermCause>;
+pub type InstResult<F, S> = Result<DiffStack<F, S>, TermCause>;
 
 /// Represents an individual atomic change in the state of the machine.
 ///
 /// These diffs occur at one of three levels: user, OS/kernel, and hardware.
-pub enum StateDiff<F: ArchFamily<T>, T: MachineDataWidth> {
-    User(UserDiff<F, T>),
-    Priv(PrivDiff<T>),
+pub enum StateDiff<F: ArchFamily<S>, S: Data> {
+    User(UserDiff<F, S>),
+    Priv(PrivDiff<S>),
     Phys(PhysDiff),
 }
 

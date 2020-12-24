@@ -1,5 +1,8 @@
 use super::BitStr32;
-use num_traits::{cast::AsPrimitive, int, sign};
+use num_traits::{
+    cast::{AsPrimitive, FromPrimitive},
+    int, sign,
+};
 use std::fmt;
 use std::marker::PhantomData;
 
@@ -29,8 +32,10 @@ pub trait Data: Clone + Copy + Sized {
         + fmt::UpperHex
         + fmt::Display
         + AsPrimitive<u32>
-        + AsPrimitive<u64>;
-    type S: int::PrimInt + sign::Signed + fmt::Display;
+        + AsPrimitive<u64>
+        + AsPrimitive<usize>
+        + FromPrimitive<usize>;
+    type S: int::PrimInt + sign::Signed + fmt::Display + FromPrimitive<isize>;
 
     fn from_u(value: Self::U) -> Self;
     fn from_s(value: Self::S) -> Self;
@@ -135,6 +140,10 @@ impl Data for RS64b {
 pub trait DataInterp {}
 
 #[derive(Debug, Clone, Copy)]
+pub struct NoInterp;
+impl DataInterp for NoInterp {}
+
+#[derive(Debug, Clone, Copy)]
 pub struct Unsigned;
 impl DataInterp for Unsigned {}
 
@@ -143,8 +152,8 @@ pub struct Signed;
 impl DataInterp for Signed {}
 
 #[derive(Debug, Clone, Copy)]
-pub struct RegValue;
-impl DataInterp for RegValue {}
+pub struct RegData;
+impl DataInterp for RegData {}
 
 #[derive(Debug, Clone, Copy)]
 pub struct ByteAddr;
@@ -190,8 +199,8 @@ impl<S: Data, T: DataInterp> DataValue<S, T> {
         }
     }
 
-    pub fn as_reg_data(&self) -> DataValue<S, RegValue> {
-        DataValue::<S, RegValue> {
+    pub fn as_reg_data(&self) -> DataValue<S, RegData> {
+        DataValue::<S, RegData> {
             value: self.value,
             _phantom: PhantomData,
         }
@@ -205,10 +214,24 @@ impl<S: Data, T: DataInterp> DataValue<S, T> {
     }
 }
 
+impl<S: Data, T: DataInterp, U: DataInterp> From<DataValue<S, U>> for DataValue<S, T> {
+    fn from(value: DataValue<S, U>) -> Self {
+        Self::from_unsigned(value.as_unsigned().raw())
+    }
+}
+
 // ===== Interpretation differences =====
-impl<S: Data> DataValue<S, Unsigned> {
+pub type UnsignedValue<S> = DataValue<S, Unsigned>;
+
+impl<S: Data> UnsignedValue<S> {
     fn raw(self) -> S::U {
         self.value().as_u()
+    }
+}
+
+impl<S> From<usize> for UnsignedValue<S> {
+    fn from(value: usize) {
+        DataValue::from_unsigned(S::U::from_usize(value).unwrap())
     }
 }
 
@@ -218,9 +241,17 @@ impl<S: Data> fmt::Display for DataValue<S, Unsigned> {
     }
 }
 
-impl<S: Data> DataValue<S, Signed> {
+pub type SignedValue<S> = DataValue<S, Signed>;
+
+impl<S: Data> SignedValue<S> {
     fn raw(self) -> S::S {
         self.value().as_s()
+    }
+}
+
+impl<S> From<isize> for SignedValue<S> {
+    fn from(value: isize) {
+        DataValue::from_signed(S::S::from_isize(value).unwrap())
     }
 }
 
@@ -230,7 +261,15 @@ impl<S: Data> fmt::Display for DataValue<S, Signed> {
     }
 }
 
-impl<S: Data> DataValue<S, RegValue> {}
+impl<S: Data> DataValue<S, RegData> {}
+
+pub type RegValue<S> = DataValue<S, RegData>;
+
+impl<S: Data> RegValue<S> {
+    pub fn zero() -> Self {
+        UnsignedValue::<S>::zero().as_reg_data()
+    }
+}
 
 // === Special memory stuff ===
 pub type ByteAddrValue<S> = DataValue<S, ByteAddr>;
@@ -252,70 +291,70 @@ impl<S: Data> fmt::Display for DataValue<S, ByteAddr> {
 // ===== Width-specific functions (includes sign extension/zero padding) =====
 
 // Traits to provide sign extension methods and such
-trait AtLeast8b<T: DataInterp> {
-    fn zero_pad_from_byte(b: DataByte<T>) -> Self;
-    fn sign_ext_from_byte(b: DataByte<T>) -> Self;
+trait AtLeast8b {
+    fn zero_pad_from_byte(b: DataByte) -> Self;
+    fn sign_ext_from_byte(b: DataByte) -> Self;
 }
 
-trait AtLeast16b<T: DataInterp>: AtLeast8b<T> {
-    fn zero_pad_from_half(h: DataHalf<T>) -> Self;
-    fn sign_ext_from_half(h: DataHalf<T>) -> Self;
+trait AtLeast16b: AtLeast8b {
+    fn zero_pad_from_half(h: DataHalf) -> Self;
+    fn sign_ext_from_half(h: DataHalf) -> Self;
 }
 
-trait AtLeast32b<T: DataInterp>: AtLeast16b<T> {
-    fn zero_pad_from_lword(l: DataLword<T>) -> Self;
-    fn sign_ext_from_lword(l: DataLword<T>) -> Self;
-    fn lower_lword(self) -> DataLword<T>;
+trait AtLeast32b: AtLeast16b {
+    fn zero_pad_from_lword(l: DataLword) -> Self;
+    fn sign_ext_from_lword(l: DataLword) -> Self;
+    fn lower_lword(self) -> DataLword;
     fn to_bit_str(self, len: u8) -> BitStr32;
 }
 
-pub type DataByte<T> = DataValue<RS8b, T>;
+pub type DataByte = DataValue<RS8b, NoInterp>;
 
-impl<T: DataInterp> DataByte<T> {}
+impl DataByte {}
 
-impl<T: DataInterp> AtLeast8b<T> for DataByte<T> {
-    fn zero_pad_from_byte(b: DataByte<T>) -> Self {
+impl AtLeast8b for DataByte {
+    fn zero_pad_from_byte(b: DataByte) -> Self {
         Self::from_unsigned(b.as_unsigned().raw() as u8)
     }
 
-    fn sign_ext_from_byte(b: DataByte<T>) -> Self {
+    fn sign_ext_from_byte(b: DataByte) -> Self {
         Self::from_signed(b.as_signed().raw() as i8)
     }
 }
 
-pub type DataHalf<T> = DataValue<RS16b, T>;
+pub type DataHalf = DataValue<RS16b, NoInterp>;
 
-impl<T: DataInterp> DataHalf<T> {}
+impl DataHalf {}
 
-impl<T: DataInterp> AtLeast8b<T> for DataHalf<T> {
-    fn zero_pad_from_byte(b: DataByte<T>) -> Self {
+impl AtLeast8b for DataHalf {
+    fn zero_pad_from_byte(b: DataByte) -> Self {
         Self::from_unsigned(b.as_unsigned().raw() as u16)
     }
 
-    fn sign_ext_from_byte(b: DataByte<T>) -> Self {
+    fn sign_ext_from_byte(b: DataByte) -> Self {
         Self::from_signed(b.as_signed().raw() as i16)
     }
 }
 
-impl<T: DataInterp> AtLeast16b<T> for DataHalf<T> {
-    fn zero_pad_from_half(h: DataHalf<T>) -> Self {
+impl AtLeast16b for DataHalf {
+    fn zero_pad_from_half(h: DataHalf) -> Self {
         Self::from_unsigned(h.as_unsigned().raw() as u16)
     }
 
-    fn sign_ext_from_half(h: DataHalf<T>) -> Self {
+    fn sign_ext_from_half(h: DataHalf) -> Self {
         Self::from_signed(h.as_signed().raw() as i16)
     }
 }
 
-pub type DataLword<T> = DataValue<RS32b, T>;
+pub type DataLword = DataValue<RS32b, NoInterp>;
 
-impl<T: DataInterp> DataLword<T> {
+impl DataLword {
     pub fn zero() -> Self {
         Self::from_unsigned(0)
     }
 
     /// Returns a copy of the value with the ith byte set to val.
-    pub fn set_byte(self, i: u8, val: DataByte<T>) -> Self {
+    pub fn set_byte(self, i: u8, val: DataByte) -> Self {
         debug_assert!(i < 4);
         let mask: u32 = !(0xFF << (i * 8));
         DataLword::from_unsigned(
@@ -324,42 +363,42 @@ impl<T: DataInterp> DataLword<T> {
     }
 
     /// Selects the ith byte in the word, where 0 is the LSB.
-    pub fn get_byte(self, i: u8) -> DataByte<T> {
+    pub fn get_byte(self, i: u8) -> DataByte {
         debug_assert!(i < 4);
         DataByte::from_unsigned((self.value().as_u() >> (i * 8)) as u8)
     }
 }
 
-impl<T: DataInterp> AtLeast8b<T> for DataLword<T> {
-    fn zero_pad_from_byte(b: DataByte<T>) -> Self {
+impl AtLeast8b for DataLword {
+    fn zero_pad_from_byte(b: DataByte) -> Self {
         Self::from_unsigned(b.as_unsigned().raw() as u32)
     }
 
-    fn sign_ext_from_byte(b: DataByte<T>) -> Self {
+    fn sign_ext_from_byte(b: DataByte) -> Self {
         Self::from_signed(b.as_signed().raw() as i32)
     }
 }
 
-impl<T: DataInterp> AtLeast16b<T> for DataLword<T> {
-    fn zero_pad_from_half(h: DataHalf<T>) -> Self {
+impl AtLeast16b for DataLword {
+    fn zero_pad_from_half(h: DataHalf) -> Self {
         Self::from_unsigned(h.as_unsigned().raw() as u32)
     }
 
-    fn sign_ext_from_half(h: DataHalf<T>) -> Self {
+    fn sign_ext_from_half(h: DataHalf) -> Self {
         Self::from_signed(h.as_signed().raw() as i32)
     }
 }
 
-impl<T: DataInterp> AtLeast32b<T> for DataLword<T> {
-    fn zero_pad_from_lword(l: DataLword<T>) -> Self {
+impl AtLeast32b for DataLword {
+    fn zero_pad_from_lword(l: DataLword) -> Self {
         l
     }
 
-    fn sign_ext_from_lword(l: DataLword<T>) -> Self {
+    fn sign_ext_from_lword(l: DataLword) -> Self {
         l
     }
 
-    fn lower_lword(self) -> DataLword<T> {
+    fn lower_lword(self) -> DataLword {
         self
     }
 
@@ -368,82 +407,82 @@ impl<T: DataInterp> AtLeast32b<T> for DataLword<T> {
     }
 }
 
-impl<T: DataInterp> From<BitStr32> for DataLword<T> {
-    fn from(value: BitStr32) -> DataLword<T> {
+impl From<BitStr32> for DataLword {
+    fn from(value: BitStr32) -> DataLword {
         Self::from_unsigned(value.value as u32)
     }
 }
 
-impl<T: DataInterp> From<u32> for DataLword<T> {
+impl From<u32> for DataLword {
     fn from(value: u32) -> Self {
         Self::from_unsigned(value)
     }
 }
 
-impl<T: DataInterp> From<DataLword<T>> for u32 {
-    fn from(value: DataLword<T>) -> u32 {
+impl From<DataLword> for u32 {
+    fn from(value: DataLword) -> u32 {
         value.as_unsigned().raw()
     }
 }
 
-impl<T: DataInterp> From<i32> for DataLword<T> {
+impl From<i32> for DataLword {
     fn from(value: i32) -> Self {
         Self::from_signed(value)
     }
 }
 
-impl<T: DataInterp> From<DataLword<T>> for i32 {
-    fn from(value: DataLword<T>) -> i32 {
+impl From<DataLword> for i32 {
+    fn from(value: DataLword) -> i32 {
         value.as_signed().raw()
     }
 }
 
-pub type DataDword<T> = DataValue<RS64b, T>;
+pub type DataDword = DataValue<RS64b, NoInterp>;
 
-impl<T: DataInterp> DataDword<T> {
+impl DataDword {
     pub fn zero() -> Self {
         Self::from_unsigned(0)
     }
 
-    pub fn from_lwords(lower: DataLword<T>, upper: DataLword<T>) -> Self {
+    pub fn from_lwords(lower: DataLword, upper: DataLword) -> Self {
         Self::from_unsigned(((upper.value().as_u() as u64) << 32) | (lower.value().as_u() as u64))
     }
 
-    pub fn upper_lword(self) -> DataLword<T> {
+    pub fn upper_lword(self) -> DataLword {
         DataLword::from_unsigned((self.value().as_u() as u64 >> 32) as u32)
     }
 }
 
-impl<T: DataInterp> AtLeast8b<T> for DataDword<T> {
-    fn zero_pad_from_byte(b: DataByte<T>) -> Self {
+impl AtLeast8b for DataDword {
+    fn zero_pad_from_byte(b: DataByte) -> Self {
         Self::from_unsigned(b.as_unsigned().raw() as u64)
     }
 
-    fn sign_ext_from_byte(b: DataByte<T>) -> Self {
+    fn sign_ext_from_byte(b: DataByte) -> Self {
         Self::from_signed(b.as_signed().raw() as i64)
     }
 }
 
-impl<T: DataInterp> AtLeast16b<T> for DataDword<T> {
-    fn zero_pad_from_half(h: DataHalf<T>) -> Self {
+impl AtLeast16b for DataDword {
+    fn zero_pad_from_half(h: DataHalf) -> Self {
         Self::from_unsigned(h.as_unsigned().raw() as u64)
     }
 
-    fn sign_ext_from_half(h: DataHalf<T>) -> Self {
+    fn sign_ext_from_half(h: DataHalf) -> Self {
         Self::from_signed(h.as_signed().raw() as i64)
     }
 }
 
-impl<T: DataInterp> AtLeast32b<T> for DataDword<T> {
-    fn zero_pad_from_lword(l: DataLword<T>) -> Self {
+impl AtLeast32b for DataDword {
+    fn zero_pad_from_lword(l: DataLword) -> Self {
         Self::from_unsigned(l.as_unsigned().raw() as u64)
     }
 
-    fn sign_ext_from_lword(l: DataLword<T>) -> Self {
+    fn sign_ext_from_lword(l: DataLword) -> Self {
         Self::from_signed(l.as_signed().raw() as i64)
     }
 
-    fn lower_lword(self) -> DataLword<T> {
+    fn lower_lword(self) -> DataLword {
         DataLword::from_unsigned((self.value().as_u() as u64) as u32)
     }
 
@@ -452,32 +491,32 @@ impl<T: DataInterp> AtLeast32b<T> for DataDword<T> {
     }
 }
 
-impl<T: DataInterp> From<BitStr32> for DataDword<T> {
+impl From<BitStr32> for DataDword {
     fn from(value: BitStr32) -> Self {
         Self::from_unsigned(value.value as u64)
     }
 }
 
-impl<T: DataInterp> From<u64> for DataDword<T> {
+impl From<u64> for DataDword {
     fn from(value: u64) -> Self {
         Self::from_unsigned(value)
     }
 }
 
-impl<T: DataInterp> From<DataDword<T>> for u64 {
-    fn from(value: DataDword<T>) -> u64 {
+impl From<DataDword> for u64 {
+    fn from(value: DataDword) -> u64 {
         value.as_unsigned().raw()
     }
 }
 
-impl<T: DataInterp> From<i64> for DataDword<T> {
+impl From<i64> for DataDword {
     fn from(value: i64) -> Self {
         Self::from_signed(value)
     }
 }
 
-impl<T: DataInterp> From<DataDword<T>> for i64 {
-    fn from(value: DataDword<T>) -> i64 {
+impl From<DataDword> for i64 {
+    fn from(value: DataDword) -> i64 {
         value.as_signed().raw()
     }
 }

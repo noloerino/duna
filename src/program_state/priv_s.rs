@@ -9,18 +9,18 @@ use crate::arch::*;
 
 /// Contains program state that is visited only to privileged entities, i.e. a kernel thread.
 /// TODO add kernel thread information (tid, file descriptors, etc.)
-pub struct PrivState<T: MachineDataWidth> {
-    pub brk: T::ByteAddr,
-    pub heap_start: T::ByteAddr,
-    pub page_table: Box<dyn PageTable<T::ByteAddr>>,
+pub struct PrivState<S: Data> {
+    pub brk: ByteAddrValue<S>,
+    pub heap_start: ByteAddrValue<S>,
+    pub page_table: Box<dyn PageTable<ByteAddrValue<S>>>,
     /// Holds the contents of all bytes that have been printed to stdout (used mostly for testing)
     pub(crate) stdout: Vec<u8>,
     pub(crate) stderr: Vec<u8>,
     // file_descriptors: Vec<Vec<u8>>
 }
 
-impl<T: MachineDataWidth> PrivState<T> {
-    pub fn new(heap_start: T::ByteAddr, page_table: Box<dyn PageTable<T::ByteAddr>>) -> Self {
+impl<S: Data> PrivState<S> {
+    pub fn new(heap_start: ByteAddrValue<S>, page_table: Box<dyn PageTable<S>>) -> Self {
         PrivState {
             brk: heap_start,
             heap_start,
@@ -38,18 +38,18 @@ impl<T: MachineDataWidth> PrivState<T> {
     /// and generated an appropriate UserDiff.
     ///
     /// Returns a TermCause if the program is terminated.
-    pub fn apply_diff<F: ArchFamily<T>>(
+    pub fn apply_diff<F: ArchFamily<S>>(
         &mut self,
         mem: &mut PhysMem,
-        diff: &PrivDiff<T>,
+        diff: &PrivDiff<S>,
     ) -> Result<(), TermCause> {
         use PrivDiff::*;
         match diff {
             FileWrite { fd, data } => {
                 // TODO impl for other files
                 let fd_idx: usize = {
-                    let num: T::Unsigned = (*fd).into();
-                    T::usgn_to_usize(num)
+                    let num: UnsignedValue<S> = (*fd).into();
+                    num as usize
                 };
                 match fd_idx {
                     1 => {
@@ -77,7 +77,7 @@ impl<T: MachineDataWidth> PrivState<T> {
     }
 
     /// Reverts a privileged state change.
-    pub fn revert_diff<F: ArchFamily<T>>(&mut self, mem: &mut PhysMem, diff: &PrivDiff<T>) {
+    pub fn revert_diff<F: ArchFamily<S>>(&mut self, mem: &mut PhysMem, diff: &PrivDiff<S>) {
         use PrivDiff::*;
         match diff {
             // TODO delete last len bytes from fd
@@ -93,29 +93,29 @@ impl<T: MachineDataWidth> PrivState<T> {
 
 /// Encodes a change that occurred to the state of the privileged aspects of a program,
 /// such as a write to a file.
-pub enum PrivDiff<T: MachineDataWidth> {
+pub enum PrivDiff<S: Data> {
     /// Indicates that the program is to be terminated.
     Terminate(TermCause),
     /// Represents a file write.
     /// * fd: the file descriptor
     /// * data: the bytes being written
     FileWrite {
-        fd: T::RegData,
+        fd: RegValue<S>,
         data: Vec<u8>,
     },
     PtUpdate(PtUpdate),
     BrkUpdate {
-        old: T::ByteAddr,
-        new: T::ByteAddr,
+        old: ByteAddrValue<S>,
+        new: ByteAddrValue<S>,
     },
 }
 
-impl<T: MachineDataWidth> PrivDiff<T> {
-    pub fn into_state_diff<F: ArchFamily<T>>(self) -> StateDiff<F, T> {
+impl<S: Data> PrivDiff<S> {
+    pub fn into_state_diff<F: ArchFamily<S>>(self) -> StateDiff<F, S> {
         StateDiff::Priv(self)
     }
 
-    pub fn into_diff_stack<F: ArchFamily<T>>(self) -> DiffStack<F, T> {
+    pub fn into_diff_stack<F: ArchFamily<S>>(self) -> DiffStack<F, S> {
         vec![self.into_state_diff()]
     }
 }
@@ -133,8 +133,8 @@ pub enum TermCause {
     BusError,
 }
 
-impl<T: ByteAddress> From<MemFault<T>> for TermCause {
-    fn from(fault: MemFault<T>) -> TermCause {
+impl<S> From<MemFault<S>> for TermCause {
+    fn from(fault: MemFault<S>) -> TermCause {
         match fault.cause {
             MemFaultCause::PageFault => TermCause::SegFault,
             MemFaultCause::SegFault => TermCause::SegFault,
@@ -145,9 +145,9 @@ impl<T: ByteAddress> From<MemFault<T>> for TermCause {
 
 impl TermCause {
     /// Prints any messages related to the exit cause, and returns the exit code.
-    pub fn handle_exit<F: ArchFamily<T>, T: MachineDataWidth>(
+    pub fn handle_exit<F: ArchFamily<S>, S: Data>(
         self,
-        program_state: &mut ProgramState<F, T>,
+        program_state: &mut ProgramState<F, S>,
     ) -> u8 {
         use TermCause::*;
         const ABNORMAL_MASK: u8 = 0b1000_0000;

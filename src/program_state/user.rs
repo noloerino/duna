@@ -11,27 +11,27 @@ use super::registers::*;
 use crate::arch::*;
 
 /// Contains program state that is visible to the user.
-pub struct UserState<F: ArchFamily<T>, T: MachineDataWidth> {
-    pub pc: T::ByteAddr,
-    pub regfile: RegFile<F::Register, T>,
+pub struct UserState<F: ArchFamily<S>, S: Data> {
+    pub pc: ByteAddrValue<S>,
+    pub regfile: RegFile<F::Register, S>,
 }
 
-impl<F: ArchFamily<T>, T: MachineDataWidth> Default for UserState<F, T> {
+impl<F: ArchFamily<S>, S: Data> Default for UserState<F, S> {
     fn default() -> Self {
         UserState::new()
     }
 }
 
-impl<F: ArchFamily<T>, T: MachineDataWidth> UserState<F, T> {
+impl<F: ArchFamily<S>, S: Data> UserState<F, S> {
     pub fn new() -> Self {
         UserState {
-            pc: T::sgn_zero().into(),
+            pc: SignedValue::<S>::zero().as_byte_addr(),
             regfile: RegFile::new(),
         }
     }
 
     /// Applies a diff to the user state.
-    pub fn apply_diff(&mut self, diff: &UserDiff<F, T>) {
+    pub fn apply_diff(&mut self, diff: &UserDiff<F, S>) {
         match *diff {
             UserDiff::PcDiff { new_pc, .. } => {
                 self.pc = new_pc;
@@ -47,7 +47,7 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> UserState<F, T> {
         }
     }
 
-    pub fn revert_diff(&mut self, diff: &UserDiff<F, T>) {
+    pub fn revert_diff(&mut self, diff: &UserDiff<F, S>) {
         match *diff {
             UserDiff::PcDiff { old_pc, .. } => {
                 self.pc = old_pc;
@@ -66,36 +66,36 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> UserState<F, T> {
 /// Represents an atomic diff that is applied only to the user state of a program.
 /// Since traps are synchronous, they're included in here - they can be thought of as a context
 /// switch operation.
-pub enum UserDiff<F: ArchFamily<T>, T: MachineDataWidth> {
+pub enum UserDiff<F: ArchFamily<S>, S: Data> {
     PcDiff {
-        old_pc: T::ByteAddr,
-        new_pc: T::ByteAddr,
+        old_pc: ByteAddrValue<S>,
+        new_pc: ByteAddrValue<S>,
     },
     RegDiff {
         reg: F::Register,
-        change: RegDataChange<T>,
+        change: RegDataChange<S>,
     },
-    Trap(TrapKind<T::ByteAddr>),
+    Trap(TrapKind<S>),
 }
 
-impl<F: ArchFamily<T>, T: MachineDataWidth> UserDiff<F, T> {
-    pub fn into_state_diff(self) -> StateDiff<F, T> {
+impl<F: ArchFamily<S>, S: Data> UserDiff<F, S> {
+    pub fn into_state_diff(self) -> StateDiff<F, S> {
         StateDiff::User(self)
     }
 
-    pub fn into_diff_stack(self) -> DiffStack<F, T> {
+    pub fn into_diff_stack(self) -> DiffStack<F, S> {
         vec![self.into_state_diff()]
     }
 
     /// Advances the program counter by 4.
-    pub fn pc_p4(state: &UserState<F, T>) -> Self {
+    pub fn pc_p4(state: &UserState<F, S>) -> Self {
         UserDiff::PcDiff {
             old_pc: state.pc,
             new_pc: state.pc.plus_4(),
         }
     }
 
-    pub fn pc_update_op(state: &UserState<F, T>, new_pc: T::ByteAddr) -> DiffStack<F, T> {
+    pub fn pc_update_op(state: &UserState<F, S>, new_pc: ByteAddrValue<S>) -> DiffStack<F, S> {
         vec![UserDiff::PcDiff {
             old_pc: state.pc,
             new_pc,
@@ -103,7 +103,7 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> UserDiff<F, T> {
         .into_state_diff()]
     }
 
-    pub fn reg_update(state: &UserState<F, T>, reg: F::Register, rd_val: T::RegData) -> Self {
+    pub fn reg_update(state: &UserState<F, S>, reg: F::Register, rd_val: RegValue<S>) -> Self {
         UserDiff::RegDiff {
             reg,
             change: RegDataChange {
@@ -114,11 +114,11 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> UserDiff<F, T> {
     }
 
     pub fn reg_write_op(
-        state: &UserState<F, T>,
-        new_pc: T::ByteAddr,
+        state: &UserState<F, S>,
+        new_pc: ByteAddrValue<S>,
         reg: F::Register,
-        rd_val: T::RegData,
-    ) -> DiffStack<F, T> {
+        rd_val: RegValue<S>,
+    ) -> DiffStack<F, S> {
         vec![
             UserDiff::RegDiff {
                 reg,
@@ -138,18 +138,18 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> UserDiff<F, T> {
     }
 
     pub fn reg_write_pc_p4(
-        state: &UserState<F, T>,
+        state: &UserState<F, S>,
         reg: F::Register,
-        val: T::RegData,
-    ) -> DiffStack<F, T> {
+        val: RegValue<S>,
+    ) -> DiffStack<F, S> {
         UserDiff::reg_write_op(state, state.pc.plus_4(), reg, val)
     }
 
     pub fn mem_write_pc_p4(
-        state: &ProgramState<F, T>,
-        addr: T::ByteAddr,
+        state: &ProgramState<F, S>,
+        addr: ByteAddrValue<S>,
         val: DataEnum,
-    ) -> Result<DiffStack<F, T>, MemFault<T::ByteAddr>> {
+    ) -> Result<DiffStack<F, S>, MemFault<S>> {
         let mut diffs = state.memory_set(addr, val)?;
         diffs.push(UserDiff::pc_p4(&state.user_state).into_state_diff());
         Ok(diffs)
@@ -159,15 +159,15 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> UserDiff<F, T> {
 /// Represents the type of trap being raised from user mode.
 /// See "Machine Cause Register" in the RISCV privileged spec for details.
 #[derive(Copy, Clone)]
-pub enum TrapKind<T: ByteAddress> {
+pub enum TrapKind<S> {
     /// Corresponds to an ecall instruction issued from user mode.
     Ecall,
-    MemFault(MemFault<T>),
+    MemFault(MemFault<S>),
 }
 
 /// Converts a memory fault into a trap.
-impl<T: ByteAddress> From<MemFault<T>> for TrapKind<T> {
-    fn from(fault: MemFault<T>) -> TrapKind<T> {
+impl<S> From<MemFault<S>> for TrapKind<S> {
+    fn from(fault: MemFault<S>) -> TrapKind<S> {
         TrapKind::MemFault(fault)
     }
 }

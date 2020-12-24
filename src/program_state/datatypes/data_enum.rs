@@ -20,15 +20,15 @@ impl DataWidth {
 }
 
 #[derive(Copy, Clone, PartialEq, Debug)]
-pub enum DataEnum<T> {
-    Byte(DataByte<T>),
-    Half(DataHalf<T>),
-    Word(DataLword<T>),
-    DoubleWord(DataDword<T>),
+pub enum DataEnum {
+    Byte(DataByte),
+    Half(DataHalf),
+    Word(DataLword),
+    DoubleWord(DataDword),
 }
 
-impl<T> DataEnum<T> {
-    pub fn width(self) -> DataWidth<T> {
+impl DataEnum {
+    pub fn width(self) -> DataWidth {
         match self {
             DataEnum::Byte(_) => DataWidth::Byte,
             DataEnum::Half(_) => DataWidth::Half,
@@ -38,7 +38,7 @@ impl<T> DataEnum<T> {
     }
 }
 
-impl<T> From<DataEnum<T>> for DataByte<T> {
+impl From<DataEnum> for DataByte {
     fn from(value: DataEnum) -> Self {
         match value {
             DataEnum::Byte(b) => b,
@@ -47,7 +47,7 @@ impl<T> From<DataEnum<T>> for DataByte<T> {
     }
 }
 
-impl<T> From<DataEnum<T>> for DataHalf<T> {
+impl From<DataEnum> for DataHalf {
     fn from(value: DataEnum) -> Self {
         match value {
             DataEnum::Half(h) => h,
@@ -56,7 +56,7 @@ impl<T> From<DataEnum<T>> for DataHalf<T> {
     }
 }
 
-impl<T> From<DataEnum<T>> for DataLword<T> {
+impl From<DataEnum> for DataLword {
     fn from(value: DataEnum) -> Self {
         match value {
             DataEnum::Word(w) => w,
@@ -65,7 +65,7 @@ impl<T> From<DataEnum<T>> for DataLword<T> {
     }
 }
 
-impl<T> From<DataEnum<T>> for DataDword<T> {
+impl From<DataEnum> for DataDword {
     fn from(value: DataEnum) -> Self {
         match value {
             DataEnum::DoubleWord(d) => d,
@@ -75,27 +75,15 @@ impl<T> From<DataEnum<T>> for DataDword<T> {
 }
 
 #[derive(Copy, Clone, PartialEq, Debug)]
-pub enum DataEnumDiff<T> {
-    Byte {
-        old: DataByte<T>,
-        new: DataByte<T>,
-    },
-    Half {
-        old: DataHalf<T>,
-        new: DataHalf<T>,
-    },
-    Word {
-        old: DataLword<T>,
-        new: DataLword<T>,
-    },
-    DoubleWord {
-        old: DataDword<T>,
-        new: DataDword<T>,
-    },
+pub enum DataEnumDiff {
+    Byte { old: DataByte, new: DataByte },
+    Half { old: DataHalf, new: DataHalf },
+    Word { old: DataLword, new: DataLword },
+    DoubleWord { old: DataDword, new: DataDword },
 }
 
-impl<T> DataEnumDiff<T> {
-    pub fn old_val(self) -> DataEnum<T> {
+impl DataEnumDiff {
+    pub fn old_val(self) -> DataEnum {
         use DataEnumDiff::*;
         match self {
             Byte { old, .. } => DataEnum::Byte(old),
