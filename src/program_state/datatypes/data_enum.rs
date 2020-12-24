@@ -20,15 +20,15 @@ impl DataWidth {
 }
 
 #[derive(Copy, Clone, PartialEq, Debug)]
-pub enum DataEnum {
-    Byte(DataByte),
-    Half(DataHalf),
-    Word(DataWord),
-    DoubleWord(DataDword),
+pub enum DataEnum<T> {
+    Byte(DataByte<T>),
+    Half(DataHalf<T>),
+    Word(DataLword<T>),
+    DoubleWord(DataDword<T>),
 }
 
-impl DataEnum {
-    pub fn width(self) -> DataWidth {
+impl<T> DataEnum<T> {
+    pub fn width(self) -> DataWidth<T> {
         match self {
             DataEnum::Byte(_) => DataWidth::Byte,
             DataEnum::Half(_) => DataWidth::Half,
@@ -38,8 +38,8 @@ impl DataEnum {
     }
 }
 
-impl From<DataEnum> for DataByte {
-    fn from(value: DataEnum) -> DataByte {
+impl<T> From<DataEnum<T>> for DataByte<T> {
+    fn from(value: DataEnum) -> Self {
         match value {
             DataEnum::Byte(b) => b,
             _ => panic!("DataByte was coerced from DataEnum of wrong width"),
@@ -47,8 +47,8 @@ impl From<DataEnum> for DataByte {
     }
 }
 
-impl From<DataEnum> for DataHalf {
-    fn from(value: DataEnum) -> DataHalf {
+impl<T> From<DataEnum<T>> for DataHalf<T> {
+    fn from(value: DataEnum) -> Self {
         match value {
             DataEnum::Half(h) => h,
             _ => panic!("DataHalf was coerced from DataEnum of wrong width"),
@@ -56,8 +56,8 @@ impl From<DataEnum> for DataHalf {
     }
 }
 
-impl From<DataEnum> for DataWord {
-    fn from(value: DataEnum) -> DataWord {
+impl<T> From<DataEnum<T>> for DataLword<T> {
+    fn from(value: DataEnum) -> Self {
         match value {
             DataEnum::Word(w) => w,
             _ => panic!("DataWord was coerced from DataEnum of wrong width"),
@@ -65,8 +65,8 @@ impl From<DataEnum> for DataWord {
     }
 }
 
-impl From<DataEnum> for DataDword {
-    fn from(value: DataEnum) -> DataDword {
+impl<T> From<DataEnum<T>> for DataDword<T> {
+    fn from(value: DataEnum) -> Self {
         match value {
             DataEnum::DoubleWord(d) => d,
             _ => panic!("DataDword was coerced from DataEnum of wrong width"),
@@ -75,15 +75,27 @@ impl From<DataEnum> for DataDword {
 }
 
 #[derive(Copy, Clone, PartialEq, Debug)]
-pub enum DataEnumDiff {
-    Byte { old: DataByte, new: DataByte },
-    Half { old: DataHalf, new: DataHalf },
-    Word { old: DataWord, new: DataWord },
-    DoubleWord { old: DataDword, new: DataDword },
+pub enum DataEnumDiff<T> {
+    Byte {
+        old: DataByte<T>,
+        new: DataByte<T>,
+    },
+    Half {
+        old: DataHalf<T>,
+        new: DataHalf<T>,
+    },
+    Word {
+        old: DataLword<T>,
+        new: DataLword<T>,
+    },
+    DoubleWord {
+        old: DataDword<T>,
+        new: DataDword<T>,
+    },
 }
 
-impl DataEnumDiff {
-    pub fn old_val(self) -> DataEnum {
+impl<T> DataEnumDiff<T> {
+    pub fn old_val(self) -> DataEnum<T> {
         use DataEnumDiff::*;
         match self {
             Byte { old, .. } => DataEnum::Byte(old),
@@ -102,10 +114,4 @@ impl DataEnumDiff {
             DoubleWord { new, .. } => DataEnum::DoubleWord(new),
         }
     }
-}
-
-/// Marker trait for different datatypes.
-pub trait Data: Copy + Clone + PartialEq {
-    fn kind(self) -> DataEnum;
-    fn width(self) -> DataWidth;
 }
