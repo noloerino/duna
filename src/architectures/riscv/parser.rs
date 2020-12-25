@@ -1,8 +1,7 @@
 use super::arch::*;
 use super::instruction::*;
 use super::isa;
-use super::pseudo_inst;
-use super::pseudo_inst::*;
+use super::isa::*;
 use super::registers::RiscVRegister;
 use crate::assembler::lexer::*;
 use crate::assembler::parser::*;
@@ -779,20 +778,16 @@ impl<'a, S: AtLeast32b> InstParser<'a, S> {
                 let last_arg = self.try_parse_imm_or_label_ref(32, args.remove(0))?;
                 match last_arg {
                     ImmOrLabelRef::Imm(imm) => Ok(vec![
-                        PartialInst::new_complete(pseudo_inst::La::expand_upper(rd, imm)),
-                        PartialInst::new_complete(pseudo_inst::La::expand_lower(rd, imm)),
+                        PartialInst::new_complete(isa::La::expand_upper(rd, imm)),
+                        PartialInst::new_complete(isa::La::expand_lower(rd, imm)),
                     ]),
                     ImmOrLabelRef::LabelRef(tgt_label) => Ok(vec![
                         PartialInst::new_one_reg_needs_label(
-                            pseudo_inst::La::expand_upper,
+                            isa::La::expand_upper,
                             rd,
                             tgt_label.clone(),
                         ),
-                        PartialInst::new_one_reg_needs_label(
-                            pseudo_inst::La::expand_lower,
-                            rd,
-                            tgt_label,
-                        ),
+                        PartialInst::new_one_reg_needs_label(isa::La::expand_lower, rd, tgt_label),
                     ]),
                 }
             }

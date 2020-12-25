@@ -3,7 +3,6 @@ mod instruction;
 pub mod isa;
 mod parser;
 mod program;
-mod pseudo_inst;
 mod registers;
 
 pub use arch::*;
