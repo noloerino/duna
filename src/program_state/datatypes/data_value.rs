@@ -677,6 +677,11 @@ impl<T: DataInterp> From<DataValue<RS64b, T>> for i64 {
 // All widths must implement From<i64> for immediate parsing
 impl<S: Data, T: DataInterp> From<i64> for DataValue<S, T> {
     fn from(value: i64) -> Self {
-        Self::from_signed(S::S::from_i64(value).unwrap())
+        // Hack to coerce values with high MSB that num_traits won't cast
+        if value as u64 > (u32::MAX as u64) {
+            Self::from_signed(S::S::from_i64(value).unwrap())
+        } else {
+            Self::from_signed(S::S::from_i32(value as i32).unwrap())
+        }
     }
 }
