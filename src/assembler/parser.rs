@@ -62,11 +62,11 @@ impl DirectiveLiterals {
     }
 
     pub fn add_word(&mut self, val: u32) {
-        self.data.push(DataEnum::Word(val.into()));
+        self.data.push(DataEnum::Lword(val.into()));
     }
 
     pub fn add_doubleword(&mut self, val: u64) {
-        self.data.push(DataEnum::DoubleWord(val.into()));
+        self.data.push(DataEnum::Dword(val.into()));
     }
 
     pub fn is_empty(&self) -> bool {

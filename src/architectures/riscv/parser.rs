@@ -4,7 +4,6 @@ use super::isa;
 use super::pseudo_inst;
 use super::pseudo_inst::*;
 use super::registers::RiscVRegister;
-use crate::arch::*;
 use crate::assembler::lexer::*;
 use crate::assembler::parser::*;
 use crate::assembler::*;
@@ -888,8 +887,8 @@ impl<'a> DirectiveParser<'a> {
             // literal insertions
             "byte" => self.parse_data(DataWidth::Byte),
             "2byte" | "half" | "short" => self.parse_data(DataWidth::Half),
-            "4byte" | "word" | "long" => self.parse_data(DataWidth::Word),
-            "8byte" | "dword" | "quad" => self.parse_data(DataWidth::DoubleWord),
+            "4byte" | "word" | "long" => self.parse_data(DataWidth::Lword),
+            "8byte" | "dword" | "quad" => self.parse_data(DataWidth::Dword),
             "zero" => self.parse_zero(),
             "ascii" => self.parse_string(false),
             "asciz" | "string" => self.parse_string(true),
@@ -925,11 +924,11 @@ impl<'a> DirectiveParser<'a> {
                             let val: u16 = self.try_parse_imm(16, tok)? as u16;
                             data.add_half(val);
                         }
-                        Word => {
+                        Lword => {
                             let val: u32 = self.try_parse_imm(32, tok)? as u32;
                             data.add_word(val);
                         }
-                        DoubleWord => {
+                        Dword => {
                             let val: u64 = self.try_parse_imm(32, tok)? as u64;
                             data.add_doubleword(val);
                         }

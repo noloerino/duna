@@ -4,7 +4,6 @@
 use super::instruction::*;
 use super::isa::*;
 use super::registers::RiscVRegister;
-use crate::arch::*;
 use crate::program_state::*;
 use RiscVRegister::*;
 

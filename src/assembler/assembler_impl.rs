@@ -112,8 +112,8 @@ impl SectionStore {
             let pad_requirement = match val {
                 Byte(_) => 1,
                 Half(_) => 2,
-                Word(_) => 4,
-                DoubleWord(_) => 8,
+                Lword(_) => 4,
+                Dword(_) => 8,
             };
             while self.byte_len(section) % pad_requirement != 0 {
                 self.add_byte(section, 0);
@@ -126,8 +126,8 @@ impl SectionStore {
         match val {
             Byte(n) => self.add_byte(section, n.into()),
             Half(n) => self.add_half(section, n.into()),
-            Word(n) => self.add_word(section, n.into()),
-            DoubleWord(n) => self.add_doubleword(section, n.into()),
+            Lword(n) => self.add_word(section, n.into()),
+            Dword(n) => self.add_doubleword(section, n.into()),
         }
     }
 
@@ -329,10 +329,7 @@ impl<A: Architecture> UnlinkedProgram<A> {
                         }
                         // since inst_index is in words, we need to multiply by 4
                         let small_distance = (data_index as isize) - ((inst_index * 4) as isize);
-                        let byte_distance = small_distance
-                            + SignedValue::<A::DataWidth>::from(data_start - text_start)
-                                .raw()
-                                .as_();
+                        let byte_distance = small_distance + (data_start - text_start).raw().as_();
                         byte_distance as i64
                     }
                 };

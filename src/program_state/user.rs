@@ -150,7 +150,7 @@ impl<F: ArchFamily<S>, S: Data> UserDiff<F, S> {
         addr: ByteAddrValue<S>,
         val: DataEnum,
     ) -> Result<DiffStack<F, S>, MemFault<S>> {
-        let mut diffs = state.memory_set(addr, val)?;
+        let mut diffs = state.memory_set_unsized(addr, val)?;
         diffs.push(UserDiff::pc_p4(&state.user_state).into_state_diff());
         Ok(diffs)
     }

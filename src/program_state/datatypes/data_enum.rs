@@ -16,16 +16,16 @@ pub enum DataEnum {
     Dword(DataDword),
 }
 
-// impl DataEnum {
-//     pub fn width(self) -> DataWidth {
-//         match self {
-//             DataEnum::Byte(_) => DataWidth::Byte,
-//             DataEnum::Half(_) => DataWidth::Half,
-//             DataEnum::Word(_) => DataWidth::Word,
-//             DataEnum::DoubleWord(_) => DataWidth::DoubleWord,
-//         }
-//     }
-// }
+impl DataEnum {
+    pub fn width(self) -> DataWidth {
+        match self {
+            DataEnum::Byte(_) => DataWidth::Byte,
+            DataEnum::Half(_) => DataWidth::Half,
+            DataEnum::Lword(_) => DataWidth::Lword,
+            DataEnum::Dword(_) => DataWidth::Dword,
+        }
+    }
+}
 
 impl From<DataEnum> for DataByte {
     fn from(value: DataEnum) -> Self {

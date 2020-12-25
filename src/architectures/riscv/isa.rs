@@ -2,7 +2,6 @@ use super::arch::*;
 use super::instruction::*;
 pub use super::pseudo_inst::*;
 use super::registers::RiscVRegister;
-use crate::arch::*;
 use crate::program_state::*;
 use duna_macro::*;
 use num_traits::ops::wrapping::{WrappingAdd, WrappingSub};
@@ -72,7 +71,7 @@ impl ITypeArith<RS64b> for Addiw {
         let v1: DataLword = rs1_val.lower_lword();
         let v2: DataLword = imm.into();
         let result: DataLword = u32::from(v1).wrapping_add(u32::from(v2)).into();
-        DataDword::sign_ext_from_lword(result).into()
+        DataDword::sign_ext_from_lword(result)
     }
 }
 
@@ -90,7 +89,7 @@ impl RType<RS64b> for Addw {
         let v1: DataLword = rs1_val.lower_lword();
         let v2: DataLword = rs2_val.lower_lword();
         let result: DataLword = u32::from(v1).wrapping_add(u32::from(v2)).into();
-        DataDword::sign_ext_from_lword(result).into()
+        DataDword::sign_ext_from_lword(result)
     }
 }
 
@@ -314,8 +313,8 @@ impl<S: AtLeast32b> ITypeLoad<S> for Lb {
         state: &ProgramState<RiscV<S>, S>,
         addr: ByteAddrValue<S>,
     ) -> Result<MemReadResult<S>, MemFault<S>> {
-        let (v, diffs) = state.memory_get(addr, DataWidth::Byte)?;
-        Ok((<RegValue<S>>::sign_ext_from_byte(v.into()), diffs))
+        let (v, diffs) = state.memory_get::<RS8b>(addr)?;
+        Ok((<RegValue<S>>::sign_ext_from_byte(v), diffs))
     }
 }
 
@@ -333,8 +332,8 @@ impl<S: AtLeast32b> ITypeLoad<S> for Lbu {
         state: &ProgramState<RiscV<S>, S>,
         addr: ByteAddrValue<S>,
     ) -> Result<MemReadResult<S>, MemFault<S>> {
-        let (v, diffs) = state.memory_get(addr, DataWidth::Byte)?;
-        Ok((<RegValue<S>>::zero_pad_from_byte(v.into()), diffs))
+        let (v, diffs) = state.memory_get::<RS8b>(addr)?;
+        Ok((<RegValue<S>>::zero_pad_from_byte(v), diffs))
     }
 }
 
@@ -352,8 +351,8 @@ impl ITypeLoad<RS64b> for Ld {
         state: &ProgramState<RiscV<RS64b>, RS64b>,
         addr: ByteAddr64,
     ) -> Result<MemReadResult<RS64b>, MemFault<RS64b>> {
-        let (v, diffs) = state.memory_get(addr, DataWidth::DoubleWord)?;
-        Ok((v.into(), diffs))
+        let (v, diffs) = state.memory_get::<RS64b>(addr)?;
+        Ok((v, diffs))
     }
 }
 
@@ -371,8 +370,8 @@ impl<S: AtLeast32b> ITypeLoad<S> for Lh {
         state: &ProgramState<RiscV<S>, S>,
         addr: ByteAddrValue<S>,
     ) -> Result<MemReadResult<S>, MemFault<S>> {
-        let (v, diffs) = state.memory_get(addr, DataWidth::Half)?;
-        Ok((<RegValue<S>>::sign_ext_from_half(v.into()), diffs))
+        let (v, diffs) = state.memory_get::<RS16b>(addr)?;
+        Ok((<RegValue<S>>::sign_ext_from_half(v), diffs))
     }
 }
 
@@ -390,8 +389,8 @@ impl<S: AtLeast32b> ITypeLoad<S> for Lhu {
         state: &ProgramState<RiscV<S>, S>,
         addr: ByteAddrValue<S>,
     ) -> Result<MemReadResult<S>, MemFault<S>> {
-        let (v, diffs) = state.memory_get(addr, DataWidth::Half)?;
-        Ok((<RegValue<S>>::zero_pad_from_half(v.into()), diffs))
+        let (v, diffs) = state.memory_get::<RS16b>(addr)?;
+        Ok((<RegValue<S>>::zero_pad_from_half(v), diffs))
     }
 }
 
@@ -427,8 +426,8 @@ impl<S: AtLeast32b> ITypeLoad<S> for Lw {
         state: &ProgramState<RiscV<S>, S>,
         addr: ByteAddrValue<S>,
     ) -> Result<MemReadResult<S>, MemFault<S>> {
-        let (v, diffs) = state.memory_get(addr, DataWidth::Word)?;
-        Ok((<RegValue<S>>::sign_ext_from_lword(v.into()), diffs))
+        let (v, diffs) = state.memory_get::<RS32b>(addr)?;
+        Ok((<RegValue<S>>::sign_ext_from_lword(v), diffs))
     }
 }
 
@@ -446,8 +445,8 @@ impl ITypeLoad<RS64b> for Lwu {
         state: &ProgramState<RiscV<RS64b>, RS64b>,
         addr: ByteAddr64,
     ) -> Result<MemReadResult<RS64b>, MemFault<RS64b>> {
-        let (v, diffs) = state.memory_get(addr, DataWidth::Word)?;
-        Ok((DataDword::sign_ext_from_lword(v.into()), diffs))
+        let (v, diffs) = state.memory_get::<RS32b>(addr)?;
+        Ok((DataDword::sign_ext_from_lword(v), diffs))
     }
 }
 
@@ -525,7 +524,7 @@ impl SType<RS64b> for Sd {
         let base_addr: i64 = state.user_state.regfile.read(rs1).into();
         let byte_addr: ByteAddr64 = (base_addr.wrapping_add(imm.into())).into();
         let new_dword = state.user_state.regfile.read(rs2);
-        UserDiff::mem_write_pc_p4(state, byte_addr, DataEnum::DoubleWord(new_dword))
+        UserDiff::mem_write_pc_p4(state, byte_addr, DataEnum::Dword(new_dword))
             .map_err(TermCause::from)
     }
 }
@@ -609,7 +608,7 @@ impl<S: AtLeast32b> SType<S> for Sw {
         UserDiff::mem_write_pc_p4(
             state,
             byte_addr,
-            DataEnum::Word(state.user_state.regfile.read(rs2).lower_lword()),
+            DataEnum::Lword(state.user_state.regfile.read(rs2).lower_lword()),
         )
         .map_err(TermCause::from)
     }
@@ -1069,7 +1068,7 @@ mod tests_32 {
     #[test]
     fn test_ecall() {
         let mut state = get_init_state();
-        state.regfile_set(SP, 0x7FFF_000.into());
+        state.regfile_set(SP, 0x07FF_F000.into());
         let addr = ByteAddr32::from(state.regfile_read(SP));
         state.memory_set_word(addr, DataLword::from(0xDEAD_BEEFu32));
         // Set ecall code

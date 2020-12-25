@@ -66,7 +66,7 @@ impl<A: Architecture> Program<A> {
         // Initialize SP and PC
         user_state.regfile.set(sp, stack_start.into());
         user_state.pc =
-            (text_start + (UnsignedValue::<A::DataWidth>::from(4 * start_inst_idx)).into()).into();
+            text_start + (UnsignedValue::<A::DataWidth>::from(4 * start_inst_idx)).into();
         // store instructions
         let mut next_addr: ByteAddrValue<A::DataWidth> = user_state.pc;
         for inst in &insts {
@@ -350,6 +350,30 @@ impl<F: ArchFamily<S>, S: Data> ProgramState<F, S> {
         ))
     }
 
+    pub fn memory_set_unsized(
+        &self,
+        vaddr: ByteAddrValue<S>,
+        data: DataEnum,
+    ) -> Result<DiffStack<F, S>, MemFault<S>> {
+        // TODO see memory_get
+        let PtLookupData {
+            diffs: pt_diffs,
+            ppn,
+            offs,
+        } = self.priv_state.page_table.lookup_page(vaddr)?;
+        let mut diffs: Vec<StateDiff<F, S>> = pt_diffs
+            .into_iter()
+            .map(PtUpdate::into_state_diff)
+            .collect();
+        diffs.push(
+            self.phys_state
+                .memory_set_unsized(ppn, offs, data)
+                .map_err(|_| MemFault::buserror_at_addr(vaddr))?
+                .into_state_diff(),
+        );
+        Ok(diffs)
+    }
+
     /// Performs a read to memory with the specified data.
     /// Returns the sequence of state updates on success, or a page fault on failure.
     pub fn memory_set<W: PageIndex>(
@@ -379,7 +403,7 @@ impl<F: ArchFamily<S>, S: Data> ProgramState<F, S> {
     /// Used to inspect memory. Any page table updates will not be performed.
     pub fn memory_inspect_word(&self, addr: ByteAddrValue<S>) -> DataLword {
         let (v, _diffs) = self.memory_get::<RS32b>(addr).unwrap();
-        v.into()
+        v
     }
 
     /// Sets the value in memory, performing any page table updates as needed.
@@ -396,7 +420,7 @@ impl<F: ArchFamily<S>, S: Data> ProgramState<F, S> {
     pub fn memory_get_word(&mut self, addr: ByteAddrValue<S>) -> DataLword {
         let (v, diffs) = self.memory_get::<RS32b>(addr).unwrap();
         self.apply_diff_stack(diffs).unwrap();
-        v.into()
+        v
     }
 
     #[cfg(test)]
@@ -409,7 +433,7 @@ impl<F: ArchFamily<S>, S: Data> ProgramState<F, S> {
     pub fn memory_get_doubleword(&mut self, addr: ByteAddrValue<S>) -> DataDword {
         let (v, diffs) = self.memory_get::<RS64b>(addr).unwrap();
         self.apply_diff_stack(diffs).unwrap();
-        v.into()
+        v
     }
 
     #[cfg(test)]
@@ -478,7 +502,7 @@ impl<F: ArchFamily<S>, S: Data> ProgramState<F, S> {
                     let (val, diffs) = self
                         .memory_get::<RS8b>((base_addr + UnsignedValue::<S>::from(i)).into())
                         .unwrap();
-                    let byte: DataByte = val.into();
+                    let byte: DataByte = val;
                     v.extend(diffs);
                     byte
                 })
