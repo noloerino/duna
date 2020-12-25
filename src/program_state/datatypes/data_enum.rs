@@ -71,10 +71,10 @@ pub struct DataDiff<S: DataWidth> {
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum DataEnumDiff {
-    Byte(DataDiff<RS8b>),
-    Half(DataDiff<RS16b>),
-    Lword(DataDiff<RS32b>),
-    Dword(DataDiff<RS64b>),
+    Byte(DataDiff<W8b>),
+    Half(DataDiff<W16b>),
+    Lword(DataDiff<W32b>),
+    Dword(DataDiff<W64b>),
 }
 
 impl DataEnumDiff {

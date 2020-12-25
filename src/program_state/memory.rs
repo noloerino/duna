@@ -404,7 +404,7 @@ mod tests {
     /// Ensures that the single-page memory has stuff "mapped" properly.
     #[test]
     fn test_all_mapped() {
-        let pt = AllMappedPt::<RS32b>::new();
+        let pt = AllMappedPt::<W32b>::new();
         let npe: ByteAddr32 = DataLword::zero().into();
         assert!(pt.lookup_page(npe).is_err());
         let addr1: ByteAddr32 = DataLword::from(0xFFFF_F000u32).into();
@@ -423,7 +423,7 @@ mod tests {
     #[test]
     fn test_linear_pt() {
         // 4 KiB page size, 1 MiB physical memory
-        let mut pt = FifoLinearPt::<RS32b>::new(8, 12);
+        let mut pt = FifoLinearPt::<W32b>::new(8, 12);
         let mut dummy_mem = Default::default();
         let good_addr: ByteAddr32 = 0xFFFF_EF00u32.into();
         // Should pagefault when it's unmapped

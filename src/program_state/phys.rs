@@ -421,7 +421,7 @@ pub trait PageIndex: DataWidth {
     fn get(page: &MemPage, offs: PageOffs) -> RegValue<Self>;
 }
 
-impl PageIndex for RS8b {
+impl PageIndex for W8b {
     fn set(self, page: &mut MemPage, offs: PageOffs) {
         page.set_byte(offs, DataByte::new(self))
     }
@@ -431,7 +431,7 @@ impl PageIndex for RS8b {
     }
 }
 
-impl PageIndex for RS16b {
+impl PageIndex for W16b {
     fn set(self, page: &mut MemPage, offs: PageOffs) {
         page.set_half(offs, DataHalf::new(self))
     }
@@ -441,7 +441,7 @@ impl PageIndex for RS16b {
     }
 }
 
-impl PageIndex for RS32b {
+impl PageIndex for W32b {
     fn set(self, page: &mut MemPage, offs: PageOffs) {
         page.set_word(offs, DataLword::new(self))
     }
@@ -451,7 +451,7 @@ impl PageIndex for RS32b {
     }
 }
 
-impl PageIndex for RS64b {
+impl PageIndex for W64b {
     fn set(self, page: &mut MemPage, offs: PageOffs) {
         page.set_doubleword(offs, DataDword::new(self))
     }
@@ -495,6 +495,6 @@ mod tests {
     #[test]
     fn test_unaligned_fault() {
         let state = PhysState::new(Endianness::default(), true, 1, 20);
-        assert!(state.memory_get::<RS32b>(0, 1).is_err(),);
+        assert!(state.memory_get::<W32b>(0, 1).is_err(),);
     }
 }

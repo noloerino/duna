@@ -59,7 +59,7 @@ impl<S: AtLeast32b> ITypeArith<S> for Addi {
 
 #[derive(ITypeArith64)]
 pub struct Addiw;
-impl ITypeArith<RS64b> for Addiw {
+impl ITypeArith<W64b> for Addiw {
     fn inst_fields() -> IInstFields {
         IInstFields {
             funct3: f3(0),
@@ -69,14 +69,14 @@ impl ITypeArith<RS64b> for Addiw {
 
     fn eval(rs1_val: DataDword, imm: BitStr32) -> DataDword {
         let v1: DataLword = rs1_val.lower_lword();
-        let v2: DataLword = SignedValue::<RS32b>::from(imm).into();
+        let v2: DataLword = SignedValue::<W32b>::from(imm).into();
         let result: DataLword = u32::from(v1).wrapping_add(u32::from(v2)).into();
         DataDword::sign_ext_from_lword(result)
     }
 }
 
 pub struct Addw;
-impl RType<RS64b> for Addw {
+impl RType<W64b> for Addw {
     fn inst_fields() -> RInstFields {
         RInstFields {
             funct7: f7(0),
@@ -313,7 +313,7 @@ impl<S: AtLeast32b> ITypeLoad<S> for Lb {
         state: &ProgramState<RiscV<S>, S>,
         addr: ByteAddrValue<S>,
     ) -> Result<MemReadResult<S>, MemFault<S>> {
-        let (v, diffs) = state.memory_get::<RS8b>(addr)?;
+        let (v, diffs) = state.memory_get::<W8b>(addr)?;
         Ok((<RegValue<S>>::sign_ext_from_byte(v), diffs))
     }
 }
@@ -332,14 +332,14 @@ impl<S: AtLeast32b> ITypeLoad<S> for Lbu {
         state: &ProgramState<RiscV<S>, S>,
         addr: ByteAddrValue<S>,
     ) -> Result<MemReadResult<S>, MemFault<S>> {
-        let (v, diffs) = state.memory_get::<RS8b>(addr)?;
+        let (v, diffs) = state.memory_get::<W8b>(addr)?;
         Ok((<RegValue<S>>::zero_pad_from_byte(v), diffs))
     }
 }
 
 #[derive(ITypeLoad64)]
 pub struct Ld;
-impl ITypeLoad<RS64b> for Ld {
+impl ITypeLoad<W64b> for Ld {
     fn inst_fields() -> IInstFields {
         IInstFields {
             opcode: I_OPCODE_LOAD,
@@ -348,10 +348,10 @@ impl ITypeLoad<RS64b> for Ld {
     }
 
     fn eval(
-        state: &ProgramState<RiscV<RS64b>, RS64b>,
+        state: &ProgramState<RiscV<W64b>, W64b>,
         addr: ByteAddr64,
-    ) -> Result<MemReadResult<RS64b>, MemFault<RS64b>> {
-        let (v, diffs) = state.memory_get::<RS64b>(addr)?;
+    ) -> Result<MemReadResult<W64b>, MemFault<W64b>> {
+        let (v, diffs) = state.memory_get::<W64b>(addr)?;
         Ok((v, diffs))
     }
 }
@@ -370,7 +370,7 @@ impl<S: AtLeast32b> ITypeLoad<S> for Lh {
         state: &ProgramState<RiscV<S>, S>,
         addr: ByteAddrValue<S>,
     ) -> Result<MemReadResult<S>, MemFault<S>> {
-        let (v, diffs) = state.memory_get::<RS16b>(addr)?;
+        let (v, diffs) = state.memory_get::<W16b>(addr)?;
         Ok((<RegValue<S>>::sign_ext_from_half(v), diffs))
     }
 }
@@ -389,7 +389,7 @@ impl<S: AtLeast32b> ITypeLoad<S> for Lhu {
         state: &ProgramState<RiscV<S>, S>,
         addr: ByteAddrValue<S>,
     ) -> Result<MemReadResult<S>, MemFault<S>> {
-        let (v, diffs) = state.memory_get::<RS16b>(addr)?;
+        let (v, diffs) = state.memory_get::<W16b>(addr)?;
         Ok((<RegValue<S>>::zero_pad_from_half(v), diffs))
     }
 }
@@ -426,14 +426,14 @@ impl<S: AtLeast32b> ITypeLoad<S> for Lw {
         state: &ProgramState<RiscV<S>, S>,
         addr: ByteAddrValue<S>,
     ) -> Result<MemReadResult<S>, MemFault<S>> {
-        let (v, diffs) = state.memory_get::<RS32b>(addr)?;
+        let (v, diffs) = state.memory_get::<W32b>(addr)?;
         Ok((<RegValue<S>>::sign_ext_from_lword(v), diffs))
     }
 }
 
 #[derive(ITypeLoad64)]
 pub struct Lwu;
-impl ITypeLoad<RS64b> for Lwu {
+impl ITypeLoad<W64b> for Lwu {
     fn inst_fields() -> IInstFields {
         IInstFields {
             opcode: I_OPCODE_LOAD,
@@ -442,10 +442,10 @@ impl ITypeLoad<RS64b> for Lwu {
     }
 
     fn eval(
-        state: &ProgramState<RiscV<RS64b>, RS64b>,
+        state: &ProgramState<RiscV<W64b>, W64b>,
         addr: ByteAddr64,
-    ) -> Result<MemReadResult<RS64b>, MemFault<RS64b>> {
-        let (v, diffs) = state.memory_get::<RS32b>(addr)?;
+    ) -> Result<MemReadResult<W64b>, MemFault<W64b>> {
+        let (v, diffs) = state.memory_get::<W32b>(addr)?;
         Ok((DataDword::sign_ext_from_lword(v), diffs))
     }
 }
@@ -507,7 +507,7 @@ impl<S: AtLeast32b> SType<S> for Sb {
 }
 
 pub struct Sd;
-impl SType<RS64b> for Sd {
+impl SType<W64b> for Sd {
     fn inst_fields() -> SInstFields {
         SInstFields {
             funct3: f3(0b011),
@@ -516,11 +516,11 @@ impl SType<RS64b> for Sd {
     }
 
     fn eval(
-        state: &ProgramState<RiscV<RS64b>, RS64b>,
+        state: &ProgramState<RiscV<W64b>, W64b>,
         rs1: RiscVRegister,
         rs2: RiscVRegister,
         imm: BitStr32,
-    ) -> InstResult<RiscV<RS64b>, RS64b> {
+    ) -> InstResult<RiscV<W64b>, W64b> {
         let base_addr: i64 = state.user_state.regfile.read(rs1).into();
         let byte_addr: ByteAddr64 = (base_addr.wrapping_add(imm.into())).into();
         let new_dword = state.user_state.regfile.read(rs2);
@@ -571,7 +571,7 @@ impl<S: AtLeast32b> RType<S> for Sub {
 }
 
 pub struct Subw;
-impl RType<RS64b> for Subw {
+impl RType<W64b> for Subw {
     fn inst_fields() -> RInstFields {
         RInstFields {
             funct7: f7(0b0100_0000),
@@ -665,8 +665,8 @@ mod tests_32 {
     const RS2_POS: RiscVRegister = T1;
     const RS2_NEG: RiscVRegister = S1;
 
-    fn get_init_state() -> ProgramState<RiscV<RS32b>, RS32b> {
-        let mut state: ProgramState<RiscV<RS32b>, RS32b> = Default::default();
+    fn get_init_state() -> ProgramState<RiscV<W32b>, W32b> {
+        let mut state: ProgramState<RiscV<W32b>, W32b> = Default::default();
         state.regfile_set(RS1, DataLword::from(RS1_VAL));
         state.regfile_set(RS2_POS, DataLword::from(RS2_VAL_POS));
         state.regfile_set(RS2_NEG, DataLword::from(RS2_VAL_NEG));
@@ -675,7 +675,7 @@ mod tests_32 {
 
     #[test]
     fn test_write_x0() {
-        let mut state: ProgramState<RiscV<RS32b>, RS32b> = Default::default();
+        let mut state: ProgramState<RiscV<W32b>, W32b> = Default::default();
         state.apply_inst_test(&Addi::new(ZERO, ZERO, DataLword::from(0x100)));
         assert_eq!(i32::from(state.regfile_read(ZERO)), 0);
     }
@@ -687,8 +687,8 @@ mod tests_32 {
 
     /// Tests an R type instruction. Assumes that the registers being read
     /// are independent of the registers being written.
-    fn test_r_type<T: RType<RS32b>>(
-        state: &mut ProgramState<RiscV<RS32b>, RS32b>,
+    fn test_r_type<T: RType<W32b>>(
+        state: &mut ProgramState<RiscV<W32b>, W32b>,
         args: Vec<RTestData>,
     ) {
         for RTestData { rs2, result } in args {
@@ -704,8 +704,8 @@ mod tests_32 {
 
     /// Tests an I type arithmetic instruction. Assumes that the registers being read
     /// are independent of the registers being written.
-    fn test_i_type_arith<T: ITypeArith<RS32b>>(
-        state: &mut ProgramState<RiscV<RS32b>, RS32b>,
+    fn test_i_type_arith<T: ITypeArith<W32b>>(
+        state: &mut ProgramState<RiscV<W32b>, W32b>,
         args: Vec<IArithTestData>,
     ) {
         for IArithTestData { imm, result } in args {
@@ -725,27 +725,27 @@ mod tests_32 {
     fn test_to_machine_code() {
         // add s0, s1, s2
         const ADD_HEX: u32 = 0x0124_8433;
-        let add_inst: RiscVInst<RS32b> = Add::new(RiscVRegister::S0, S1, S2);
+        let add_inst: RiscVInst<W32b> = Add::new(RiscVRegister::S0, S1, S2);
         assert_eq!(add_inst.to_machine_code(), ADD_HEX);
         // addi T1, T1, -1075
         const ADDI_HEX: u32 = 0xBCD3_0313;
-        let addi_inst: RiscVInst<RS32b> = Addi::new(T1, T1, DataLword::from(-1075));
+        let addi_inst: RiscVInst<W32b> = Addi::new(T1, T1, DataLword::from(-1075));
         assert_eq!(addi_inst.to_machine_code(), ADDI_HEX);
         // auipc s1, 10
         const AUIPC_HEX: u32 = 0x0000_A497;
-        let auipc_inst: RiscVInst<RS32b> = Auipc::new(S1, DataLword::from(10));
+        let auipc_inst: RiscVInst<W32b> = Auipc::new(S1, DataLword::from(10));
         assert_eq!(auipc_inst.to_machine_code(), AUIPC_HEX);
         // bne s1, s2, 4
         const BNE_HEX: u32 = 0x0124_9263;
-        let bne_inst: RiscVInst<RS32b> = Bne::new(S1, S2, DataLword::from(4));
+        let bne_inst: RiscVInst<W32b> = Bne::new(S1, S2, DataLword::from(4));
         assert_eq!(bne_inst.to_machine_code(), BNE_HEX);
         // ecall
         const ECALL_HEX: u32 = 0x0000_0073;
-        let ecall_inst: RiscVInst<RS32b> = Ecall::new();
+        let ecall_inst: RiscVInst<W32b> = Ecall::new();
         assert_eq!(ecall_inst.to_machine_code(), ECALL_HEX);
         // jal ra, 16
         const JAL_HEX: u32 = 0x0100_00EF;
-        let jal_inst: RiscVInst<RS32b> = Jal::new(RA, DataLword::from(16));
+        let jal_inst: RiscVInst<W32b> = Jal::new(RA, DataLword::from(16));
         assert_eq!(jal_inst.to_machine_code(), JAL_HEX);
     }
 
@@ -931,8 +931,8 @@ mod tests_32 {
     }
 
     /// Tests a branch instruction. Taken jumps move forward by 0x100, or backwards by 0x100.
-    fn test_b_type<T: BType<RS32b>>(
-        state: &mut ProgramState<RiscV<RS32b>, RS32b>,
+    fn test_b_type<T: BType<W32b>>(
+        state: &mut ProgramState<RiscV<W32b>, W32b>,
         args: Vec<BTestData>,
     ) {
         for &dist in &[0x100, -0x100] {
@@ -956,7 +956,7 @@ mod tests_32 {
 
     #[test]
     fn test_b_type_insts() {
-        let mut state: ProgramState<RiscV<RS32b>, RS32b> = Default::default();
+        let mut state: ProgramState<RiscV<W32b>, W32b> = Default::default();
         test_b_type::<Beq>(
             &mut state,
             vec![
@@ -1078,7 +1078,7 @@ mod tests_32 {
         // Set ecall code
         state.regfile_set(
             A7,
-            RiscVSyscallConvention::<RS32b>::syscall_to_number(Syscall::Write),
+            RiscVSyscallConvention::<W32b>::syscall_to_number(Syscall::Write),
         );
         // We're writing 4 bytes to stdout, which has fd 1
         state.regfile_set(A0, DataLword::from(1));
@@ -1250,8 +1250,8 @@ mod tests_64 {
     use super::*;
     use RiscVRegister::*;
 
-    fn get_init_state() -> ProgramState<RiscV<RS64b>, RS64b> {
-        let state: ProgramState<RiscV<RS64b>, RS64b> = Default::default();
+    fn get_init_state() -> ProgramState<RiscV<W64b>, W64b> {
+        let state: ProgramState<RiscV<W64b>, W64b> = Default::default();
         state
     }
 

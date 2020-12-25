@@ -36,7 +36,7 @@ impl La {
 
 pub struct Li32;
 impl Li32 {
-    pub fn expand(reg: RiscVRegister, data: DataLword) -> Vec<RiscVInst<RS32b>> {
+    pub fn expand(reg: RiscVRegister, data: DataLword) -> Vec<RiscVInst<W32b>> {
         let imm = data.to_bit_str(32);
         let mut upper = imm.slice(32, 12);
         let lower = imm.slice(11, 0);
@@ -49,12 +49,12 @@ impl Li32 {
         }
         let no_lui = upper.is_zero();
         let rs1 = if no_lui { ZERO } else { reg };
-        let addi = Addi::new(reg, rs1, SignedValue::<RS32b>::from(lower).into());
+        let addi = Addi::new(reg, rs1, SignedValue::<W32b>::from(lower).into());
         if no_lui {
             vec![addi]
         } else {
             vec![
-                Lui::new(reg, UnsignedValue::<RS32b>::from(upper).into()),
+                Lui::new(reg, UnsignedValue::<W32b>::from(upper).into()),
                 addi,
             ]
         }
@@ -66,7 +66,7 @@ impl Li32 {
 // TODO figure out how to emit a new label for 64-bit literals that we can ld from
 pub struct Li64;
 impl Li64 {
-    pub fn expand(reg: RiscVRegister, data: DataDword) -> Vec<RiscVInst<RS64b>> {
+    pub fn expand(reg: RiscVRegister, data: DataDword) -> Vec<RiscVInst<W64b>> {
         let imm = data.to_bit_str(32);
         let mut upper = imm.slice(32, 12);
         let lower = imm.slice(11, 0);
@@ -79,12 +79,12 @@ impl Li64 {
         }
         let no_lui = upper.is_zero();
         let rs1 = if no_lui { ZERO } else { reg };
-        let addi = Addi::new(reg, rs1, SignedValue::<RS64b>::from(lower).into());
+        let addi = Addi::new(reg, rs1, SignedValue::<W64b>::from(lower).into());
         if upper.is_zero() {
             vec![addi]
         } else {
             vec![
-                Lui::new(reg, UnsignedValue::<RS64b>::from(upper).into()),
+                Lui::new(reg, UnsignedValue::<W64b>::from(upper).into()),
                 addi,
             ]
         }
@@ -158,9 +158,9 @@ impl Ret {
 mod tests {
     use super::*;
     use crate::architectures::riscv::RiscV;
-    use crate::program_state::{DataLword, ProgramState, RS32b};
+    use crate::program_state::{DataLword, ProgramState, W32b};
 
-    type Expanded = Vec<RiscVInst<RS32b>>;
+    type Expanded = Vec<RiscVInst<W32b>>;
 
     #[test]
     fn test_li_32() {
@@ -193,7 +193,7 @@ mod tests {
 
     #[test]
     fn test_not_neg() {
-        let mut state: ProgramState<RiscV<RS64b>, RS64b> = Default::default();
+        let mut state: ProgramState<RiscV<W64b>, W64b> = Default::default();
         let v1 = 0xABCD_ABCD_0123_0123u64 as i64;
         state.regfile_set(S0, v1.into());
         state.apply_inst_test(&Not::expand(A0, S0));

@@ -9,7 +9,7 @@ pub struct RiscVProgramBehavior<S: DataWidth> {
     _phantom: PhantomData<S>,
 }
 
-impl ProgramBehavior<RiscV<RS32b>, RS32b> for RiscVProgramBehavior<RS32b> {
+impl ProgramBehavior<RiscV<W32b>, W32b> for RiscVProgramBehavior<W32b> {
     fn sp_register() -> RiscVRegister {
         RiscVRegister::SP
     }
@@ -19,7 +19,7 @@ impl ProgramBehavior<RiscV<RS32b>, RS32b> for RiscVProgramBehavior<RS32b> {
     }
 }
 
-impl ProgramBehavior<RiscV<RS64b>, RS64b> for RiscVProgramBehavior<RS64b> {
+impl ProgramBehavior<RiscV<W64b>, W64b> for RiscVProgramBehavior<W64b> {
     fn sp_register() -> RiscVRegister {
         RiscVRegister::SP
     }

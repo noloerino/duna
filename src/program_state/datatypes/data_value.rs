@@ -10,22 +10,22 @@ use std::fmt;
 use std::marker::PhantomData;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct RS8b {
+pub struct W8b {
     value: u8,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct RS16b {
+pub struct W16b {
     value: u16,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct RS32b {
+pub struct W32b {
     value: u32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct RS64b {
+pub struct W64b {
     value: u64,
 }
 
@@ -34,17 +34,17 @@ pub trait AtLeast8b: DataWidth {}
 pub trait AtLeast16b: AtLeast8b {}
 pub trait AtLeast32b: AtLeast16b {}
 
-impl AtLeast8b for RS8b {}
-impl AtLeast8b for RS16b {}
-impl AtLeast8b for RS32b {}
-impl AtLeast8b for RS64b {}
+impl AtLeast8b for W8b {}
+impl AtLeast8b for W16b {}
+impl AtLeast8b for W32b {}
+impl AtLeast8b for W64b {}
 
-impl AtLeast16b for RS16b {}
-impl AtLeast16b for RS32b {}
-impl AtLeast16b for RS64b {}
+impl AtLeast16b for W16b {}
+impl AtLeast16b for W32b {}
+impl AtLeast16b for W64b {}
 
-impl AtLeast32b for RS32b {}
-impl AtLeast32b for RS64b {}
+impl AtLeast32b for W32b {}
+impl AtLeast32b for W64b {}
 
 pub trait DataWidth: fmt::Debug + Clone + Copy + PartialEq + Sized + 'static {
     type U: PrimInt
@@ -81,7 +81,7 @@ pub trait DataWidth: fmt::Debug + Clone + Copy + PartialEq + Sized + 'static {
     fn as_enum(&self) -> DataEnum;
 }
 
-impl DataWidth for RS8b {
+impl DataWidth for W8b {
     type U = u8;
     type S = i8;
 
@@ -116,7 +116,7 @@ impl DataWidth for RS8b {
     }
 }
 
-impl DataWidth for RS16b {
+impl DataWidth for W16b {
     type U = u16;
     type S = i16;
 
@@ -153,7 +153,7 @@ impl DataWidth for RS16b {
     }
 }
 
-impl DataWidth for RS32b {
+impl DataWidth for W32b {
     type U = u32;
     type S = i32;
 
@@ -190,7 +190,7 @@ impl DataWidth for RS32b {
     }
 }
 
-impl DataWidth for RS64b {
+impl DataWidth for W64b {
     type U = u64;
     type S = i64;
 
@@ -504,8 +504,8 @@ impl<S: DataWidth> fmt::Display for RegValue<S> {
 
 // === Special memory stuff ===
 pub type ByteAddrValue<S> = DataValue<S, ByteAddr>;
-pub type ByteAddr32 = DataValue<RS32b, ByteAddr>;
-pub type ByteAddr64 = DataValue<RS64b, ByteAddr>;
+pub type ByteAddr32 = DataValue<W32b, ByteAddr>;
+pub type ByteAddr64 = DataValue<W64b, ByteAddr>;
 
 impl<S: DataWidth> ByteAddrValue<S> {
     pub fn plus_4(self) -> Self {
@@ -532,7 +532,7 @@ impl<S: DataWidth> fmt::Display for DataValue<S, ByteAddr> {
 }
 
 // ===== Width-specific functions (includes sign extension/zero padding) =====
-pub type DataByte = DataValue<RS8b, RegData>;
+pub type DataByte = DataValue<W8b, RegData>;
 
 impl<S: AtLeast8b, T: DataInterp> DataValue<S, T> {
     pub fn zero_pad_from_byte(b: DataByte) -> Self {
@@ -544,31 +544,31 @@ impl<S: AtLeast8b, T: DataInterp> DataValue<S, T> {
     }
 }
 
-impl<T: DataInterp> From<u8> for DataValue<RS8b, T> {
+impl<T: DataInterp> From<u8> for DataValue<W8b, T> {
     fn from(value: u8) -> Self {
         Self::from_unsigned(value)
     }
 }
 
-impl<T: DataInterp> From<DataValue<RS8b, T>> for u8 {
-    fn from(value: DataValue<RS8b, T>) -> u8 {
+impl<T: DataInterp> From<DataValue<W8b, T>> for u8 {
+    fn from(value: DataValue<W8b, T>) -> u8 {
         value.as_unsigned().raw()
     }
 }
 
-impl<T: DataInterp> From<i8> for DataValue<RS8b, T> {
+impl<T: DataInterp> From<i8> for DataValue<W8b, T> {
     fn from(value: i8) -> Self {
         Self::from_signed(value)
     }
 }
 
-impl<T: DataInterp> From<DataValue<RS8b, T>> for i8 {
-    fn from(value: DataValue<RS8b, T>) -> i8 {
+impl<T: DataInterp> From<DataValue<W8b, T>> for i8 {
+    fn from(value: DataValue<W8b, T>) -> i8 {
         value.as_signed().raw()
     }
 }
 
-pub type DataHalf = DataValue<RS16b, RegData>;
+pub type DataHalf = DataValue<W16b, RegData>;
 
 impl<S: AtLeast16b, T: DataInterp> DataValue<S, T> {
     pub fn zero_pad_from_half(h: DataHalf) -> Self {
@@ -580,26 +580,26 @@ impl<S: AtLeast16b, T: DataInterp> DataValue<S, T> {
     }
 }
 
-impl<T: DataInterp> From<u16> for DataValue<RS16b, T> {
+impl<T: DataInterp> From<u16> for DataValue<W16b, T> {
     fn from(value: u16) -> Self {
         Self::from_unsigned(value)
     }
 }
 
-impl<T: DataInterp> From<DataValue<RS16b, T>> for u16 {
-    fn from(value: DataValue<RS16b, T>) -> u16 {
+impl<T: DataInterp> From<DataValue<W16b, T>> for u16 {
+    fn from(value: DataValue<W16b, T>) -> u16 {
         value.as_unsigned().raw()
     }
 }
 
-impl<T: DataInterp> From<i16> for DataValue<RS16b, T> {
+impl<T: DataInterp> From<i16> for DataValue<W16b, T> {
     fn from(value: i16) -> Self {
         Self::from_signed(value)
     }
 }
 
-impl<T: DataInterp> From<DataValue<RS16b, T>> for i16 {
-    fn from(value: DataValue<RS16b, T>) -> i16 {
+impl<T: DataInterp> From<DataValue<W16b, T>> for i16 {
+    fn from(value: DataValue<W16b, T>) -> i16 {
         value.as_signed().raw()
     }
 }
@@ -616,7 +616,7 @@ impl<S: AtLeast32b> From<BitStr32> for DataValue<S, Signed> {
     }
 }
 
-pub type DataLword = DataValue<RS32b, RegData>;
+pub type DataLword = DataValue<W32b, RegData>;
 
 impl<S: AtLeast32b, T: DataInterp> DataValue<S, T> {
     pub fn zero_pad_from_lword(l: DataLword) -> Self {
@@ -653,31 +653,31 @@ impl<S: AtLeast32b, T: DataInterp> DataValue<S, T> {
     }
 }
 
-impl<T: DataInterp> From<u32> for DataValue<RS32b, T> {
+impl<T: DataInterp> From<u32> for DataValue<W32b, T> {
     fn from(value: u32) -> Self {
         Self::from_unsigned(value)
     }
 }
 
-impl<T: DataInterp> From<DataValue<RS32b, T>> for u32 {
-    fn from(value: DataValue<RS32b, T>) -> u32 {
+impl<T: DataInterp> From<DataValue<W32b, T>> for u32 {
+    fn from(value: DataValue<W32b, T>) -> u32 {
         value.as_unsigned().raw()
     }
 }
 
-impl<T: DataInterp> From<i32> for DataValue<RS32b, T> {
+impl<T: DataInterp> From<i32> for DataValue<W32b, T> {
     fn from(value: i32) -> Self {
         Self::from_signed(value)
     }
 }
 
-impl<T: DataInterp> From<DataValue<RS32b, T>> for i32 {
-    fn from(value: DataValue<RS32b, T>) -> i32 {
+impl<T: DataInterp> From<DataValue<W32b, T>> for i32 {
+    fn from(value: DataValue<W32b, T>) -> i32 {
         value.as_signed().raw()
     }
 }
 
-pub type DataDword = DataValue<RS64b, RegData>;
+pub type DataDword = DataValue<W64b, RegData>;
 
 impl DataDword {
     pub fn from_lwords(lower: DataLword, upper: DataLword) -> Self {
@@ -689,20 +689,20 @@ impl DataDword {
     }
 }
 
-impl<T: DataInterp> From<u64> for DataValue<RS64b, T> {
+impl<T: DataInterp> From<u64> for DataValue<W64b, T> {
     fn from(value: u64) -> Self {
         Self::from_unsigned(value)
     }
 }
 
-impl<T: DataInterp> From<DataValue<RS64b, T>> for u64 {
-    fn from(value: DataValue<RS64b, T>) -> u64 {
+impl<T: DataInterp> From<DataValue<W64b, T>> for u64 {
+    fn from(value: DataValue<W64b, T>) -> u64 {
         value.as_unsigned().raw()
     }
 }
 
-impl<T: DataInterp> From<DataValue<RS64b, T>> for i64 {
-    fn from(value: DataValue<RS64b, T>) -> i64 {
+impl<T: DataInterp> From<DataValue<W64b, T>> for i64 {
+    fn from(value: DataValue<W64b, T>) -> i64 {
         value.as_signed().raw()
     }
 }

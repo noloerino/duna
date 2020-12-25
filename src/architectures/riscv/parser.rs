@@ -57,7 +57,7 @@ pub struct RiscVParser<S: AtLeast32b> {
 type TokenIter = Peekable<IntoIter<Token>>;
 
 lazy_static! {
-    static ref RV32_INST_EXPANSION_TABLE: HashMap<String, ParseType<RS32b>> = {
+    static ref RV32_INST_EXPANSION_TABLE: HashMap<String, ParseType<W32b >> = {
         use super::isa::*;
         use ParseType::*;
         [
@@ -115,7 +115,7 @@ lazy_static! {
         .map(|(s, t)| (s.to_string(), t))
         .collect()
     };
-    static ref RV64_INST_EXPANSION_TABLE: HashMap<String, ParseType<RS64b>> = {
+    static ref RV64_INST_EXPANSION_TABLE: HashMap<String, ParseType<W64b >> = {
         use super::isa::*;
         use ParseType::*;
         [
@@ -199,8 +199,8 @@ lazy_static! {
     };
 }
 
-impl Parser<RiscV<RS32b>, RS32b> for RiscVParser<RS32b> {
-    fn parse_lex_result(lex_result: LexResult) -> ParseResult<RiscV<RS32b>, RS32b> {
+impl Parser<RiscV<W32b>, W32b> for RiscVParser<W32b> {
+    fn parse_lex_result(lex_result: LexResult) -> ParseResult<RiscV<W32b>, W32b> {
         RiscVParser {
             file_id: lex_result.file_id,
             lines: lex_result.lines,
@@ -212,8 +212,8 @@ impl Parser<RiscV<RS32b>, RS32b> for RiscVParser<RS32b> {
     }
 }
 
-impl Parser<RiscV<RS64b>, RS64b> for RiscVParser<RS64b> {
-    fn parse_lex_result(lex_result: LexResult) -> ParseResult<RiscV<RS64b>, RS64b> {
+impl Parser<RiscV<W64b>, W64b> for RiscVParser<W64b> {
+    fn parse_lex_result(lex_result: LexResult) -> ParseResult<RiscV<W64b>, W64b> {
         RiscVParser {
             file_id: lex_result.file_id,
             lines: lex_result.lines,
@@ -1203,7 +1203,7 @@ mod tests {
 
     /// Parses and lexes the provided string, assuming that there are no errors in either phase.
     /// Assumes that there were no lex errors.
-    fn parse_and_lex(prog: &str) -> Vec<PartialInst<RiscV<RS32b>, RS32b>> {
+    fn parse_and_lex(prog: &str) -> Vec<PartialInst<RiscV<W32b>, W32b>> {
         let ParseResult {
             insts, reporter, ..
         } = RiscVParser::parse_lex_result(lex(prog));
@@ -1212,7 +1212,7 @@ mod tests {
     }
 
     /// Parses and lexes a string assuming it contains instructions that don't need expanding.
-    fn parse_and_lex_concr(prog: &str) -> Vec<RiscVInst<RS32b>> {
+    fn parse_and_lex_concr(prog: &str) -> Vec<RiscVInst<W32b>> {
         parse_and_lex(prog)
             .into_iter()
             .map(|inst| inst.try_into_concrete_inst())
@@ -1228,7 +1228,7 @@ mod tests {
             sections,
             insts,
             ..
-        } = RiscVParser::<RS32b>::parse_str(0, prog);
+        } = RiscVParser::<W32b>::parse_str(0, prog);
         assert!(reporter.is_empty(), insts.is_empty());
         assert_eq!(sections.data, vec![0xef, 0xbe, 0xad, 0xde, 0x12]);
     }
@@ -1240,7 +1240,7 @@ mod tests {
             ".section .data\n.byte 0x123", // immediate too large
         ];
         for prog in &programs {
-            let ParseResult { reporter, .. } = RiscVParser::<RS32b>::parse_str(0, prog);
+            let ParseResult { reporter, .. } = RiscVParser::<W32b>::parse_str(0, prog);
             assert!(!reporter.is_empty());
         }
     }
@@ -1249,7 +1249,7 @@ mod tests {
     /// Tests parsing of a label in the middle and a label at the end.
     fn test_label_defs() {
         let insts = parse_and_lex("add a0, sp, fp\nl1: addi sp, sp, -4\naddi sp, sp, 4\nl2:");
-        let expected_concrete: [RiscVInst<RS32b>; 3] = [
+        let expected_concrete: [RiscVInst<W32b>; 3] = [
             Add::new(A0, SP, S0),
             Addi::new(SP, SP, DataLword::from(-4)),
             Addi::new(SP, SP, DataLword::from(4)),
@@ -1302,7 +1302,7 @@ mod tests {
             "add x1,,x2, x3",
         ];
         for inst in bad_insts {
-            let ParseResult { reporter, .. } = RiscVParser::<RS32b>::parse_str(0, inst);
+            let ParseResult { reporter, .. } = RiscVParser::<W32b>::parse_str(0, inst);
             assert!(!reporter.is_empty());
         }
     }
@@ -1337,7 +1337,7 @@ mod tests {
         // immediates for instructions like addi can only be 12 bits long
         let ParseResult {
             insts, reporter, ..
-        } = RiscVParser::<RS32b>::parse_str(0, "addi sp sp 0xF000");
+        } = RiscVParser::<W32b>::parse_str(0, "addi sp sp 0xF000");
         assert!(!reporter.is_empty());
         assert!(insts.is_empty());
     }

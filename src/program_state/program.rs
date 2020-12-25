@@ -402,7 +402,7 @@ impl<F: ArchFamily<S>, S: DataWidth> ProgramState<F, S> {
 
     /// Used to inspect memory. Any page table updates will not be performed.
     pub fn memory_inspect_word(&self, addr: ByteAddrValue<S>) -> DataLword {
-        let (v, _diffs) = self.memory_get::<RS32b>(addr).unwrap();
+        let (v, _diffs) = self.memory_get::<W32b>(addr).unwrap();
         v
     }
 
@@ -418,7 +418,7 @@ impl<F: ArchFamily<S>, S: DataWidth> ProgramState<F, S> {
     /// history stack only keeps track of full instructions.
     #[cfg(test)]
     pub fn memory_get_word(&mut self, addr: ByteAddrValue<S>) -> DataLword {
-        let (v, diffs) = self.memory_get::<RS32b>(addr).unwrap();
+        let (v, diffs) = self.memory_get::<W32b>(addr).unwrap();
         self.apply_diff_stack(diffs).unwrap();
         v
     }
@@ -431,7 +431,7 @@ impl<F: ArchFamily<S>, S: DataWidth> ProgramState<F, S> {
 
     #[cfg(test)]
     pub fn memory_get_doubleword(&mut self, addr: ByteAddrValue<S>) -> DataDword {
-        let (v, diffs) = self.memory_get::<RS64b>(addr).unwrap();
+        let (v, diffs) = self.memory_get::<W64b>(addr).unwrap();
         self.apply_diff_stack(diffs).unwrap();
         v
     }
@@ -500,7 +500,7 @@ impl<F: ArchFamily<S>, S: DataWidth> ProgramState<F, S> {
             .map(|i| {
                 u8::from({
                     let (val, diffs) = self
-                        .memory_get::<RS8b>((base_addr + UnsignedValue::<S>::from(i)).into())
+                        .memory_get::<W8b>((base_addr + UnsignedValue::<S>::from(i)).into())
                         .unwrap();
                     let byte: DataByte = val;
                     v.extend(diffs);
