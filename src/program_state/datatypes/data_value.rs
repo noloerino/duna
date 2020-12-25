@@ -1,7 +1,8 @@
 use super::{BitStr32, DataEnum};
 use num_traits::{
+    bounds::Bounded,
     cast::{AsPrimitive, FromPrimitive},
-    int,
+    int::PrimInt,
     ops::wrapping::{WrappingAdd, WrappingSub},
     sign,
 };
@@ -46,7 +47,7 @@ impl AtLeast32b for RS32b {}
 impl AtLeast32b for RS64b {}
 
 pub trait Data: fmt::Debug + Clone + Copy + PartialEq + Sized + 'static {
-    type U: int::PrimInt
+    type U: PrimInt
         + sign::Unsigned
         + fmt::UpperHex
         + fmt::Display
@@ -54,17 +55,22 @@ pub trait Data: fmt::Debug + Clone + Copy + PartialEq + Sized + 'static {
         + AsPrimitive<u32>
         + AsPrimitive<u64>
         + AsPrimitive<usize>
+        + Bounded
         + FromPrimitive;
-    type S: int::PrimInt
+    type S: PrimInt
         + sign::Signed
         + fmt::Display
         + WrappingAdd
         + WrappingSub
         + AsPrimitive<isize>
+        + Bounded
         + FromPrimitive;
 
     fn from_u(value: Self::U) -> Self;
     fn from_s(value: Self::S) -> Self;
+
+    // Needed because num_traits casting is checked rather than saturating
+    fn from_u64(value: u64) -> Self;
 
     fn as_u(self) -> Self::U;
     fn as_s(self) -> Self::S;
@@ -86,6 +92,10 @@ impl Data for RS8b {
         Self {
             value: value as Self::U,
         }
+    }
+
+    fn from_u64(value: u64) -> Self {
+        Self { value: value as u8 }
     }
 
     fn as_u(self) -> Self::U {
@@ -116,6 +126,12 @@ impl Data for RS16b {
     fn from_s(value: Self::S) -> Self {
         Self {
             value: value as Self::U,
+        }
+    }
+
+    fn from_u64(value: u64) -> Self {
+        Self {
+            value: value as u16,
         }
     }
 
@@ -150,6 +166,12 @@ impl Data for RS32b {
         }
     }
 
+    fn from_u64(value: u64) -> Self {
+        Self {
+            value: value as u32,
+        }
+    }
+
     fn as_u(self) -> Self::U {
         self.value
     }
@@ -179,6 +201,10 @@ impl Data for RS64b {
         Self {
             value: value as Self::U,
         }
+    }
+
+    fn from_u64(value: u64) -> Self {
+        Self { value }
     }
 
     fn as_u(self) -> Self::U {
@@ -434,7 +460,7 @@ impl<S: Data> UnsignedValue<S> {
 
 impl<S: Data> From<usize> for UnsignedValue<S> {
     fn from(value: usize) -> Self {
-        DataValue::from_unsigned(S::U::from_usize(value).unwrap())
+        DataValue::new(S::from_u64(value as u64))
     }
 }
 
@@ -454,7 +480,7 @@ impl<S: Data> SignedValue<S> {
 
 impl<S: Data> From<isize> for SignedValue<S> {
     fn from(value: isize) -> Self {
-        DataValue::from_signed(S::S::from_isize(value).unwrap())
+        DataValue::new(S::from_u64(value as u64))
     }
 }
 
@@ -489,11 +515,11 @@ impl<S: Data> ByteAddrValue<S> {
     }
 
     pub fn is_aligned_to<W: Data>(self) -> bool {
-        W::from_u(W::U::from_u64(self.as_unsigned().raw().as_() as u64).unwrap()).is_aligned()
+        W::from_u64(self.as_unsigned().raw().as_() as u64).is_aligned()
     }
 
     pub fn to_word_address(self) -> S::U {
-        S::U::from_u64(self.as_unsigned().raw().as_() as u64 >> 2).unwrap()
+        S::from_u64(self.as_unsigned().raw().as_() as u64 >> 2).as_u()
     }
 }
 
@@ -599,13 +625,9 @@ impl<S: AtLeast32b, T: DataInterp> DataValue<S, T> {
     pub fn set_byte(self, i: u8, val: DataByte) -> Self {
         let mask: u64 = !(0xFF << (i * 8));
         let other_raw_val: u64 = val.as_unsigned().raw().as_();
-        Self::from_unsigned(
-            S::U::from_u64(
-                (self.as_unsigned().raw().as_() as u64 & mask)
-                    | ((other_raw_val as u64) << (i * 8)),
-            )
-            .unwrap(),
-        )
+        Self::new(S::from_u64(
+            (self.as_unsigned().raw().as_() as u64 & mask) | ((other_raw_val as u64) << (i * 8)),
+        ))
     }
 
     /// Selects the ith byte in the word, where 0 is the LSB.

@@ -1068,7 +1068,7 @@ mod tests_32 {
     #[test]
     fn test_ecall() {
         let mut state = get_init_state();
-        state.regfile_set(SP, 0x07FF_F000.into());
+        state.regfile_set(SP, 0x7FFF_0000.into());
         let addr = ByteAddr32::from(state.regfile_read(SP));
         state.memory_set_word(addr, DataLword::from(0xDEAD_BEEFu32));
         // Set ecall code
