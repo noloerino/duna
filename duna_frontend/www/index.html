@@ -7,6 +7,7 @@
   <body>
     <noscript>Duna requires Javascript and WebAssembly to run.</noscript>
     <script src="./bootstrap.js"></script>
+    <link rel="stylesheet" href="node_modules/codemirror/lib/codemirror.css">
     <div>
       <textarea
         id="code"
@@ -27,5 +28,7 @@
     <div>
       <button id="go">Go!</button>
     </div>
+    <pre id="compile-errors">
+    </pre>
   </body>
 </html>

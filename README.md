@@ -2,7 +2,7 @@
 ![](https://github.com/noloerino/duna/workflows/Rust/badge.svg)
 [![Coverage Status](https://coveralls.io/repos/github/noloerino/duna/badge.svg?branch=master)](https://coveralls.io/github/noloerino/duna?branch=master)
 
-A 32-bit RISCV emulator built in Rust. Inspired by [Venus](https://github.com/ThaumicMekanism/venus).
+A 32-bit RISCV simulator built in Rust. Inspired by [Venus](https://github.com/ThaumicMekanism/venus).
 
 ## Current functionality
 - Supports most of the base ISA (haven't implemented a few arithmetic operations yet since I'm still
