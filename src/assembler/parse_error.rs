@@ -440,14 +440,14 @@ impl fmt::Display for ParseError {
 #[cfg(test)]
 mod tests {
     use super::super::parser::Parser;
-    use crate::arch::Width32b;
     use crate::architectures::riscv::RiscVParser;
+    use crate::program_state::RS32b;
 
     #[test]
     /// Tests that an error produced by the lexer makes it so the affected line is not passed
     /// to the parser.
     fn test_lex_short_circuit() {
-        let reporter = RiscVParser::<Width32b>::parse_str(0, "addi x1 0xggg1, x2").reporter;
+        let reporter = RiscVParser::<RS32b>::parse_str(0, "addi x1 0xggg1, x2").reporter;
         assert_eq!(reporter.errs.len(), 1);
     }
 }

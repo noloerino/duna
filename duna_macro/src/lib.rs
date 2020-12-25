@@ -162,18 +162,18 @@ fn impl_convert_int32_derive(ast: &syn::DeriveInput) -> TokenStream {
 fn impl_itype_arith_derive(ast: &syn::DeriveInput) -> TokenStream {
     let name = &ast.ident;
     let gen = quote! {
-        impl<T: MachineDataWidth> IType<T> for #name {
+        impl<S: AtLeast32b> IType<S> for #name {
             fn inst_fields() -> IInstFields {
-                <#name as ITypeArith<T>>::inst_fields()
+                <#name as ITypeArith<S>>::inst_fields()
             }
 
             fn eval(
-                state: &ProgramState<RiscV<T>, T>,
+                state: &ProgramState<RiscV<S>, S>,
                 rd: RiscVRegister,
                 rs1: RiscVRegister,
                 imm: BitStr32
-            ) -> InstResult<RiscV<T>, T> {
-                let new_rd_val = <#name as ITypeArith<T>>::eval(state.user_state.regfile.read(rs1), imm.into());
+            ) -> InstResult<RiscV<S>, S> {
+                let new_rd_val = <#name as ITypeArith<S>>::eval(state.user_state.regfile.read(rs1), imm.into());
                 Ok(UserDiff::reg_write_pc_p4(&state.user_state, rd, new_rd_val))
             }
         }
@@ -184,18 +184,18 @@ fn impl_itype_arith_derive(ast: &syn::DeriveInput) -> TokenStream {
 fn impl_itype_arith_64_derive(ast: &syn::DeriveInput) -> TokenStream {
     let name = &ast.ident;
     let gen = quote! {
-        impl IType<Width64b> for #name {
+        impl IType<RS64b> for #name {
             fn inst_fields() -> IInstFields {
-                <#name as ITypeArith<Width64b>>::inst_fields()
+                <#name as ITypeArith<RS64b>>::inst_fields()
             }
 
             fn eval(
-                state: &ProgramState<RiscV<Width64b>, Width64b>,
+                state: &ProgramState<RiscV<RS64b>, RS64b>,
                 rd: RiscVRegister,
                 rs1: RiscVRegister,
                 imm: BitStr32
-            ) -> InstResult<RiscV<Width64b>, Width64b> {
-                let new_rd_val = <#name as ITypeArith<Width64b>>::eval(state.user_state.regfile.read(rs1), imm.into());
+            ) -> InstResult<RiscV<RS64b>, RS64b> {
+                let new_rd_val = <#name as ITypeArith<RS64b>>::eval(state.user_state.regfile.read(rs1), imm.into());
                 Ok(UserDiff::reg_write_pc_p4(&state.user_state, rd, new_rd_val))
             }
         }
@@ -206,20 +206,20 @@ fn impl_itype_arith_64_derive(ast: &syn::DeriveInput) -> TokenStream {
 fn impl_itype_load_derive(ast: &syn::DeriveInput) -> TokenStream {
     let name = &ast.ident;
     let gen = quote! {
-        impl<T: MachineDataWidth> IType<T> for #name {
+        impl<S: AtLeast32b> IType<S> for #name {
             fn inst_fields() -> IInstFields {
-                <#name as ITypeLoad<T>>::inst_fields()
+                <#name as ITypeLoad<S>>::inst_fields()
             }
 
             fn eval(
-                state: &ProgramState<RiscV<T>, T>,
+                state: &ProgramState<RiscV<S>, S>,
                 rd: RiscVRegister,
                 rs1: RiscVRegister,
                 imm: BitStr32
-            ) -> InstResult<RiscV<T>, T> {
-                let rs1_val: T::Signed = state.user_state.regfile.read(rs1).into();
-                let addr: T::RegData = (rs1_val + imm.into()).into();
-                let result = <#name as ITypeLoad<T>>::eval(state, addr.into());
+            ) -> InstResult<RiscV<S>, S> {
+                let rs1_val: SignedValue<S> = state.user_state.regfile.read(rs1).into();
+                let addr: RegValue<S> = (rs1_val + imm.into()).into();
+                let result = <#name as ITypeLoad<S>>::eval(state, addr.into());
                 match result {
                     Ok((new_rd_val, mut diffs)) => {
                         diffs.extend(
@@ -238,21 +238,21 @@ fn impl_itype_load_derive(ast: &syn::DeriveInput) -> TokenStream {
 fn impl_itype_load_64_derive(ast: &syn::DeriveInput) -> TokenStream {
     let name = &ast.ident;
     let gen = quote! {
-        impl IType<Width64b> for #name {
+        impl IType<RS64b> for #name {
             fn inst_fields() -> IInstFields {
-                <#name as ITypeLoad<Width64b>>::inst_fields()
+                <#name as ITypeLoad<RS64b>>::inst_fields()
             }
 
             fn eval(
-                state: &ProgramState<RiscV<Width64b>, Width64b>,
+                state: &ProgramState<RiscV<RS64b>, RS64b>,
                 rd: RiscVRegister,
                 rs1: RiscVRegister,
                 imm: BitStr32
-            ) -> InstResult<RiscV<Width64b>, Width64b> {
+            ) -> InstResult<RiscV<RS64b>, RS64b> {
                 let rs1_val: i64 = state.user_state.regfile.read(rs1).into();
-                let imm_val: i64 = imm.into();
+                let imm_val: i64 = SignedValue::<RS64b>::from(imm).into();
                 let addr: DataDword = (rs1_val + imm_val).into();
-                let result = <#name as ITypeLoad<Width64b>>::eval(state, addr.into());
+                let result = <#name as ITypeLoad<RS64b>>::eval(state, addr.into());
                 match result {
                     Ok((new_rd_val, mut diffs)) => {
                         diffs.extend(

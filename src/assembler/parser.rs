@@ -74,23 +74,23 @@ impl DirectiveLiterals {
     }
 }
 
-pub enum OkParseResult<F: ArchFamily<T>, T: MachineDataWidth> {
-    Insts(ParsedInstStream<F, T>),
+pub enum OkParseResult<F: ArchFamily<S>, S: Data> {
+    Insts(ParsedInstStream<F, S>),
     Literals(DirectiveLiterals),
     None,
 }
 
-pub type ParsedInstStream<F, T> = Vec<PartialInst<F, T>>;
-pub type InstParseResult<F, T> = Result<ParsedInstStream<F, T>, ParseError>;
-pub type LineParseResult<F, T> = Result<OkParseResult<F, T>, ParseError>;
+pub type ParsedInstStream<F, S> = Vec<PartialInst<F, S>>;
+pub type InstParseResult<F, S> = Result<ParsedInstStream<F, S>, ParseError>;
+pub type LineParseResult<F, S> = Result<OkParseResult<F, S>, ParseError>;
 
-pub struct ParseResult<F, T>
+pub struct ParseResult<F, S>
 where
-    F: ArchFamily<T>,
-    T: MachineDataWidth,
+    F: ArchFamily<S>,
+    S: Data,
 {
     pub file_id: FileId,
-    pub insts: ParsedInstStream<F, T>,
+    pub insts: ParsedInstStream<F, S>,
     pub sections: SectionStore,
     pub declared_globals: HashSet<String>,
     pub reporter: ParseErrorReporter,
@@ -124,14 +124,14 @@ impl Default for ParseState {
 
 pub type TokenIter = Peekable<IntoIter<Token>>;
 
-pub trait Parser<F: ArchFamily<T>, T>
+pub trait Parser<F, S>
 where
-    F: ArchFamily<T>,
-    T: MachineDataWidth,
+    F: ArchFamily<S>,
+    S: Data,
 {
-    fn parse_str(file_id: FileId, contents: &str) -> ParseResult<F, T> {
+    fn parse_str(file_id: FileId, contents: &str) -> ParseResult<F, S> {
         Self::parse_lex_result(Lexer::lex_str(file_id, contents))
     }
 
-    fn parse_lex_result(lex_result: LexResult) -> ParseResult<F, T>;
+    fn parse_lex_result(lex_result: LexResult) -> ParseResult<F, S>;
 }

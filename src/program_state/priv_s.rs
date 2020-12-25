@@ -6,13 +6,14 @@ use super::memory::*;
 use super::phys::PhysMem;
 use super::program::{DiffStack, ProgramState, StateDiff};
 use crate::arch::*;
+use num_traits::cast::AsPrimitive;
 
 /// Contains program state that is visited only to privileged entities, i.e. a kernel thread.
 /// TODO add kernel thread information (tid, file descriptors, etc.)
 pub struct PrivState<S: Data> {
     pub brk: ByteAddrValue<S>,
     pub heap_start: ByteAddrValue<S>,
-    pub page_table: Box<dyn PageTable<ByteAddrValue<S>>>,
+    pub page_table: Box<dyn PageTable<S>>,
     /// Holds the contents of all bytes that have been printed to stdout (used mostly for testing)
     pub(crate) stdout: Vec<u8>,
     pub(crate) stderr: Vec<u8>,
@@ -49,7 +50,7 @@ impl<S: Data> PrivState<S> {
                 // TODO impl for other files
                 let fd_idx: usize = {
                     let num: UnsignedValue<S> = (*fd).into();
-                    num as usize
+                    num.raw().as_() as usize
                 };
                 match fd_idx {
                     1 => {
@@ -133,7 +134,7 @@ pub enum TermCause {
     BusError,
 }
 
-impl<S> From<MemFault<S>> for TermCause {
+impl<S: Data> From<MemFault<S>> for TermCause {
     fn from(fault: MemFault<S>) -> TermCause {
         match fault.cause {
             MemFaultCause::PageFault => TermCause::SegFault,

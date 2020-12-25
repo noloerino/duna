@@ -16,6 +16,7 @@ use std::str::FromStr;
 pub trait ProgramBehavior<F, S>
 where
     F: ArchFamily<S>,
+    S: Data,
 {
     /// Returns the register that holds the stack pointer.
     fn sp_register() -> F::Register;
@@ -50,9 +51,9 @@ impl<A: Architecture> Program<A> {
         pg_ofs_len: usize,
         page_table: Box<dyn PageTable<A::DataWidth>>,
     ) -> Self {
-        let text_start = segment_starts.text::<A::DataWidth>();
-        let stack_start: ByteAddrValue<A::DataWidth> = segment_starts.stack::<A::DataWidth>();
-        let data_start: ByteAddrValue<A::DataWidth> = segment_starts.data::<A::DataWidth>();
+        let text_start: ByteAddrValue<A::DataWidth> = segment_starts.text();
+        let stack_start: ByteAddrValue<A::DataWidth> = segment_starts.stack();
+        let data_start: ByteAddrValue<A::DataWidth> = segment_starts.data();
         let mut state = ProgramState::new(pg_count, pg_ofs_len, page_table);
         let mem = &mut state.phys_state.phys_mem;
         let pt = &mut state.priv_state.page_table;
@@ -64,9 +65,8 @@ impl<A: Architecture> Program<A> {
         let sp = <A::ProgramBehavior as ProgramBehavior<A::Family, A::DataWidth>>::sp_register();
         // Initialize SP and PC
         user_state.regfile.set(sp, stack_start.into());
-        user_state.pc = (UnsignedValue::<A::DataWidth>::from(text_start).raw()
-            + (UnsignedValue::<A::DataWidth>::from4 * start_inst_idx).raw())
-        .into();
+        user_state.pc =
+            (text_start + (UnsignedValue::<A::DataWidth>::from(4 * start_inst_idx)).into()).into();
         // store instructions
         let mut next_addr: ByteAddrValue<A::DataWidth> = user_state.pc;
         for inst in &insts {
@@ -78,7 +78,7 @@ impl<A: Architecture> Program<A> {
         }
         // store data
         let all_data = sections.data.into_iter().chain(sections.rodata.into_iter());
-        let data_start_usize = data_start.as_unsigned().raw() as usize;
+        let data_start_usize = data_start.as_unsigned().raw().as_() as usize;
         let mut end_of_data: usize = data_start_usize;
         for (offs, byte) in all_data.enumerate() {
             let addr: ByteAddrValue<A::DataWidth> =
@@ -198,7 +198,7 @@ impl<A: Architecture> ProgramExecutor<A> {
                     <A::ProgramBehavior as ProgramBehavior<A::Family, A::DataWidth>>::return_register();
                 let a0_val: UnsignedValue<A::DataWidth> = program.state.regfile_read(a0).into();
                 // For a non-abnormal exit, downcast to u8 and set upper bit to 0
-                let val_u8 = a0_val.as_();
+                let val_u8 = a0_val.raw().as_() as u8;
                 Some(val_u8 & 0b0111_1111)
             }
         } else {
@@ -268,7 +268,7 @@ impl<A: Architecture> ProgramExecutor<A> {
             <A::ProgramBehavior as ProgramBehavior<A::Family, A::DataWidth>>::return_register();
         let a0_val: UnsignedValue<A::DataWidth> = program.state.regfile_read(a0).into();
         // For a non-abnormal exit, downcast to u8 and set upper bit to 0
-        let val_u8 = a0_val.as_();
+        let val_u8 = a0_val.raw().as_() as u8;
         val_u8 & 0b0111_1111
     }
 }
@@ -334,7 +334,7 @@ impl<F: ArchFamily<S>, S: Data> ProgramState<F, S> {
         &self,
         vaddr: ByteAddrValue<S>,
         width: DataWidth,
-    ) -> Result<MemGetResult<F, S>, MemFault<ByteAddrValue<S>>> {
+    ) -> Result<MemGetResult<F, S>, MemFault<S>> {
         // TODO how do we handle lookups spanning multiple pages? how do we handle a PT update that
         // failed on memory access due to an alignment error?
         let PtLookupData {
@@ -397,15 +397,15 @@ impl<F: ArchFamily<S>, S: Data> ProgramState<F, S> {
     /// Used for testing only. Any operations applied in this fashion are noninvertible, as the
     /// history stack only keeps track of full instructions.
     #[cfg(test)]
-    pub fn memory_get_word(&mut self, addr: ByteAddrValue<S>) -> DataWord {
+    pub fn memory_get_word(&mut self, addr: ByteAddrValue<S>) -> DataLword {
         let (v, diffs) = self.memory_get(addr, DataWidth::Word).unwrap();
         self.apply_diff_stack(diffs).unwrap();
         v.into()
     }
 
     #[cfg(test)]
-    pub fn memory_set_word(&mut self, addr: ByteAddrValue<S>, val: DataWord) {
-        self.apply_diff_stack(self.memory_set(addr, val.kind()).unwrap())
+    pub fn memory_set_word(&mut self, addr: ByteAddrValue<S>, val: DataLword) {
+        self.apply_diff_stack(self.memory_set(addr, DataEnum::Word(val)).unwrap())
             .unwrap();
     }
 
@@ -418,7 +418,7 @@ impl<F: ArchFamily<S>, S: Data> ProgramState<F, S> {
 
     #[cfg(test)]
     pub fn memory_set_doubleword(&mut self, addr: ByteAddrValue<S>, val: DataDword) {
-        self.apply_diff_stack(self.memory_set(addr, val.kind()).unwrap())
+        self.apply_diff_stack(self.memory_set(addr, DataEnum::DoubleWord(val)).unwrap())
             .unwrap();
     }
 
@@ -472,7 +472,7 @@ impl<F: ArchFamily<S>, S: Data> ProgramState<F, S> {
         len: RegValue<S>,
     ) -> InstResult<F, S> {
         let len_val: UnsignedValue<S> = len.into();
-        let count: usize = UnsignedValue::<S>::from(len_val);
+        let count: usize = len_val.raw().as_();
         let base_addr: UnsignedValue<S> = buf.into();
         let ret_reg = <F::Syscalls as SyscallConvention<F, S>>::syscall_return_regs()[0];
         let mut v = Vec::new();
@@ -552,7 +552,7 @@ impl<F: ArchFamily<S>, S: Data> ProgramState<F, S> {
     fn syscall_exit(&self, code: RegValue<S>) -> InstResult<F, S> {
         // downcast to u32 no matter what
         let val: UnsignedValue<S> = code.into();
-        Ok(PrivDiff::Terminate(TermCause::Exit(val.raw() as u32)).into_diff_stack())
+        Ok(PrivDiff::Terminate(TermCause::Exit(val.raw().as_() as u32)).into_diff_stack())
     }
 
     /// Handles an unknown syscall.

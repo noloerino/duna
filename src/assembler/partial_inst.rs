@@ -1,29 +1,30 @@
 use super::parser::{LabelDef, LabelRef};
 use crate::arch::*;
+use crate::program_state::*;
 
-pub(crate) enum NeededRegs<F: ArchFamily<T>, T: MachineDataWidth> {
+pub(crate) enum NeededRegs<F: ArchFamily<S>, S: Data> {
     Two {
-        assemble: fn(F::Register, F::Register, T::RegData) -> F::Instruction,
+        assemble: fn(F::Register, F::Register, RegValue<S>) -> F::Instruction,
         reg1: F::Register,
         reg2: F::Register,
     },
     One {
-        assemble: fn(F::Register, T::RegData) -> F::Instruction,
+        assemble: fn(F::Register, RegValue<S>) -> F::Instruction,
         reg: F::Register,
     },
     Zero {
-        assemble: fn(T::RegData) -> F::Instruction,
+        assemble: fn(RegValue<S>) -> F::Instruction,
     },
 }
 
-pub(crate) struct NeedsLabel<F: ArchFamily<T>, T: MachineDataWidth> {
-    tpe: NeededRegs<F, T>,
+pub(crate) struct NeedsLabel<F: ArchFamily<S>, S: Data> {
+    tpe: NeededRegs<F, S>,
     needed_label: LabelRef,
 }
 
-impl<F: ArchFamily<T>, T: MachineDataWidth> NeedsLabel<F, T> {
+impl<F: ArchFamily<S>, S: Data> NeedsLabel<F, S> {
     /// Attempts to replace the needed label with the provided immediate
-    pub fn fulfill_label(&self, imm: T::RegData) -> F::Instruction {
+    pub fn fulfill_label(&self, imm: RegValue<S>) -> F::Instruction {
         use NeededRegs::*;
         match self.tpe {
             Two {
@@ -37,26 +38,26 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> NeedsLabel<F, T> {
     }
 }
 
-pub(crate) enum PartialInstType<F: ArchFamily<T>, T: MachineDataWidth> {
+pub(crate) enum PartialInstType<F: ArchFamily<S>, S: Data> {
     Complete(F::Instruction),
-    NeedsLabelRef(NeedsLabel<F, T>),
+    NeedsLabelRef(NeedsLabel<F, S>),
 }
 
-pub struct PartialInst<F: ArchFamily<T>, T: MachineDataWidth> {
-    pub(crate) tpe: PartialInstType<F, T>,
+pub struct PartialInst<F: ArchFamily<S>, S: Data> {
+    pub(crate) tpe: PartialInstType<F, S>,
     /// A label pointing to this instructions.
     pub label: Option<LabelDef>,
 }
 
-impl<F: ArchFamily<T>, T: MachineDataWidth> PartialInst<F, T> {
-    pub fn new_complete(inst: F::Instruction) -> PartialInst<F, T> {
+impl<F: ArchFamily<S>, S: Data> PartialInst<F, S> {
+    pub fn new_complete(inst: F::Instruction) -> PartialInst<F, S> {
         PartialInst {
             tpe: PartialInstType::Complete(inst),
             label: None,
         }
     }
 
-    fn new_needs_label(data: NeedsLabel<F, T>) -> PartialInst<F, T> {
+    fn new_needs_label(data: NeedsLabel<F, S>) -> PartialInst<F, S> {
         PartialInst {
             tpe: PartialInstType::NeedsLabelRef(data),
             label: None,
@@ -64,11 +65,11 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> PartialInst<F, T> {
     }
 
     pub fn new_two_reg_needs_label(
-        assemble: fn(F::Register, F::Register, T::RegData) -> F::Instruction,
+        assemble: fn(F::Register, F::Register, RegValue<S>) -> F::Instruction,
         reg1: F::Register,
         reg2: F::Register,
         needed: LabelRef,
-    ) -> PartialInst<F, T> {
+    ) -> PartialInst<F, S> {
         PartialInst::new_needs_label(NeedsLabel {
             tpe: NeededRegs::Two {
                 assemble,
@@ -80,10 +81,10 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> PartialInst<F, T> {
     }
 
     pub fn new_one_reg_needs_label(
-        assemble: fn(F::Register, T::RegData) -> F::Instruction,
+        assemble: fn(F::Register, RegValue<S>) -> F::Instruction,
         reg: F::Register,
         needed: LabelRef,
-    ) -> PartialInst<F, T> {
+    ) -> PartialInst<F, S> {
         PartialInst::new_needs_label(NeedsLabel {
             tpe: NeededRegs::One { assemble, reg },
             needed_label: needed,
@@ -91,9 +92,9 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> PartialInst<F, T> {
     }
 
     pub fn new_no_reg_needs_label(
-        assemble: fn(T::RegData) -> F::Instruction,
+        assemble: fn(RegValue<S>) -> F::Instruction,
         needed: LabelRef,
-    ) -> PartialInst<F, T> {
+    ) -> PartialInst<F, S> {
         PartialInst::new_needs_label(NeedsLabel {
             tpe: NeededRegs::Zero { assemble },
             needed_label: needed,
@@ -101,7 +102,7 @@ impl<F: ArchFamily<T>, T: MachineDataWidth> PartialInst<F, T> {
     }
 
     /// Attaches a label to this instruction. Panics if there's already a label.
-    pub fn with_label(self, label: LabelDef) -> PartialInst<F, T> {
+    pub fn with_label(self, label: LabelDef) -> PartialInst<F, S> {
         match self.label {
             None => PartialInst {
                 tpe: self.tpe,

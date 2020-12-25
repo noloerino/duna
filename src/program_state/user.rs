@@ -159,14 +159,14 @@ impl<F: ArchFamily<S>, S: Data> UserDiff<F, S> {
 /// Represents the type of trap being raised from user mode.
 /// See "Machine Cause Register" in the RISCV privileged spec for details.
 #[derive(Copy, Clone)]
-pub enum TrapKind<S> {
+pub enum TrapKind<S: Data> {
     /// Corresponds to an ecall instruction issued from user mode.
     Ecall,
     MemFault(MemFault<S>),
 }
 
 /// Converts a memory fault into a trap.
-impl<S> From<MemFault<S>> for TrapKind<S> {
+impl<S: Data> From<MemFault<S>> for TrapKind<S> {
     fn from(fault: MemFault<S>) -> TrapKind<S> {
         TrapKind::MemFault(fault)
     }

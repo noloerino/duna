@@ -1,4 +1,3 @@
-use crate::arch::MachineDataWidth;
 use crate::program_state::*;
 
 /// Options for the assembler.
@@ -36,16 +35,16 @@ impl Default for SegmentStarts {
 }
 
 impl SegmentStarts {
-    pub fn text<T: MachineDataWidth>(&self) -> T::ByteAddr {
-        <T as MachineDataWidth>::usize_to_usgn(self.text_start).into()
+    pub fn text<S: Data>(&self) -> ByteAddrValue<S> {
+        UnsignedValue::<S>::from(self.text_start).into()
     }
 
-    pub fn data<T: MachineDataWidth>(&self) -> T::ByteAddr {
-        <T as MachineDataWidth>::usize_to_usgn(self.data_start).into()
+    pub fn data<S: Data>(&self) -> ByteAddrValue<S> {
+        UnsignedValue::<S>::from(self.data_start).into()
     }
 
-    pub fn stack<T: MachineDataWidth>(&self) -> T::ByteAddr {
-        <T as MachineDataWidth>::usize_to_usgn(self.stack_start).into()
+    pub fn stack<S: Data>(&self) -> ByteAddrValue<S> {
+        UnsignedValue::<S>::from(self.stack_start).into()
     }
 }
 
@@ -86,14 +85,14 @@ impl Default for MemConfig {
 }
 
 impl MemConfig {
-    pub fn build_mem<T: ByteAddress>(&self) -> Box<dyn PageTable<T>> {
+    pub fn build_mem<S: Data>(&self) -> Box<dyn PageTable<S>> {
         use crate::program_state::*;
         let kind = self.kind;
         match kind {
-            PtKind::AllMapped => Box::new(AllMappedPt::<T>::new()),
-            PtKind::FifoLinearPaged => {
-                Box::new(FifoLinearPt::<T>::new(self.phys_pn_bits, self.pg_ofs_bits))
-            }
+            PtKind::AllMapped => Box::new(AllMappedPt::<S>::new()),
+            _ => unimplemented!(), // PtKind::FifoLinearPaged => {
+                                   //     Box::new(FifoLinearPt::<T>::new(self.phys_pn_bits, self.pg_ofs_bits))
+                                   // }
         }
     }
 }

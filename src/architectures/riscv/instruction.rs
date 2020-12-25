@@ -1,6 +1,5 @@
 use super::arch::*;
 use super::registers::RiscVRegister;
-use crate::arch::*;
 use crate::instruction::ConcreteInst;
 use crate::program_state::*;
 use std::fmt;
@@ -29,10 +28,10 @@ pub struct JInstFields {
     pub opcode: BitStr32,
 }
 
-pub type InstApplyFn<T> = dyn Fn(&ProgramState<RiscV<T>, T>) -> InstResult<RiscV<T>, T>;
+pub type InstApplyFn<S> = dyn Fn(&ProgramState<RiscV<S>, S>) -> InstResult<RiscV<S>, S>;
 
-pub struct RiscVInst<T: MachineDataWidth> {
-    pub eval: Box<InstApplyFn<T>>,
+pub struct RiscVInst<S: AtLeast32b> {
+    pub eval: Box<InstApplyFn<S>>,
     data: RiscVInstData,
 }
 
@@ -73,7 +72,7 @@ enum RiscVInstData {
     },
 }
 
-impl<T: MachineDataWidth> ConcreteInst<RiscV<T>, T> for RiscVInst<T> {
+impl<S: AtLeast32b> ConcreteInst<RiscV<S>, S> for RiscVInst<S> {
     fn to_machine_code(&self) -> u32 {
         match self.data {
             RiscVInstData::R {
@@ -146,24 +145,24 @@ impl<T: MachineDataWidth> ConcreteInst<RiscV<T>, T> for RiscVInst<T> {
         .as_u32()
     }
 
-    fn apply(&self, state: &ProgramState<RiscV<T>, T>) -> InstResult<RiscV<T>, T> {
+    fn apply(&self, state: &ProgramState<RiscV<S>, S>) -> InstResult<RiscV<S>, S> {
         (*self.eval)(state)
     }
 }
 
-impl<T: MachineDataWidth> PartialEq<RiscVInst<T>> for RiscVInst<T> {
-    fn eq(&self, other: &RiscVInst<T>) -> bool {
+impl<S: AtLeast32b> PartialEq<RiscVInst<S>> for RiscVInst<S> {
+    fn eq(&self, other: &RiscVInst<S>) -> bool {
         self.to_machine_code() == other.to_machine_code()
     }
 }
 
-impl<T: MachineDataWidth> fmt::Debug for RiscVInst<T> {
+impl<S: AtLeast32b> fmt::Debug for RiscVInst<S> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:#010X}", self.to_machine_code())
     }
 }
 
-impl<T: MachineDataWidth> fmt::Display for RiscVInst<T> {
+impl<S: AtLeast32b> fmt::Display for RiscVInst<S> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use RiscVInstData::*;
         let args = match self.data {
@@ -182,8 +181,8 @@ impl<T: MachineDataWidth> fmt::Display for RiscVInst<T> {
     }
 }
 
-pub trait RType<T: MachineDataWidth> {
-    fn new(rd: RiscVRegister, rs1: RiscVRegister, rs2: RiscVRegister) -> RiscVInst<T> {
+pub trait RType<S: AtLeast32b> {
+    fn new(rd: RiscVRegister, rs1: RiscVRegister, rs2: RiscVRegister) -> RiscVInst<S> {
         RiscVInst {
             eval: Box::new(move |state| {
                 let user_state = &state.user_state;
@@ -203,22 +202,15 @@ pub trait RType<T: MachineDataWidth> {
     fn inst_fields() -> RInstFields;
 
     /// Calculates the new value of rd given values of rs1 and rs2.
-    fn eval(
-        rs1_val: <T as MachineDataWidth>::RegData,
-        rs2_val: <T as MachineDataWidth>::RegData,
-    ) -> <T as MachineDataWidth>::RegData;
+    fn eval(rs1_val: RegValue<S>, rs2_val: RegValue<S>) -> RegValue<S>;
 }
 
-pub trait IType<T: MachineDataWidth> {
+pub trait IType<S: AtLeast32b> {
     /// Creates an instance of the IType istruction.
-    fn new(
-        rd: RiscVRegister,
-        rs1: RiscVRegister,
-        imm: <T as MachineDataWidth>::RegData,
-    ) -> RiscVInst<T> {
+    fn new(rd: RiscVRegister, rs1: RiscVRegister, imm: RegValue<S>) -> RiscVInst<S> {
         let imm_vec = imm.to_bit_str(12);
         RiscVInst {
-            eval: Box::new(move |state| <Self as IType<T>>::eval(&state, rd, rs1, imm_vec)),
+            eval: Box::new(move |state| <Self as IType<S>>::eval(&state, rd, rs1, imm_vec)),
             data: RiscVInstData::I {
                 fields: Self::inst_fields(),
                 rd,
@@ -229,33 +221,30 @@ pub trait IType<T: MachineDataWidth> {
     }
     fn inst_fields() -> IInstFields;
     fn eval(
-        state: &ProgramState<RiscV<T>, T>,
+        state: &ProgramState<RiscV<S>, S>,
         rd: RiscVRegister,
         rs1: RiscVRegister,
         imm: BitStr32,
-    ) -> InstResult<RiscV<T>, T>;
+    ) -> InstResult<RiscV<S>, S>;
 }
 
-pub(crate) trait ITypeArith<T: MachineDataWidth>: IType<T> {
+pub(crate) trait ITypeArith<S: AtLeast32b>: IType<S> {
+    fn inst_fields() -> IInstFields;
+    fn eval(rs1_val: RegValue<S>, imm: BitStr32) -> RegValue<S>;
+}
+
+pub(crate) type MemReadResult<S> = (RegValue<S>, DiffStack<RiscV<S>, S>);
+
+pub(crate) trait ITypeLoad<S: AtLeast32b>: IType<S> {
     fn inst_fields() -> IInstFields;
     fn eval(
-        rs1_val: <T as MachineDataWidth>::RegData,
-        imm: BitStr32,
-    ) -> <T as MachineDataWidth>::RegData;
+        state: &ProgramState<RiscV<S>, S>,
+        addr: ByteAddrValue<S>,
+    ) -> Result<MemReadResult<S>, MemFault<S>>;
 }
 
-pub(crate) type MemReadResult<T> = (<T as MachineDataWidth>::RegData, DiffStack<RiscV<T>, T>);
-
-pub(crate) trait ITypeLoad<T: MachineDataWidth>: IType<T> {
-    fn inst_fields() -> IInstFields;
-    fn eval(
-        state: &ProgramState<RiscV<T>, T>,
-        addr: <T as MachineDataWidth>::ByteAddr,
-    ) -> Result<MemReadResult<T>, MemFault<T::ByteAddr>>;
-}
-
-pub trait EnvironInst<T: MachineDataWidth> {
-    fn new() -> RiscVInst<T> {
+pub trait EnvironInst<S: AtLeast32b> {
+    fn new() -> RiscVInst<S> {
         RiscVInst {
             eval: Box::new(|state| Self::eval(state)),
             data: RiscVInstData::I {
@@ -268,15 +257,11 @@ pub trait EnvironInst<T: MachineDataWidth> {
     }
     fn funct12() -> BitStr32;
     fn inst_fields() -> IInstFields;
-    fn eval(state: &ProgramState<RiscV<T>, T>) -> InstResult<RiscV<T>, T>;
+    fn eval(state: &ProgramState<RiscV<S>, S>) -> InstResult<RiscV<S>, S>;
 }
 
-pub trait SType<T: MachineDataWidth> {
-    fn new(
-        rs1: RiscVRegister,
-        rs2: RiscVRegister,
-        imm: <T as MachineDataWidth>::RegData,
-    ) -> RiscVInst<T> {
+pub trait SType<S: AtLeast32b> {
+    fn new(rs1: RiscVRegister, rs2: RiscVRegister, imm: RegValue<S>) -> RiscVInst<S> {
         let imm_vec = imm.to_bit_str(12);
         RiscVInst {
             eval: Box::new(move |state| Self::eval(&state, rs1, rs2, imm_vec)),
@@ -290,27 +275,23 @@ pub trait SType<T: MachineDataWidth> {
     }
     fn inst_fields() -> SInstFields;
     fn eval(
-        state: &ProgramState<RiscV<T>, T>,
+        state: &ProgramState<RiscV<S>, S>,
         rs1: RiscVRegister,
         rs2: RiscVRegister,
         imm: BitStr32,
-    ) -> InstResult<RiscV<T>, T>;
+    ) -> InstResult<RiscV<S>, S>;
 }
 
-pub trait BType<T: MachineDataWidth> {
-    fn new(
-        rs1: RiscVRegister,
-        rs2: RiscVRegister,
-        imm: <T as MachineDataWidth>::RegData,
-    ) -> RiscVInst<T> {
+pub trait BType<S: AtLeast32b> {
+    fn new(rs1: RiscVRegister, rs2: RiscVRegister, imm: RegValue<S>) -> RiscVInst<S> {
         let imm_vec = imm.to_bit_str(13);
         RiscVInst {
             eval: Box::new(move |state| {
                 let user_state = &state.user_state;
                 if Self::eval(user_state.regfile.read(rs1), user_state.regfile.read(rs2)) {
-                    let pc: <T as MachineDataWidth>::Signed = user_state.pc.into();
-                    let offs: <T as MachineDataWidth>::Signed = imm_vec.into();
-                    let new_pc: <T as MachineDataWidth>::Signed = pc + offs;
+                    let pc: SignedValue<S> = user_state.pc.into();
+                    let offs: SignedValue<S> = imm_vec.into();
+                    let new_pc: SignedValue<S> = pc + offs;
                     Ok(UserDiff::pc_update_op(user_state, new_pc.into()))
                 } else {
                     Ok(UserDiff::pc_p4(user_state).into_diff_stack())
@@ -328,14 +309,11 @@ pub trait BType<T: MachineDataWidth> {
     fn inst_fields() -> BInstFields;
 
     /// Returns true if the branch should be taken.
-    fn eval(
-        rs1_val: <T as MachineDataWidth>::RegData,
-        rs2_val: <T as MachineDataWidth>::RegData,
-    ) -> bool;
+    fn eval(rs1_val: RegValue<S>, rs2_val: RegValue<S>) -> bool;
 }
 
-pub trait UType<T: MachineDataWidth> {
-    fn new(rd: RiscVRegister, imm: <T as MachineDataWidth>::RegData) -> RiscVInst<T> {
+pub trait UType<S: AtLeast32b> {
+    fn new(rd: RiscVRegister, imm: RegValue<S>) -> RiscVInst<S> {
         let imm_vec = imm.to_bit_str(20);
         RiscVInst {
             eval: Box::new(move |state| Ok(Self::eval(&state.user_state, rd, imm_vec))),
@@ -349,14 +327,14 @@ pub trait UType<T: MachineDataWidth> {
 
     fn inst_fields() -> UInstFields;
     fn eval(
-        state: &UserState<RiscV<T>, T>,
+        state: &UserState<RiscV<S>, S>,
         rd: RiscVRegister,
         imm: BitStr32,
-    ) -> DiffStack<RiscV<T>, T>;
+    ) -> DiffStack<RiscV<S>, S>;
 }
 
-pub trait JType<T: MachineDataWidth> {
-    fn new(rd: RiscVRegister, imm: <T as MachineDataWidth>::RegData) -> RiscVInst<T> {
+pub trait JType<S: AtLeast32b> {
+    fn new(rd: RiscVRegister, imm: RegValue<S>) -> RiscVInst<S> {
         let imm_vec = imm.to_bit_str(20);
         RiscVInst {
             eval: Box::new(move |state| Ok(Self::eval(&state.user_state, rd, imm_vec))),
@@ -369,8 +347,8 @@ pub trait JType<T: MachineDataWidth> {
     }
     fn inst_fields() -> JInstFields;
     fn eval(
-        state: &UserState<RiscV<T>, T>,
+        state: &UserState<RiscV<S>, S>,
         rd: RiscVRegister,
         imm: BitStr32,
-    ) -> DiffStack<RiscV<T>, T>;
+    ) -> DiffStack<RiscV<S>, S>;
 }

@@ -3,32 +3,33 @@ use super::parser::RiscVParser;
 use super::program::*;
 use super::registers::RiscVRegister;
 use crate::arch::*;
+use crate::program_state::*;
 use std::marker::PhantomData;
 
-pub struct RiscV<T: MachineDataWidth> {
-    _phantom: PhantomData<T>,
+pub struct RiscV<S: Data> {
+    _phantom: PhantomData<S>,
 }
 
-impl<T: MachineDataWidth> ArchFamily<T> for RiscV<T> {
+impl<S: AtLeast32b> ArchFamily<S> for RiscV<S> {
     type Register = RiscVRegister;
-    type Instruction = RiscVInst<T>;
-    type Syscalls = RiscVSyscallConvention<T>;
+    type Instruction = RiscVInst<S>;
+    type Syscalls = RiscVSyscallConvention<S>;
 }
 
 pub struct RV32;
 
 impl Architecture for RV32 {
-    type DataWidth = Width32b;
-    type Family = RiscV<Width32b>;
-    type ProgramBehavior = RiscVProgramBehavior<Width32b>;
-    type Parser = RiscVParser<Width32b>;
+    type DataWidth = RS32b;
+    type Family = RiscV<RS32b>;
+    type ProgramBehavior = RiscVProgramBehavior<RS32b>;
+    type Parser = RiscVParser<RS32b>;
 }
 
 pub struct RV64;
 
 impl Architecture for RV64 {
-    type DataWidth = Width64b;
-    type Family = RiscV<Width64b>;
-    type ProgramBehavior = RiscVProgramBehavior<Width64b>;
-    type Parser = RiscVParser<Width64b>;
+    type DataWidth = RS64b;
+    type Family = RiscV<RS64b>;
+    type ProgramBehavior = RiscVProgramBehavior<RS64b>;
+    type Parser = RiscVParser<RS64b>;
 }

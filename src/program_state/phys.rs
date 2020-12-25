@@ -86,11 +86,12 @@ impl PhysState {
     }
 
     fn check_alignment(&self, offs: PageOffs, width: DataWidth) -> Result<(), ()> {
-        if !self.require_aligned || ByteAddr32::from(offs as u32).is_aligned_to(width) {
-            Ok(())
-        } else {
-            Err(())
-        }
+        unimplemented!()
+        // if !self.require_aligned || ByteAddr32::from(offs as u32).is_aligned_to::<W>() {
+        //     Ok(())
+        // } else {
+        //     Err(())
+        // }
     }
 
     /// Returns the requested value from memory. If alignment is required and the address is
@@ -107,7 +108,7 @@ impl PhysState {
             ppn,
             self.pg_count
         );
-        self.check_alignment(offs, width)?;
+        // self.check_alignment::<W>(offs)?;
         Ok(self
             .phys_mem
             .get(&ppn)

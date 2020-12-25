@@ -4,7 +4,8 @@ use super::parser::{Label, LabelDef, LabelRef, ParseResult, Parser};
 use super::partial_inst::{PartialInst, PartialInstType};
 use crate::arch::*;
 use crate::config::*;
-use crate::program_state::{DataEnum, Program};
+use crate::program_state::*;
+use num_traits::cast::AsPrimitive;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 
@@ -319,9 +320,9 @@ impl<A: Architecture> UnlinkedProgram<A> {
                         // (DATA_START - TEXT_START + y - x)
                         // TODO make this more configurable
                         let segment_starts = SegmentStarts::default();
-                        let text_start: <A::DataWidth as MachineDataWidth>::Signed =
+                        let text_start: SignedValue<A::DataWidth> =
                             segment_starts.text::<A::DataWidth>().into();
-                        let data_start: <A::DataWidth as MachineDataWidth>::Signed =
+                        let data_start: SignedValue<A::DataWidth> =
                             segment_starts.data::<A::DataWidth>().into();
                         if section != ProgramSection::Data {
                             unimplemented!()
@@ -329,9 +330,9 @@ impl<A: Architecture> UnlinkedProgram<A> {
                         // since inst_index is in words, we need to multiply by 4
                         let small_distance = (data_index as isize) - ((inst_index * 4) as isize);
                         let byte_distance = small_distance
-                            + <A::DataWidth as MachineDataWidth>::sgn_to_isize(
-                                data_start - text_start,
-                            );
+                            + SignedValue::<A::DataWidth>::from(data_start - text_start)
+                                .raw()
+                                .as_();
                         byte_distance as i64
                     }
                 };

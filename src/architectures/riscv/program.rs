@@ -1,15 +1,15 @@
 use super::arch::*;
 use super::registers::RiscVRegister;
-use crate::arch::*;
 use crate::program_state::*;
+use num_traits::cast::AsPrimitive;
 use std::collections::HashMap;
 use std::marker::PhantomData;
 
-pub struct RiscVProgramBehavior<T: MachineDataWidth> {
-    _phantom: PhantomData<T>,
+pub struct RiscVProgramBehavior<S: Data> {
+    _phantom: PhantomData<S>,
 }
 
-impl ProgramBehavior<RiscV<Width32b>, Width32b> for RiscVProgramBehavior<Width32b> {
+impl ProgramBehavior<RiscV<RS32b>, RS32b> for RiscVProgramBehavior<RS32b> {
     fn sp_register() -> RiscVRegister {
         RiscVRegister::SP
     }
@@ -19,7 +19,7 @@ impl ProgramBehavior<RiscV<Width32b>, Width32b> for RiscVProgramBehavior<Width32
     }
 }
 
-impl ProgramBehavior<RiscV<Width64b>, Width64b> for RiscVProgramBehavior<Width64b> {
+impl ProgramBehavior<RiscV<RS64b>, RS64b> for RiscVProgramBehavior<RS64b> {
     fn sp_register() -> RiscVRegister {
         RiscVRegister::SP
     }
@@ -55,20 +55,20 @@ lazy_static! {
         .collect();
 }
 
-pub struct RiscVSyscallConvention<T: MachineDataWidth> {
-    _phantom: PhantomData<T>,
+pub struct RiscVSyscallConvention<S: Data> {
+    _phantom: PhantomData<S>,
 }
 
 /// Per the RISCV calling convention (see http://man7.org/linux/man-pages/man2/syscall.2.html),
 /// the a7 register determines which syscall is being performed, and the arguments are stored
 /// in the argument registers of user space.
-impl<T: MachineDataWidth> SyscallConvention<RiscV<T>, T> for RiscVSyscallConvention<T> {
-    fn number_to_syscall(n: T::Signed) -> Option<Syscall> {
-        RISCV_SYSCALL_TABLE.get(&T::sgn_to_isize(n)).cloned()
+impl<S: AtLeast32b> SyscallConvention<RiscV<S>, S> for RiscVSyscallConvention<S> {
+    fn number_to_syscall(n: SignedValue<S>) -> Option<Syscall> {
+        RISCV_SYSCALL_TABLE.get(&(n.raw().as_() as isize)).cloned()
     }
 
-    fn syscall_to_number(syscall: Syscall) -> T::RegData {
-        T::isize_to_sgn(RISCV_SYSCALL_NUMBERS.get(&syscall).copied().unwrap_or(-1)).into()
+    fn syscall_to_number(syscall: Syscall) -> RegValue<S> {
+        SignedValue::<S>::from(RISCV_SYSCALL_NUMBERS.get(&syscall).copied().unwrap_or(-1)).into()
     }
 
     fn syscall_number_reg() -> RiscVRegister {

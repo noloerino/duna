@@ -50,14 +50,14 @@ impl BitStr32 {
         BitStr32::new(self.value << shamt, 32)
     }
 
-    /// Sign extends the value and stores it in a DataWord.
-    pub fn to_sgn_data_word(self) -> DataWord {
+    /// Sign extends the value and stores it in a DataLword.
+    pub fn to_sgn_data_word(self) -> DataLword {
         // Prevent overflow
         if self.len == 32 {
-            return DataWord::from(self.value);
+            return DataLword::from(self.value);
         }
         let sign_mask = u32::max_value() << self.len as u32;
-        DataWord::from(if self.index(self.len - 1).value == 1 {
+        DataLword::from(if self.index(self.len - 1).value == 1 {
             self.value | sign_mask
         } else {
             self.value
