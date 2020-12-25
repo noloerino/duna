@@ -90,9 +90,9 @@ impl MemConfig {
         let kind = self.kind;
         match kind {
             PtKind::AllMapped => Box::new(AllMappedPt::<S>::new()),
-            _ => unimplemented!(), // PtKind::FifoLinearPaged => {
-                                   //     Box::new(FifoLinearPt::<T>::new(self.phys_pn_bits, self.pg_ofs_bits))
-                                   // }
+            PtKind::FifoLinearPaged => {
+                Box::new(FifoLinearPt::<S>::new(self.phys_pn_bits, self.pg_ofs_bits))
+            }
         }
     }
 }

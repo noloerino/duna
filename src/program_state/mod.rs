@@ -1,4 +1,4 @@
-// mod bitmap;
+mod bitmap;
 mod datatypes;
 mod memory;
 mod phys;
