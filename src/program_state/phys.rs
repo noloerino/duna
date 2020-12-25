@@ -4,6 +4,7 @@ use super::datatypes::*;
 use super::program::StateDiff;
 use crate::arch::*;
 use std::collections::HashMap;
+use std::fmt;
 
 /// Indexes into physical memory. Constrained by the number of pages.
 pub type PhysPn = usize;
@@ -37,6 +38,17 @@ impl PhysDiff {
         StateDiff::Phys(self)
     }
 }
+
+#[derive(Debug, Copy, Clone)]
+pub struct MisalignedAccess;
+
+impl fmt::Display for MisalignedAccess {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl std::error::Error for MisalignedAccess {}
 
 impl Default for PhysState {
     /// Produces a state with a memory with a 64-bit physical address space.
@@ -86,15 +98,19 @@ impl PhysState {
         }
     }
 
-    fn check_alignment<S: PageIndex>(&self, offs: PageOffs) -> Result<(), ()> {
+    fn check_alignment<S: PageIndex>(&self, offs: PageOffs) -> Result<(), MisalignedAccess> {
         if !self.require_aligned || ByteAddr32::from(offs as u32).is_aligned_to::<S>() {
             Ok(())
         } else {
-            Err(())
+            Err(MisalignedAccess)
         }
     }
 
-    fn check_alignment_unsized(&self, offs: PageOffs, width: DataWidth) -> Result<(), ()> {
+    fn check_alignment_unsized(
+        &self,
+        offs: PageOffs,
+        width: DataWidth,
+    ) -> Result<(), MisalignedAccess> {
         use DataWidth::*;
         if !self.require_aligned
             || match width {
@@ -106,13 +122,17 @@ impl PhysState {
         {
             Ok(())
         } else {
-            Err(())
+            Err(MisalignedAccess)
         }
     }
 
     /// Returns the requested value from memory. If alignment is required and the address is
     /// unaligned, an error is returned.
-    pub fn memory_get<S: PageIndex>(&self, ppn: PhysPn, offs: PageOffs) -> Result<RegValue<S>, ()> {
+    pub fn memory_get<S: PageIndex>(
+        &self,
+        ppn: PhysPn,
+        offs: PageOffs,
+    ) -> Result<RegValue<S>, MisalignedAccess> {
         assert!(
             ppn < self.pg_count,
             "PPN was {} but max page count was {}",
@@ -138,7 +158,7 @@ impl PhysState {
         ppn: PhysPn,
         offs: PageOffs,
         data: DataEnum,
-    ) -> Result<PhysDiff, ()> {
+    ) -> Result<PhysDiff, MisalignedAccess> {
         assert!(
             ppn < self.pg_count,
             "PPN was {} but max page count was {}",
@@ -192,7 +212,7 @@ impl PhysState {
         ppn: PhysPn,
         offs: PageOffs,
         data: RegValue<S>,
-    ) -> Result<PhysDiff, ()> {
+    ) -> Result<PhysDiff, MisalignedAccess> {
         assert!(
             ppn < self.pg_count,
             "PPN was {} but max page count was {}",

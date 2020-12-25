@@ -50,7 +50,7 @@ impl<S: Data> PrivState<S> {
                 // TODO impl for other files
                 let fd_idx: usize = {
                     let num: UnsignedValue<S> = (*fd).into();
-                    num.raw().as_() as usize
+                    AsPrimitive::<usize>::as_(num.raw())
                 };
                 match fd_idx {
                     1 => {

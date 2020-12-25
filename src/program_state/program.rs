@@ -75,7 +75,7 @@ impl<A: Architecture> Program<A> {
         }
         // store data
         let all_data = sections.data.into_iter().chain(sections.rodata.into_iter());
-        let data_start_usize = data_start.as_unsigned().raw().as_() as usize;
+        let data_start_usize = AsPrimitive::<usize>::as_(data_start.as_unsigned().raw());
         let mut end_of_data: usize = data_start_usize;
         for (offs, byte) in all_data.enumerate() {
             let addr: ByteAddrValue<A::DataWidth> =
@@ -195,7 +195,7 @@ impl<A: Architecture> ProgramExecutor<A> {
                     <A::ProgramBehavior as ProgramBehavior<A::Family, A::DataWidth>>::return_register();
                 let a0_val: UnsignedValue<A::DataWidth> = program.state.regfile_read(a0).into();
                 // For a non-abnormal exit, downcast to u8 and set upper bit to 0
-                let val_u8 = a0_val.raw().as_() as u8;
+                let val_u8 = AsPrimitive::<u8>::as_(a0_val.raw());
                 Some(val_u8 & 0b0111_1111)
             }
         } else {
@@ -265,7 +265,7 @@ impl<A: Architecture> ProgramExecutor<A> {
             <A::ProgramBehavior as ProgramBehavior<A::Family, A::DataWidth>>::return_register();
         let a0_val: UnsignedValue<A::DataWidth> = program.state.regfile_read(a0).into();
         // For a non-abnormal exit, downcast to u8 and set upper bit to 0
-        let val_u8 = a0_val.raw().as_() as u8;
+        let val_u8 = AsPrimitive::<u8>::as_(a0_val.raw());
         val_u8 & 0b0111_1111
     }
 }
@@ -569,7 +569,10 @@ impl<F: ArchFamily<S>, S: Data> ProgramState<F, S> {
     fn syscall_exit(&self, code: RegValue<S>) -> InstResult<F, S> {
         // downcast to u32 no matter what
         let val: UnsignedValue<S> = code.into();
-        Ok(PrivDiff::Terminate(TermCause::Exit(val.raw().as_() as u32)).into_diff_stack())
+        Ok(
+            PrivDiff::Terminate(TermCause::Exit(AsPrimitive::<u32>::as_(val.raw())))
+                .into_diff_stack(),
+        )
     }
 
     /// Handles an unknown syscall.

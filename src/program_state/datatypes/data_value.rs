@@ -52,6 +52,7 @@ pub trait Data: fmt::Debug + Clone + Copy + PartialEq + Sized + 'static {
         + fmt::UpperHex
         + fmt::Display
         + WrappingAdd
+        + AsPrimitive<u8>
         + AsPrimitive<u32>
         + AsPrimitive<u64>
         + AsPrimitive<usize>
@@ -253,7 +254,8 @@ pub struct DataValue<S: Data, T: DataInterp> {
 impl<S: Data, T: DataInterp> DataValue<S, T> {
     /// Gets the raw bits in this value.
     pub fn bits(self) -> u64 {
-        self.as_unsigned().raw().as_() as u64
+        // .as_() as u64 syntax breaks on nightly
+        AsPrimitive::<u64>::as_(self.as_unsigned().raw())
     }
 
     pub fn zero() -> Self {
@@ -515,11 +517,11 @@ impl<S: Data> ByteAddrValue<S> {
     }
 
     pub fn is_aligned_to<W: Data>(self) -> bool {
-        W::from_u64(self.as_unsigned().raw().as_() as u64).is_aligned()
+        W::from_u64(AsPrimitive::<u64>::as_(self.as_unsigned().raw())).is_aligned()
     }
 
     pub fn to_word_address(self) -> S::U {
-        S::from_u64(self.as_unsigned().raw().as_() as u64 >> 2).as_u()
+        S::from_u64(AsPrimitive::<u64>::as_(self.as_unsigned().raw()) >> 2).as_u()
     }
 }
 
@@ -626,11 +628,11 @@ impl<S: AtLeast32b, T: DataInterp> DataValue<S, T> {
     }
 
     pub fn lower_lword(self) -> DataLword {
-        DataLword::from_unsigned(self.as_unsigned().raw().as_() as u32)
+        DataLword::from_unsigned(AsPrimitive::<u32>::as_(self.as_unsigned().raw()))
     }
 
     pub fn to_bit_str(self, len: u8) -> BitStr32 {
-        BitStr32::new(self.as_unsigned().raw().as_() as u32, len)
+        BitStr32::new(AsPrimitive::<u32>::as_(self.as_unsigned().raw()), len)
     }
 
     /// Returns a copy of the value with the ith byte set to val.
@@ -638,13 +640,16 @@ impl<S: AtLeast32b, T: DataInterp> DataValue<S, T> {
         let mask: u64 = !(0xFF << (i * 8));
         let other_raw_val: u64 = val.as_unsigned().raw().as_();
         Self::new(S::from_u64(
-            (self.as_unsigned().raw().as_() as u64 & mask) | ((other_raw_val as u64) << (i * 8)),
+            (AsPrimitive::<u64>::as_(self.as_unsigned().raw()) & mask)
+                | ((other_raw_val as u64) << (i * 8)),
         ))
     }
 
     /// Selects the ith byte in the word, where 0 is the LSB.
     pub fn get_byte(self, i: u8) -> DataByte {
-        DataByte::from_unsigned((self.as_unsigned().raw() >> (i * 8).into()).as_() as u8)
+        DataByte::from_unsigned(AsPrimitive::<u8>::as_(
+            self.as_unsigned().raw() >> (i * 8).into(),
+        ))
     }
 }
 

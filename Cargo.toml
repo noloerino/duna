@@ -9,5 +9,5 @@ edition = "2018"
 [dependencies]
 clap = "2.33.0"
 lazy_static = "1.4.0"
-num-traits = "0.2.11"
+num-traits = "0.2.14"
 duna_macro = { path = "duna_macro"}

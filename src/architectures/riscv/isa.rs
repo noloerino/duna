@@ -53,7 +53,6 @@ impl<S: AtLeast32b> ITypeArith<S> for Addi {
     fn eval(rs1_val: RegValue<S>, imm: BitStr32) -> RegValue<S> {
         let v1: SignedValue<S> = rs1_val.into();
         let imm_val: SignedValue<S> = imm.into();
-        println!("imm_val: {}", imm_val.value().as_s());
         (v1.wrapping_add(&imm_val)).into()
     }
 }
