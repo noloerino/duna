@@ -114,7 +114,7 @@ impl<S: Data> MemFault<S> {
 
     /// Checks that the provided address matches the desired alignment, raising a BusError if not.
     pub fn check_aligned(user_vaddr: ByteAddrValue<S>, width: DataWidth) -> Result<(), Self> {
-        unimplemented!()
+        todo!()
         // if !user_vaddr.is_aligned_to(width) {
         //     Err(Self::buserror_at_addr(user_vaddr))
         // } else {

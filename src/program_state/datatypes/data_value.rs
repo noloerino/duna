@@ -1,4 +1,4 @@
-use super::BitStr32;
+use super::{BitStr32, DataEnum};
 use num_traits::{
     cast::{AsPrimitive, FromPrimitive},
     int,
@@ -70,6 +70,8 @@ pub trait Data: fmt::Debug + Clone + Copy + PartialEq + Sized + 'static {
     fn as_s(self) -> Self::S;
 
     fn is_aligned(self) -> bool;
+
+    fn as_enum(self) -> DataEnum;
 }
 
 impl Data for RS8b {
@@ -96,6 +98,10 @@ impl Data for RS8b {
 
     fn is_aligned(self) -> bool {
         true
+    }
+
+    fn as_enum(self) -> DataEnum {
+        DataEnum::Byte(DataByte::new(self))
     }
 }
 
@@ -124,6 +130,10 @@ impl Data for RS16b {
     fn is_aligned(self) -> bool {
         self.value % 2 == 0
     }
+
+    fn as_enum(self) -> DataEnum {
+        DataEnum::Half(DataHalf::new(self))
+    }
 }
 
 impl Data for RS32b {
@@ -151,6 +161,10 @@ impl Data for RS32b {
     fn is_aligned(self) -> bool {
         self.value % 4 == 0
     }
+
+    fn as_enum(self) -> DataEnum {
+        DataEnum::Lword(DataLword::new(self))
+    }
 }
 
 impl Data for RS64b {
@@ -177,6 +191,10 @@ impl Data for RS64b {
 
     fn is_aligned(self) -> bool {
         self.value % 8 == 0
+    }
+
+    fn as_enum(self) -> DataEnum {
+        DataEnum::Dword(DataDword::new(self))
     }
 }
 
@@ -226,6 +244,13 @@ impl<S: Data, T: DataInterp> DataValue<S, T> {
     pub fn from_signed(value: <S as Data>::S) -> Self {
         DataValue::<S, T> {
             value: <S as Data>::from_s(value),
+            _phantom: PhantomData,
+        }
+    }
+
+    pub fn new(value: S) -> Self {
+        DataValue {
+            value,
             _phantom: PhantomData,
         }
     }

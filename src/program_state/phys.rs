@@ -27,6 +27,7 @@ pub enum PhysDiff {
     MemSet {
         ppn: PhysPn,
         offs: PageOffs,
+        // We can't use DataDiff because we need this to be sized in order to store these in a Vec
         diff: DataEnumDiff,
     },
 }
@@ -70,7 +71,7 @@ impl PhysState {
                 self.phys_mem
                     .entry(ppn)
                     .or_insert_with(|| MemPage::new(endianness, pg_ofs_bits))
-                    .set(offs, diff.new_val());
+                    .set_unsized(offs, diff.new_val());
             }
         }
     }
@@ -81,87 +82,85 @@ impl PhysState {
                 .phys_mem
                 .get_mut(ppn)
                 .unwrap()
-                .set(*offs, diff.old_val()),
+                .set_unsized(*offs, diff.old_val()),
         }
     }
 
-    fn check_alignment(&self, offs: PageOffs, width: DataWidth) -> Result<(), ()> {
-        unimplemented!()
-        // if !self.require_aligned || ByteAddr32::from(offs as u32).is_aligned_to::<W>() {
-        //     Ok(())
-        // } else {
-        //     Err(())
-        // }
+    fn check_alignment<S: PageIndex>(&self, offs: PageOffs) -> Result<(), ()> {
+        if !self.require_aligned || ByteAddr32::from(offs as u32).is_aligned_to::<S>() {
+            Ok(())
+        } else {
+            Err(())
+        }
     }
 
     /// Returns the requested value from memory. If alignment is required and the address is
     /// unaligned, an error is returned.
-    pub fn memory_get(
-        &self,
-        ppn: PhysPn,
-        offs: PageOffs,
-        width: DataWidth,
-    ) -> Result<DataEnum, ()> {
+    pub fn memory_get<S: PageIndex>(&self, ppn: PhysPn, offs: PageOffs) -> Result<RegValue<S>, ()> {
         assert!(
             ppn < self.pg_count,
             "PPN was {} but max page count was {}",
             ppn,
             self.pg_count
         );
-        // self.check_alignment::<W>(offs)?;
+        self.check_alignment::<S>(offs)?;
         Ok(self
             .phys_mem
             .get(&ppn)
-            .map(|e| e.get(offs, width))
-            .unwrap_or_else(|| width.zero()))
+            .map(|e| e.get_sized::<S>(offs))
+            .unwrap_or_else(|| RegValue::<S>::zero()))
     }
 
-    // should really find a way type parameterize instead of using an enum
-    pub fn memory_set(&self, ppn: PhysPn, offs: PageOffs, data: DataEnum) -> Result<PhysDiff, ()> {
+    pub fn memory_set<S: PageIndex>(
+        &self,
+        ppn: PhysPn,
+        offs: PageOffs,
+        data: RegValue<S>,
+    ) -> Result<PhysDiff, ()> {
         assert!(
             ppn < self.pg_count,
             "PPN was {} but max page count was {}",
             ppn,
             self.pg_count
         );
-        self.check_alignment(offs, data.width())?;
+        self.check_alignment::<S>(offs)?;
         use DataEnumDiff::*;
         Ok(PhysDiff::MemSet {
             ppn,
             offs,
-            diff: match data {
-                DataEnum::Byte(new) => Byte {
+            diff: match data.value().as_enum() {
+                DataEnum::Byte(new) => Byte(DataDiff {
                     old: self
                         .phys_mem
                         .get(&ppn)
                         .map(|page| page.get_byte(offs))
                         .unwrap_or_else(DataByte::zero),
                     new,
-                },
-                DataEnum::Half(new) => Half {
+                }),
+                DataEnum::Half(new) => Half(DataDiff {
                     old: self
                         .phys_mem
                         .get(&ppn)
                         .map(|page| page.get_half(offs))
                         .unwrap_or_else(DataHalf::zero),
                     new,
-                },
-                DataEnum::Word(new) => Word {
+                }),
+                DataEnum::Lword(new) => Lword(DataDiff {
                     old: self
                         .phys_mem
                         .get(&ppn)
                         .map(|page| page.get_word(offs))
                         .unwrap_or_else(DataLword::zero),
                     new,
-                },
-                DataEnum::DoubleWord(new) => DoubleWord {
+                }),
+                DataEnum::Dword(new) => Dword(DataDiff {
                     old: self
                         .phys_mem
                         .get(&ppn)
                         .map(|page| page.get_doubleword(offs))
                         .unwrap_or_else(DataDword::zero),
                     new,
-                },
+                }),
             },
         })
     }
@@ -300,22 +299,69 @@ impl MemPage {
         }
     }
 
-    pub(crate) fn set(&mut self, offs: PageOffs, value: DataEnum) {
+    pub(crate) fn set_unsized(&mut self, offs: PageOffs, value: DataEnum) {
+        use DataEnum::*;
         match value {
-            DataEnum::Byte(v) => self.set_byte(offs, v),
-            DataEnum::Half(v) => self.set_half(offs, v),
-            DataEnum::Word(v) => self.set_word(offs, v),
-            DataEnum::DoubleWord(v) => self.set_doubleword(offs, v),
+            Byte(b) => self.set_byte(offs, b),
+            Half(h) => self.set_half(offs, h),
+            Lword(l) => self.set_word(offs, l),
+            Dword(d) => self.set_doubleword(offs, d),
         }
     }
 
-    pub(crate) fn get(&self, offs: PageOffs, w: DataWidth) -> DataEnum {
-        match w {
-            DataWidth::Byte => DataEnum::Byte(self.get_byte(offs)),
-            DataWidth::Half => DataEnum::Half(self.get_half(offs)),
-            DataWidth::Word => DataEnum::Word(self.get_word(offs)),
-            DataWidth::DoubleWord => DataEnum::DoubleWord(self.get_doubleword(offs)),
-        }
+    pub(crate) fn set_sized<S: PageIndex>(&mut self, offs: PageOffs, value: RegValue<S>) {
+        value.value().set(self, offs)
+    }
+
+    pub(crate) fn get_sized<S: PageIndex>(&self, offs: PageOffs) -> RegValue<S> {
+        <S as PageIndex>::get(self, offs)
+    }
+}
+
+/// Trait to denote types that can be used to index into a page of memory.
+/// This approach is taken in lieu of enums.
+pub trait PageIndex: Data {
+    fn set(self, page: &mut MemPage, offs: PageOffs);
+    fn get(page: &MemPage, offs: PageOffs) -> RegValue<Self>;
+}
+
+impl PageIndex for RS8b {
+    fn set(self, page: &mut MemPage, offs: PageOffs) {
+        page.set_byte(offs, DataByte::new(self))
+    }
+
+    fn get(page: &MemPage, offs: PageOffs) -> RegValue<Self> {
+        page.get_byte(offs)
+    }
+}
+
+impl PageIndex for RS16b {
+    fn set(self, page: &mut MemPage, offs: PageOffs) {
+        page.set_half(offs, DataHalf::new(self))
+    }
+
+    fn get(page: &MemPage, offs: PageOffs) -> RegValue<Self> {
+        page.get_half(offs)
+    }
+}
+
+impl PageIndex for RS32b {
+    fn set(self, page: &mut MemPage, offs: PageOffs) {
+        page.set_word(offs, DataLword::new(self))
+    }
+
+    fn get(page: &MemPage, offs: PageOffs) -> RegValue<Self> {
+        page.get_word(offs)
+    }
+}
+
+impl PageIndex for RS64b {
+    fn set(self, page: &mut MemPage, offs: PageOffs) {
+        page.set_doubleword(offs, DataDword::new(self))
+    }
+
+    fn get(page: &MemPage, offs: PageOffs) -> RegValue<Self> {
+        page.get_doubleword(offs)
     }
 }
 
@@ -339,7 +385,7 @@ mod tests {
         // Assuming little endian, the upper bytes of the lower address were set
         assert_eq!(
             mem.get_doubleword(0xFFFF_FFF0),
-            0xCDAB_CDAB_CDAB_CD_FFu64.into()
+            0xCDAB_CDAB_CDAB_CDFF_u64.into()
         );
         // Assuming little endian, the lower bytes of the upper address were set
         assert_eq!(
@@ -353,6 +399,6 @@ mod tests {
     #[test]
     fn test_unaligned_fault() {
         let state = PhysState::new(Endianness::default(), true, 1, 20);
-        assert!(state.memory_get(0, 1, DataWidth::Word).is_err(),);
+        assert!(state.memory_get::<RS32b>(0, 1).is_err(),);
     }
 }

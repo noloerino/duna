@@ -4,39 +4,28 @@ use super::*;
 pub enum DataWidth {
     Byte,
     Half,
-    Word,
-    DoubleWord,
-}
-
-impl DataWidth {
-    pub fn zero(self) -> DataEnum {
-        match self {
-            DataWidth::Byte => DataEnum::Byte(0u8.into()),
-            DataWidth::Half => DataEnum::Half(0u16.into()),
-            DataWidth::Word => DataEnum::Word(0u32.into()),
-            DataWidth::DoubleWord => DataEnum::DoubleWord(0u64.into()),
-        }
-    }
+    Lword,
+    Dword,
 }
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum DataEnum {
     Byte(DataByte),
     Half(DataHalf),
-    Word(DataLword),
-    DoubleWord(DataDword),
+    Lword(DataLword),
+    Dword(DataDword),
 }
 
-impl DataEnum {
-    pub fn width(self) -> DataWidth {
-        match self {
-            DataEnum::Byte(_) => DataWidth::Byte,
-            DataEnum::Half(_) => DataWidth::Half,
-            DataEnum::Word(_) => DataWidth::Word,
-            DataEnum::DoubleWord(_) => DataWidth::DoubleWord,
-        }
-    }
-}
+// impl DataEnum {
+//     pub fn width(self) -> DataWidth {
+//         match self {
+//             DataEnum::Byte(_) => DataWidth::Byte,
+//             DataEnum::Half(_) => DataWidth::Half,
+//             DataEnum::Word(_) => DataWidth::Word,
+//             DataEnum::DoubleWord(_) => DataWidth::DoubleWord,
+//         }
+//     }
+// }
 
 impl From<DataEnum> for DataByte {
     fn from(value: DataEnum) -> Self {
@@ -59,7 +48,7 @@ impl From<DataEnum> for DataHalf {
 impl From<DataEnum> for DataLword {
     fn from(value: DataEnum) -> Self {
         match value {
-            DataEnum::Word(w) => w,
+            DataEnum::Lword(w) => w,
             _ => panic!("DataWord was coerced from DataEnum of wrong width"),
         }
     }
@@ -68,38 +57,44 @@ impl From<DataEnum> for DataLword {
 impl From<DataEnum> for DataDword {
     fn from(value: DataEnum) -> Self {
         match value {
-            DataEnum::DoubleWord(d) => d,
+            DataEnum::Dword(d) => d,
             _ => panic!("DataDword was coerced from DataEnum of wrong width"),
         }
     }
 }
 
 #[derive(Copy, Clone, PartialEq, Debug)]
+pub struct DataDiff<S: Data> {
+    pub old: RegValue<S>,
+    pub new: RegValue<S>,
+}
+
+#[derive(Copy, Clone, PartialEq, Debug)]
 pub enum DataEnumDiff {
-    Byte { old: DataByte, new: DataByte },
-    Half { old: DataHalf, new: DataHalf },
-    Word { old: DataLword, new: DataLword },
-    DoubleWord { old: DataDword, new: DataDword },
+    Byte(DataDiff<RS8b>),
+    Half(DataDiff<RS16b>),
+    Lword(DataDiff<RS32b>),
+    Dword(DataDiff<RS64b>),
 }
 
 impl DataEnumDiff {
     pub fn old_val(self) -> DataEnum {
         use DataEnumDiff::*;
         match self {
-            Byte { old, .. } => DataEnum::Byte(old),
-            Half { old, .. } => DataEnum::Half(old),
-            Word { old, .. } => DataEnum::Word(old),
-            DoubleWord { old, .. } => DataEnum::DoubleWord(old),
+            Byte(DataDiff { old, .. }) => DataEnum::Byte(old),
+            Half(DataDiff { old, .. }) => DataEnum::Half(old),
+            Lword(DataDiff { old, .. }) => DataEnum::Lword(old),
+            Dword(DataDiff { old, .. }) => DataEnum::Dword(old),
         }
     }
 
     pub fn new_val(self) -> DataEnum {
         use DataEnumDiff::*;
         match self {
-            Byte { new, .. } => DataEnum::Byte(new),
-            Half { new, .. } => DataEnum::Half(new),
-            Word { new, .. } => DataEnum::Word(new),
-            DoubleWord { new, .. } => DataEnum::DoubleWord(new),
+            Byte(DataDiff { new, .. }) => DataEnum::Byte(new),
+            Half(DataDiff { new, .. }) => DataEnum::Half(new),
+            Lword(DataDiff { new, .. }) => DataEnum::Lword(new),
+            Dword(DataDiff { new, .. }) => DataEnum::Dword(new),
         }
     }
 }
