@@ -24,13 +24,13 @@ impl La {
         if lower.index(11).as_u32() > 0 {
             upper = BitStr32::new(upper.as_u32() + 1, 20);
         }
-        Auipc::new(reg, upper.into())
+        Auipc::new(reg, UnsignedValue::<S>::from(upper).into())
     }
 
     pub fn expand_lower<S: AtLeast32b>(reg: RiscVRegister, data: RegValue<S>) -> RiscVInst<S> {
         let imm: BitStr32 = data.to_bit_str(32);
         let lower = La::get_lower(imm);
-        Addi::new(reg, reg, lower.into())
+        Addi::new(reg, reg, SignedValue::<S>::from(lower).into())
     }
 }
 
@@ -49,11 +49,14 @@ impl Li32 {
         }
         let no_lui = upper.is_zero();
         let rs1 = if no_lui { ZERO } else { reg };
-        let addi = Addi::new(reg, rs1, lower.into());
+        let addi = Addi::new(reg, rs1, SignedValue::<RS32b>::from(lower).into());
         if no_lui {
             vec![addi]
         } else {
-            vec![Lui::new(reg, upper.into()), addi]
+            vec![
+                Lui::new(reg, UnsignedValue::<RS32b>::from(upper).into()),
+                addi,
+            ]
         }
     }
 }
@@ -76,11 +79,14 @@ impl Li64 {
         }
         let no_lui = upper.is_zero();
         let rs1 = if no_lui { ZERO } else { reg };
-        let addi = Addi::new(reg, rs1, lower.into());
+        let addi = Addi::new(reg, rs1, SignedValue::<RS64b>::from(lower).into());
         if upper.is_zero() {
             vec![addi]
         } else {
-            vec![Lui::new(reg, upper.into()), addi]
+            vec![
+                Lui::new(reg, UnsignedValue::<RS64b>::from(upper).into()),
+                addi,
+            ]
         }
     }
 }

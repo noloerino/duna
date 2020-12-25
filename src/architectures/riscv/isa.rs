@@ -53,6 +53,7 @@ impl<S: AtLeast32b> ITypeArith<S> for Addi {
     fn eval(rs1_val: RegValue<S>, imm: BitStr32) -> RegValue<S> {
         let v1: SignedValue<S> = rs1_val.into();
         let imm_val: SignedValue<S> = imm.into();
+        println!("imm_val: {}", imm_val.value().as_s());
         (v1.wrapping_add(&imm_val)).into()
     }
 }
@@ -69,7 +70,7 @@ impl ITypeArith<RS64b> for Addiw {
 
     fn eval(rs1_val: DataDword, imm: BitStr32) -> DataDword {
         let v1: DataLword = rs1_val.lower_lword();
-        let v2: DataLword = imm.into();
+        let v2: DataLword = SignedValue::<RS32b>::from(imm).into();
         let result: DataLword = u32::from(v1).wrapping_add(u32::from(v2)).into();
         DataDword::sign_ext_from_lword(result)
     }
@@ -710,7 +711,11 @@ mod tests_32 {
     ) {
         for IArithTestData { imm, result } in args {
             state.apply_inst_test(&T::new(RD, RS1, DataLword::from(imm)));
-            println!("{:b}\n{:b}", i32::from(state.regfile_read(RD)), result);
+            println!(
+                "rd actual:\t{:b}\nrd expected:\t{:b}",
+                i32::from(state.regfile_read(RD)),
+                result
+            );
             assert_eq!(i32::from(state.regfile_read(RD)), result);
         }
     }

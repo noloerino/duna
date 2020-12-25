@@ -162,7 +162,7 @@ impl Data for RS32b {
 
     fn from_s(value: Self::S) -> Self {
         Self {
-            value: value as Self::U,
+            value: value as u32,
         }
     }
 
@@ -199,7 +199,7 @@ impl Data for RS64b {
 
     fn from_s(value: Self::S) -> Self {
         Self {
-            value: value as Self::U,
+            value: value as u64,
         }
     }
 
@@ -602,6 +602,18 @@ impl<T: DataInterp> From<DataValue<RS16b, T>> for i16 {
     }
 }
 
+impl<S: AtLeast32b> From<BitStr32> for DataValue<S, Unsigned> {
+    fn from(value: BitStr32) -> Self {
+        Self::zero_pad_from_lword(DataLword::from_unsigned(value.as_u32()))
+    }
+}
+
+impl<S: AtLeast32b> From<BitStr32> for DataValue<S, Signed> {
+    fn from(value: BitStr32) -> Self {
+        Self::sign_ext_from_lword(value.to_sgn_data_word())
+    }
+}
+
 pub type DataLword = DataValue<RS32b, RegData>;
 
 impl<S: AtLeast32b, T: DataInterp> DataValue<S, T> {
@@ -633,12 +645,6 @@ impl<S: AtLeast32b, T: DataInterp> DataValue<S, T> {
     /// Selects the ith byte in the word, where 0 is the LSB.
     pub fn get_byte(self, i: u8) -> DataByte {
         DataByte::from_unsigned((self.as_unsigned().raw() >> (i * 8).into()).as_() as u8)
-    }
-}
-
-impl<S: AtLeast32b, T: DataInterp> From<BitStr32> for DataValue<S, T> {
-    fn from(value: BitStr32) -> Self {
-        Self::zero_pad_from_lword(DataLword::from_unsigned(value.value as u32))
     }
 }
 

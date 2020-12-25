@@ -173,7 +173,7 @@ fn impl_itype_arith_derive(ast: &syn::DeriveInput) -> TokenStream {
                 rs1: RiscVRegister,
                 imm: BitStr32
             ) -> InstResult<RiscV<S>, S> {
-                let new_rd_val = <#name as ITypeArith<S>>::eval(state.user_state.regfile.read(rs1), imm.into());
+                let new_rd_val = <#name as ITypeArith<S>>::eval(state.user_state.regfile.read(rs1), imm);
                 Ok(UserDiff::reg_write_pc_p4(&state.user_state, rd, new_rd_val))
             }
         }
@@ -195,7 +195,7 @@ fn impl_itype_arith_64_derive(ast: &syn::DeriveInput) -> TokenStream {
                 rs1: RiscVRegister,
                 imm: BitStr32
             ) -> InstResult<RiscV<RS64b>, RS64b> {
-                let new_rd_val = <#name as ITypeArith<RS64b>>::eval(state.user_state.regfile.read(rs1), imm.into());
+                let new_rd_val = <#name as ITypeArith<RS64b>>::eval(state.user_state.regfile.read(rs1), imm);
                 Ok(UserDiff::reg_write_pc_p4(&state.user_state, rd, new_rd_val))
             }
         }
