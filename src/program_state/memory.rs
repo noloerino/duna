@@ -47,7 +47,7 @@ pub enum PtUpdate {
 }
 
 impl PtUpdate {
-    pub fn into_state_diff<F: ArchFamily<S>, S: Data>(self) -> StateDiff<F, S> {
+    pub fn into_state_diff<F: ArchFamily<S>, S: DataWidth>(self) -> StateDiff<F, S> {
         StateDiff::Priv(PrivDiff::PtUpdate(self))
     }
 }
@@ -82,12 +82,12 @@ impl fmt::Debug for PtLookupData {
 }
 
 #[derive(Debug, PartialEq, Copy, Clone)]
-pub struct MemFault<S: Data> {
+pub struct MemFault<S: DataWidth> {
     pub user_vaddr: ByteAddrValue<S>,
     pub cause: MemFaultCause,
 }
 
-impl<S: Data> MemFault<S> {
+impl<S: DataWidth> MemFault<S> {
     /// Indicates a page fault at the provided address.
     pub fn pagefault_at_addr(user_vaddr: ByteAddrValue<S>) -> Self {
         MemFault {
@@ -113,7 +113,7 @@ impl<S: Data> MemFault<S> {
     }
 
     /// Checks that the provided address matches the desired alignment, raising a BusError if not.
-    pub fn check_aligned<W: Data>(user_vaddr: ByteAddrValue<S>) -> Result<(), Self> {
+    pub fn check_aligned<W: DataWidth>(user_vaddr: ByteAddrValue<S>) -> Result<(), Self> {
         if !user_vaddr.is_aligned_to::<W>() {
             Err(Self::buserror_at_addr(user_vaddr))
         } else {
@@ -132,7 +132,7 @@ pub enum MemFaultCause {
 /// Trait to define a page table abstraction.
 ///
 /// All operations will return a sequence of diffs on success, and a pagefault on failure.
-pub trait PageTable<S: Data> {
+pub trait PageTable<S: DataWidth> {
     fn apply_update(&mut self, mem: &mut PhysMem, update: &PtUpdate);
 
     fn revert_update(&mut self, mem: &mut PhysMem, update: &PtUpdate);
@@ -179,11 +179,11 @@ pub trait PageTable<S: Data> {
 ///
 /// Reads to uninitialized addresses always return 0.
 /// Faults occur on accesses to the null pointer.
-pub struct AllMappedPt<S: Data> {
+pub struct AllMappedPt<S: DataWidth> {
     _phantom: PhantomData<S>,
 }
 
-impl<S: Data> AllMappedPt<S> {
+impl<S: DataWidth> AllMappedPt<S> {
     pub fn new() -> Self {
         AllMappedPt {
             _phantom: PhantomData,
@@ -191,7 +191,7 @@ impl<S: Data> AllMappedPt<S> {
     }
 }
 
-impl<S: Data> PageTable<S> for AllMappedPt<S> {
+impl<S: DataWidth> PageTable<S> for AllMappedPt<S> {
     fn apply_update(&mut self, _mem: &mut PhysMem, _update: &PtUpdate) {
         panic!("Attempted to apply an update, but AllMappedPt should not produce any updates");
     }
@@ -226,7 +226,7 @@ impl<S: Data> PageTable<S> for AllMappedPt<S> {
     }
 }
 
-impl<S: Data> Default for AllMappedPt<S> {
+impl<S: DataWidth> Default for AllMappedPt<S> {
     fn default() -> Self {
         Self::new()
     }
@@ -249,7 +249,7 @@ pub struct FifoLinearPt<S> {
     _phantom: PhantomData<S>,
 }
 
-impl<S: Data> FifoLinearPt<S> {
+impl<S: DataWidth> FifoLinearPt<S> {
     /// Initializes the memory. The number of pages is computed from the physical address and
     /// page sizes.
     /// * phys_pn_bits: The number of bits needed to address a physical page. The number of pages of
@@ -281,7 +281,7 @@ impl<S: Data> FifoLinearPt<S> {
     }
 }
 
-impl<S: Data> PageTable<S> for FifoLinearPt<S> {
+impl<S: DataWidth> PageTable<S> for FifoLinearPt<S> {
     fn apply_update(&mut self, mem: &mut PhysMem, update: &PtUpdate) {
         use PtUpdate::*;
         match update {

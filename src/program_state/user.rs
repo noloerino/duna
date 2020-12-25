@@ -11,18 +11,18 @@ use super::registers::*;
 use crate::arch::*;
 
 /// Contains program state that is visible to the user.
-pub struct UserState<F: ArchFamily<S>, S: Data> {
+pub struct UserState<F: ArchFamily<S>, S: DataWidth> {
     pub pc: ByteAddrValue<S>,
     pub regfile: RegFile<F::Register, S>,
 }
 
-impl<F: ArchFamily<S>, S: Data> Default for UserState<F, S> {
+impl<F: ArchFamily<S>, S: DataWidth> Default for UserState<F, S> {
     fn default() -> Self {
         UserState::new()
     }
 }
 
-impl<F: ArchFamily<S>, S: Data> UserState<F, S> {
+impl<F: ArchFamily<S>, S: DataWidth> UserState<F, S> {
     pub fn new() -> Self {
         UserState {
             pc: SignedValue::<S>::zero().as_byte_addr(),
@@ -66,7 +66,7 @@ impl<F: ArchFamily<S>, S: Data> UserState<F, S> {
 /// Represents an atomic diff that is applied only to the user state of a program.
 /// Since traps are synchronous, they're included in here - they can be thought of as a context
 /// switch operation.
-pub enum UserDiff<F: ArchFamily<S>, S: Data> {
+pub enum UserDiff<F: ArchFamily<S>, S: DataWidth> {
     PcDiff {
         old_pc: ByteAddrValue<S>,
         new_pc: ByteAddrValue<S>,
@@ -78,7 +78,7 @@ pub enum UserDiff<F: ArchFamily<S>, S: Data> {
     Trap(TrapKind<S>),
 }
 
-impl<F: ArchFamily<S>, S: Data> UserDiff<F, S> {
+impl<F: ArchFamily<S>, S: DataWidth> UserDiff<F, S> {
     pub fn into_state_diff(self) -> StateDiff<F, S> {
         StateDiff::User(self)
     }
@@ -159,14 +159,14 @@ impl<F: ArchFamily<S>, S: Data> UserDiff<F, S> {
 /// Represents the type of trap being raised from user mode.
 /// See "Machine Cause Register" in the RISCV privileged spec for details.
 #[derive(Copy, Clone)]
-pub enum TrapKind<S: Data> {
+pub enum TrapKind<S: DataWidth> {
     /// Corresponds to an ecall instruction issued from user mode.
     Ecall,
     MemFault(MemFault<S>),
 }
 
 /// Converts a memory fault into a trap.
-impl<S: Data> From<MemFault<S>> for TrapKind<S> {
+impl<S: DataWidth> From<MemFault<S>> for TrapKind<S> {
     fn from(fault: MemFault<S>) -> TrapKind<S> {
         TrapKind::MemFault(fault)
     }

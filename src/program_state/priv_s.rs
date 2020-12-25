@@ -10,7 +10,7 @@ use num_traits::cast::AsPrimitive;
 
 /// Contains program state that is visited only to privileged entities, i.e. a kernel thread.
 /// TODO add kernel thread information (tid, file descriptors, etc.)
-pub struct PrivState<S: Data> {
+pub struct PrivState<S: DataWidth> {
     pub brk: ByteAddrValue<S>,
     pub heap_start: ByteAddrValue<S>,
     pub page_table: Box<dyn PageTable<S>>,
@@ -20,7 +20,7 @@ pub struct PrivState<S: Data> {
     // file_descriptors: Vec<Vec<u8>>
 }
 
-impl<S: Data> PrivState<S> {
+impl<S: DataWidth> PrivState<S> {
     pub fn new(heap_start: ByteAddrValue<S>, page_table: Box<dyn PageTable<S>>) -> Self {
         PrivState {
             brk: heap_start,
@@ -94,7 +94,7 @@ impl<S: Data> PrivState<S> {
 
 /// Encodes a change that occurred to the state of the privileged aspects of a program,
 /// such as a write to a file.
-pub enum PrivDiff<S: Data> {
+pub enum PrivDiff<S: DataWidth> {
     /// Indicates that the program is to be terminated.
     Terminate(TermCause),
     /// Represents a file write.
@@ -111,7 +111,7 @@ pub enum PrivDiff<S: Data> {
     },
 }
 
-impl<S: Data> PrivDiff<S> {
+impl<S: DataWidth> PrivDiff<S> {
     pub fn into_state_diff<F: ArchFamily<S>>(self) -> StateDiff<F, S> {
         StateDiff::Priv(self)
     }
@@ -134,7 +134,7 @@ pub enum TermCause {
     BusError,
 }
 
-impl<S: Data> From<MemFault<S>> for TermCause {
+impl<S: DataWidth> From<MemFault<S>> for TermCause {
     fn from(fault: MemFault<S>) -> TermCause {
         match fault.cause {
             MemFaultCause::PageFault => TermCause::SegFault,
@@ -146,7 +146,7 @@ impl<S: Data> From<MemFault<S>> for TermCause {
 
 impl TermCause {
     /// Prints any messages related to the exit cause, and returns the exit code.
-    pub fn handle_exit<F: ArchFamily<S>, S: Data>(
+    pub fn handle_exit<F: ArchFamily<S>, S: DataWidth>(
         self,
         program_state: &mut ProgramState<F, S>,
     ) -> u8 {

@@ -11,12 +11,12 @@ pub trait IRegister: Copy + Clone + PartialEq + From<u8> + fmt::Debug + fmt::Dis
 }
 
 const REGFILE_SIZE: usize = 32;
-pub struct RegFile<R: IRegister, S: Data> {
+pub struct RegFile<R: IRegister, S: DataWidth> {
     store: [RegValue<S>; REGFILE_SIZE],
     _phantom: PhantomData<R>,
 }
 
-impl<R: IRegister, S: Data> RegFile<R, S> {
+impl<R: IRegister, S: DataWidth> RegFile<R, S> {
     pub(in crate::program_state) fn new() -> RegFile<R, S> {
         RegFile {
             store: [RegValue::<S>::zero(); REGFILE_SIZE],
@@ -37,7 +37,7 @@ impl<R: IRegister, S: Data> RegFile<R, S> {
 }
 
 /// Dumps the contents of the register file.
-impl<R: IRegister, S: Data> Display for RegFile<R, S> {
+impl<R: IRegister, S: DataWidth> Display for RegFile<R, S> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for i in 0..REGFILE_SIZE {
             let reg: R = (i as u8).into();

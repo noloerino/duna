@@ -30,7 +30,7 @@ pub struct RS64b {
 }
 
 // Marker traits to allow relevant sign extension methods etc.
-pub trait AtLeast8b: Data {}
+pub trait AtLeast8b: DataWidth {}
 pub trait AtLeast16b: AtLeast8b {}
 pub trait AtLeast32b: AtLeast16b {}
 
@@ -46,7 +46,7 @@ impl AtLeast16b for RS64b {}
 impl AtLeast32b for RS32b {}
 impl AtLeast32b for RS64b {}
 
-pub trait Data: fmt::Debug + Clone + Copy + PartialEq + Sized + 'static {
+pub trait DataWidth: fmt::Debug + Clone + Copy + PartialEq + Sized + 'static {
     type U: PrimInt
         + sign::Unsigned
         + fmt::UpperHex
@@ -73,15 +73,15 @@ pub trait Data: fmt::Debug + Clone + Copy + PartialEq + Sized + 'static {
     // Needed because num_traits casting is checked rather than saturating
     fn from_u64(value: u64) -> Self;
 
-    fn as_u(self) -> Self::U;
-    fn as_s(self) -> Self::S;
+    fn as_u(&self) -> Self::U;
+    fn as_s(&self) -> Self::S;
 
-    fn is_aligned(self) -> bool;
+    fn is_aligned(&self) -> bool;
 
-    fn as_enum(self) -> DataEnum;
+    fn as_enum(&self) -> DataEnum;
 }
 
-impl Data for RS8b {
+impl DataWidth for RS8b {
     type U = u8;
     type S = i8;
 
@@ -99,24 +99,24 @@ impl Data for RS8b {
         Self { value: value as u8 }
     }
 
-    fn as_u(self) -> Self::U {
+    fn as_u(&self) -> Self::U {
         self.value
     }
 
-    fn as_s(self) -> Self::S {
+    fn as_s(&self) -> Self::S {
         self.value as Self::S
     }
 
-    fn is_aligned(self) -> bool {
+    fn is_aligned(&self) -> bool {
         true
     }
 
-    fn as_enum(self) -> DataEnum {
-        DataEnum::Byte(DataByte::new(self))
+    fn as_enum(&self) -> DataEnum {
+        DataEnum::Byte(DataByte::new(*self))
     }
 }
 
-impl Data for RS16b {
+impl DataWidth for RS16b {
     type U = u16;
     type S = i16;
 
@@ -136,24 +136,24 @@ impl Data for RS16b {
         }
     }
 
-    fn as_u(self) -> Self::U {
+    fn as_u(&self) -> Self::U {
         self.value
     }
 
-    fn as_s(self) -> Self::S {
+    fn as_s(&self) -> Self::S {
         self.value as Self::S
     }
 
-    fn is_aligned(self) -> bool {
+    fn is_aligned(&self) -> bool {
         self.value % 2 == 0
     }
 
-    fn as_enum(self) -> DataEnum {
-        DataEnum::Half(DataHalf::new(self))
+    fn as_enum(&self) -> DataEnum {
+        DataEnum::Half(DataHalf::new(*self))
     }
 }
 
-impl Data for RS32b {
+impl DataWidth for RS32b {
     type U = u32;
     type S = i32;
 
@@ -173,24 +173,24 @@ impl Data for RS32b {
         }
     }
 
-    fn as_u(self) -> Self::U {
+    fn as_u(&self) -> Self::U {
         self.value
     }
 
-    fn as_s(self) -> Self::S {
+    fn as_s(&self) -> Self::S {
         self.value as Self::S
     }
 
-    fn is_aligned(self) -> bool {
+    fn is_aligned(&self) -> bool {
         self.value % 4 == 0
     }
 
-    fn as_enum(self) -> DataEnum {
-        DataEnum::Lword(DataLword::new(self))
+    fn as_enum(&self) -> DataEnum {
+        DataEnum::Lword(DataLword::new(*self))
     }
 }
 
-impl Data for RS64b {
+impl DataWidth for RS64b {
     type U = u64;
     type S = i64;
 
@@ -208,20 +208,20 @@ impl Data for RS64b {
         Self { value }
     }
 
-    fn as_u(self) -> Self::U {
+    fn as_u(&self) -> Self::U {
         self.value
     }
 
-    fn as_s(self) -> Self::S {
+    fn as_s(&self) -> Self::S {
         self.value as Self::S
     }
 
-    fn is_aligned(self) -> bool {
+    fn is_aligned(&self) -> bool {
         self.value % 8 == 0
     }
 
-    fn as_enum(self) -> DataEnum {
-        DataEnum::Dword(DataDword::new(self))
+    fn as_enum(&self) -> DataEnum {
+        DataEnum::Dword(DataDword::new(*self))
     }
 }
 
@@ -245,13 +245,13 @@ pub struct ByteAddr;
 impl DataInterp for ByteAddr {}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct DataValue<S: Data, T: DataInterp> {
+pub struct DataValue<S: DataWidth, T: DataInterp> {
     value: S,
     _phantom: PhantomData<T>,
 }
 
 // ===== Generic typestate interchange functions =====
-impl<S: Data, T: DataInterp> DataValue<S, T> {
+impl<S: DataWidth, T: DataInterp> DataValue<S, T> {
     /// Gets the raw bits in this value.
     pub fn bits(self) -> u64 {
         // .as_() as u64 syntax breaks on nightly
@@ -259,19 +259,19 @@ impl<S: Data, T: DataInterp> DataValue<S, T> {
     }
 
     pub fn zero() -> Self {
-        Self::from_unsigned(<S as Data>::U::from_usize(0usize).unwrap())
+        Self::from_unsigned(<S as DataWidth>::U::from_usize(0usize).unwrap())
     }
 
-    pub fn from_unsigned(value: <S as Data>::U) -> Self {
+    pub fn from_unsigned(value: <S as DataWidth>::U) -> Self {
         DataValue::<S, T> {
-            value: <S as Data>::from_u(value),
+            value: <S as DataWidth>::from_u(value),
             _phantom: PhantomData,
         }
     }
 
-    pub fn from_signed(value: <S as Data>::S) -> Self {
+    pub fn from_signed(value: <S as DataWidth>::S) -> Self {
         DataValue::<S, T> {
-            value: <S as Data>::from_s(value),
+            value: <S as DataWidth>::from_s(value),
             _phantom: PhantomData,
         }
     }
@@ -317,7 +317,7 @@ impl<S: Data, T: DataInterp> DataValue<S, T> {
 }
 
 // ===== Arithmetic operations =====
-impl<S: Data, T: DataInterp> core::ops::Add for DataValue<S, T> {
+impl<S: DataWidth, T: DataInterp> core::ops::Add for DataValue<S, T> {
     type Output = Self;
 
     fn add(self, other: Self) -> Self {
@@ -329,13 +329,13 @@ impl<S: Data, T: DataInterp> core::ops::Add for DataValue<S, T> {
     }
 }
 
-impl<S: Data, T: DataInterp> WrappingAdd for DataValue<S, T> {
+impl<S: DataWidth, T: DataInterp> WrappingAdd for DataValue<S, T> {
     fn wrapping_add(&self, v: &Self) -> Self {
         Self::from_signed(self.as_signed().raw().wrapping_add(&v.as_signed().raw()))
     }
 }
 
-impl<S: Data, T: DataInterp> core::ops::Sub for DataValue<S, T> {
+impl<S: DataWidth, T: DataInterp> core::ops::Sub for DataValue<S, T> {
     type Output = Self;
 
     fn sub(self, other: Self) -> Self {
@@ -347,13 +347,13 @@ impl<S: Data, T: DataInterp> core::ops::Sub for DataValue<S, T> {
     }
 }
 
-impl<S: Data, T: DataInterp> WrappingSub for DataValue<S, T> {
+impl<S: DataWidth, T: DataInterp> WrappingSub for DataValue<S, T> {
     fn wrapping_sub(&self, v: &Self) -> Self {
         Self::from_signed(self.as_signed().raw().wrapping_sub(&v.as_signed().raw()))
     }
 }
 
-impl<S: Data, T: DataInterp> core::ops::BitAnd for DataValue<S, T> {
+impl<S: DataWidth, T: DataInterp> core::ops::BitAnd for DataValue<S, T> {
     type Output = Self;
 
     fn bitand(self, other: Self) -> Self {
@@ -361,7 +361,7 @@ impl<S: Data, T: DataInterp> core::ops::BitAnd for DataValue<S, T> {
     }
 }
 
-impl<S: Data, T: DataInterp> core::ops::BitOr for DataValue<S, T> {
+impl<S: DataWidth, T: DataInterp> core::ops::BitOr for DataValue<S, T> {
     type Output = Self;
 
     fn bitor(self, other: Self) -> Self {
@@ -369,7 +369,7 @@ impl<S: Data, T: DataInterp> core::ops::BitOr for DataValue<S, T> {
     }
 }
 
-impl<S: Data, T: DataInterp> core::ops::BitXor for DataValue<S, T> {
+impl<S: DataWidth, T: DataInterp> core::ops::BitXor for DataValue<S, T> {
     type Output = Self;
 
     fn bitxor(self, other: Self) -> Self {
@@ -379,73 +379,73 @@ impl<S: Data, T: DataInterp> core::ops::BitXor for DataValue<S, T> {
 
 // ===== Mutual casts =====
 // Manually unrolled to avoid conflicting From<T> for DataValue<S, T> implementations
-impl<S: Data> From<DataValue<S, Unsigned>> for DataValue<S, Signed> {
+impl<S: DataWidth> From<DataValue<S, Unsigned>> for DataValue<S, Signed> {
     fn from(value: DataValue<S, Unsigned>) -> Self {
         Self::from_unsigned(value.as_unsigned().raw())
     }
 }
 
-impl<S: Data> From<DataValue<S, Unsigned>> for DataValue<S, RegData> {
+impl<S: DataWidth> From<DataValue<S, Unsigned>> for DataValue<S, RegData> {
     fn from(value: DataValue<S, Unsigned>) -> Self {
         Self::from_unsigned(value.as_unsigned().raw())
     }
 }
 
-impl<S: Data> From<DataValue<S, Unsigned>> for DataValue<S, ByteAddr> {
+impl<S: DataWidth> From<DataValue<S, Unsigned>> for DataValue<S, ByteAddr> {
     fn from(value: DataValue<S, Unsigned>) -> Self {
         Self::from_unsigned(value.as_unsigned().raw())
     }
 }
 
-impl<S: Data> From<DataValue<S, Signed>> for DataValue<S, Unsigned> {
+impl<S: DataWidth> From<DataValue<S, Signed>> for DataValue<S, Unsigned> {
     fn from(value: DataValue<S, Signed>) -> Self {
         Self::from_unsigned(value.as_unsigned().raw())
     }
 }
 
-impl<S: Data> From<DataValue<S, Signed>> for DataValue<S, RegData> {
+impl<S: DataWidth> From<DataValue<S, Signed>> for DataValue<S, RegData> {
     fn from(value: DataValue<S, Signed>) -> Self {
         Self::from_unsigned(value.as_unsigned().raw())
     }
 }
 
-impl<S: Data> From<DataValue<S, Signed>> for DataValue<S, ByteAddr> {
+impl<S: DataWidth> From<DataValue<S, Signed>> for DataValue<S, ByteAddr> {
     fn from(value: DataValue<S, Signed>) -> Self {
         Self::from_unsigned(value.as_unsigned().raw())
     }
 }
 
-impl<S: Data> From<DataValue<S, RegData>> for DataValue<S, Unsigned> {
+impl<S: DataWidth> From<DataValue<S, RegData>> for DataValue<S, Unsigned> {
     fn from(value: DataValue<S, RegData>) -> Self {
         Self::from_unsigned(value.as_unsigned().raw())
     }
 }
 
-impl<S: Data> From<DataValue<S, RegData>> for DataValue<S, Signed> {
+impl<S: DataWidth> From<DataValue<S, RegData>> for DataValue<S, Signed> {
     fn from(value: DataValue<S, RegData>) -> Self {
         Self::from_unsigned(value.as_unsigned().raw())
     }
 }
 
-impl<S: Data> From<DataValue<S, RegData>> for DataValue<S, ByteAddr> {
+impl<S: DataWidth> From<DataValue<S, RegData>> for DataValue<S, ByteAddr> {
     fn from(value: DataValue<S, RegData>) -> Self {
         Self::from_unsigned(value.as_unsigned().raw())
     }
 }
 
-impl<S: Data> From<DataValue<S, ByteAddr>> for DataValue<S, Unsigned> {
+impl<S: DataWidth> From<DataValue<S, ByteAddr>> for DataValue<S, Unsigned> {
     fn from(value: DataValue<S, ByteAddr>) -> Self {
         Self::from_unsigned(value.as_unsigned().raw())
     }
 }
 
-impl<S: Data> From<DataValue<S, ByteAddr>> for DataValue<S, Signed> {
+impl<S: DataWidth> From<DataValue<S, ByteAddr>> for DataValue<S, Signed> {
     fn from(value: DataValue<S, ByteAddr>) -> Self {
         Self::from_unsigned(value.as_unsigned().raw())
     }
 }
 
-impl<S: Data> From<DataValue<S, ByteAddr>> for DataValue<S, RegData> {
+impl<S: DataWidth> From<DataValue<S, ByteAddr>> for DataValue<S, RegData> {
     fn from(value: DataValue<S, ByteAddr>) -> Self {
         Self::from_unsigned(value.as_unsigned().raw())
     }
@@ -454,19 +454,19 @@ impl<S: Data> From<DataValue<S, ByteAddr>> for DataValue<S, RegData> {
 // ===== Interpretation differences =====
 pub type UnsignedValue<S> = DataValue<S, Unsigned>;
 
-impl<S: Data> UnsignedValue<S> {
+impl<S: DataWidth> UnsignedValue<S> {
     pub fn raw(self) -> S::U {
         self.value().as_u()
     }
 }
 
-impl<S: Data> From<usize> for UnsignedValue<S> {
+impl<S: DataWidth> From<usize> for UnsignedValue<S> {
     fn from(value: usize) -> Self {
         DataValue::new(S::from_u64(value as u64))
     }
 }
 
-impl<S: Data> fmt::Display for DataValue<S, Unsigned> {
+impl<S: DataWidth> fmt::Display for DataValue<S, Unsigned> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.value.as_u())
     }
@@ -474,29 +474,29 @@ impl<S: Data> fmt::Display for DataValue<S, Unsigned> {
 
 pub type SignedValue<S> = DataValue<S, Signed>;
 
-impl<S: Data> SignedValue<S> {
+impl<S: DataWidth> SignedValue<S> {
     pub fn raw(self) -> S::S {
         self.value().as_s()
     }
 }
 
-impl<S: Data> From<isize> for SignedValue<S> {
+impl<S: DataWidth> From<isize> for SignedValue<S> {
     fn from(value: isize) -> Self {
         DataValue::new(S::from_u64(value as u64))
     }
 }
 
-impl<S: Data> fmt::Display for DataValue<S, Signed> {
+impl<S: DataWidth> fmt::Display for DataValue<S, Signed> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.value.as_s())
     }
 }
 
-impl<S: Data> DataValue<S, RegData> {}
+impl<S: DataWidth> DataValue<S, RegData> {}
 
 pub type RegValue<S> = DataValue<S, RegData>;
 
-impl<S: Data> fmt::Display for RegValue<S> {
+impl<S: DataWidth> fmt::Display for RegValue<S> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.value.as_u())
     }
@@ -507,7 +507,7 @@ pub type ByteAddrValue<S> = DataValue<S, ByteAddr>;
 pub type ByteAddr32 = DataValue<RS32b, ByteAddr>;
 pub type ByteAddr64 = DataValue<RS64b, ByteAddr>;
 
-impl<S: Data> ByteAddrValue<S> {
+impl<S: DataWidth> ByteAddrValue<S> {
     pub fn plus_4(self) -> Self {
         Self::from_unsigned(
             self.as_unsigned()
@@ -516,7 +516,7 @@ impl<S: Data> ByteAddrValue<S> {
         )
     }
 
-    pub fn is_aligned_to<W: Data>(self) -> bool {
+    pub fn is_aligned_to<W: DataWidth>(self) -> bool {
         W::from_u64(AsPrimitive::<u64>::as_(self.as_unsigned().raw())).is_aligned()
     }
 
@@ -525,7 +525,7 @@ impl<S: Data> ByteAddrValue<S> {
     }
 }
 
-impl<S: Data> fmt::Display for DataValue<S, ByteAddr> {
+impl<S: DataWidth> fmt::Display for DataValue<S, ByteAddr> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:#X}", self.value.as_u())
     }
@@ -536,11 +536,11 @@ pub type DataByte = DataValue<RS8b, RegData>;
 
 impl<S: AtLeast8b, T: DataInterp> DataValue<S, T> {
     pub fn zero_pad_from_byte(b: DataByte) -> Self {
-        Self::from_unsigned(<S as Data>::U::from_u8(b.as_unsigned().raw()).unwrap())
+        Self::from_unsigned(<S as DataWidth>::U::from_u8(b.as_unsigned().raw()).unwrap())
     }
 
     pub fn sign_ext_from_byte(b: DataByte) -> Self {
-        Self::from_signed(<S as Data>::S::from_i8(b.as_signed().raw()).unwrap())
+        Self::from_signed(<S as DataWidth>::S::from_i8(b.as_signed().raw()).unwrap())
     }
 }
 
@@ -572,11 +572,11 @@ pub type DataHalf = DataValue<RS16b, RegData>;
 
 impl<S: AtLeast16b, T: DataInterp> DataValue<S, T> {
     pub fn zero_pad_from_half(h: DataHalf) -> Self {
-        Self::from_unsigned(<S as Data>::U::from_u16(h.as_unsigned().raw()).unwrap())
+        Self::from_unsigned(<S as DataWidth>::U::from_u16(h.as_unsigned().raw()).unwrap())
     }
 
     pub fn sign_ext_from_half(h: DataHalf) -> Self {
-        Self::from_signed(<S as Data>::S::from_i16(h.as_signed().raw()).unwrap())
+        Self::from_signed(<S as DataWidth>::S::from_i16(h.as_signed().raw()).unwrap())
     }
 }
 
@@ -620,11 +620,11 @@ pub type DataLword = DataValue<RS32b, RegData>;
 
 impl<S: AtLeast32b, T: DataInterp> DataValue<S, T> {
     pub fn zero_pad_from_lword(l: DataLword) -> Self {
-        Self::from_unsigned(<S as Data>::U::from_u32(l.as_unsigned().raw()).unwrap())
+        Self::from_unsigned(<S as DataWidth>::U::from_u32(l.as_unsigned().raw()).unwrap())
     }
 
     pub fn sign_ext_from_lword(l: DataLword) -> Self {
-        Self::from_signed(<S as Data>::S::from_i32(l.as_signed().raw()).unwrap())
+        Self::from_signed(<S as DataWidth>::S::from_i32(l.as_signed().raw()).unwrap())
     }
 
     pub fn lower_lword(self) -> DataLword {
@@ -708,7 +708,7 @@ impl<T: DataInterp> From<DataValue<RS64b, T>> for i64 {
 }
 
 // All widths must implement From<i64> for immediate parsing
-impl<S: Data, T: DataInterp> From<i64> for DataValue<S, T> {
+impl<S: DataWidth, T: DataInterp> From<i64> for DataValue<S, T> {
     fn from(value: i64) -> Self {
         // Hack to coerce values with high MSB that num_traits won't cast
         if value as u64 > (u32::MAX as u64) {

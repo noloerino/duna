@@ -5,7 +5,7 @@ use num_traits::cast::AsPrimitive;
 use std::collections::HashMap;
 use std::marker::PhantomData;
 
-pub struct RiscVProgramBehavior<S: Data> {
+pub struct RiscVProgramBehavior<S: DataWidth> {
     _phantom: PhantomData<S>,
 }
 
@@ -55,7 +55,7 @@ lazy_static! {
         .collect();
 }
 
-pub struct RiscVSyscallConvention<S: Data> {
+pub struct RiscVSyscallConvention<S: DataWidth> {
     _phantom: PhantomData<S>,
 }
 

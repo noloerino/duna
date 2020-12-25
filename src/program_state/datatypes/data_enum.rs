@@ -1,7 +1,7 @@
 use super::*;
 
 #[derive(Copy, Clone, PartialEq)]
-pub enum DataWidth {
+pub enum DataWidthEnum {
     Byte,
     Half,
     Lword,
@@ -17,12 +17,12 @@ pub enum DataEnum {
 }
 
 impl DataEnum {
-    pub fn width(self) -> DataWidth {
+    pub fn width(self) -> DataWidthEnum {
         match self {
-            DataEnum::Byte(_) => DataWidth::Byte,
-            DataEnum::Half(_) => DataWidth::Half,
-            DataEnum::Lword(_) => DataWidth::Lword,
-            DataEnum::Dword(_) => DataWidth::Dword,
+            DataEnum::Byte(_) => DataWidthEnum::Byte,
+            DataEnum::Half(_) => DataWidthEnum::Half,
+            DataEnum::Lword(_) => DataWidthEnum::Lword,
+            DataEnum::Dword(_) => DataWidthEnum::Dword,
         }
     }
 }
@@ -64,7 +64,7 @@ impl From<DataEnum> for DataDword {
 }
 
 #[derive(Copy, Clone, PartialEq, Debug)]
-pub struct DataDiff<S: Data> {
+pub struct DataDiff<S: DataWidth> {
     pub old: RegValue<S>,
     pub new: RegValue<S>,
 }

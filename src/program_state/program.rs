@@ -16,7 +16,7 @@ use std::str::FromStr;
 pub trait ProgramBehavior<F, S>
 where
     F: ArchFamily<S>,
-    S: Data,
+    S: DataWidth,
 {
     /// Returns the register that holds the stack pointer.
     fn sp_register() -> F::Register;
@@ -270,13 +270,13 @@ impl<A: Architecture> ProgramExecutor<A> {
     }
 }
 
-pub struct ProgramState<F: ArchFamily<S>, S: Data> {
+pub struct ProgramState<F: ArchFamily<S>, S: DataWidth> {
     pub(crate) user_state: UserState<F, S>,
     pub(crate) priv_state: PrivState<S>,
     pub(crate) phys_state: PhysState,
 }
 
-impl<F: ArchFamily<S>, S: Data> Default for ProgramState<F, S> {
+impl<F: ArchFamily<S>, S: DataWidth> Default for ProgramState<F, S> {
     fn default() -> Self {
         // Pray that we never test sbrk when we use default
         ProgramState::new(1, 64, Box::new(AllMappedPt::new()))
@@ -287,7 +287,7 @@ pub type MemGetResult<F, S, W> = (RegValue<W>, DiffStack<F, S>);
 
 /// TODO put custom types for syscall args
 /// TODO put errno on user state at a thread-local statically known location
-impl<F: ArchFamily<S>, S: Data> ProgramState<F, S> {
+impl<F: ArchFamily<S>, S: DataWidth> ProgramState<F, S> {
     pub fn get_stdout(&self) -> &[u8] {
         self.priv_state.stdout.as_slice()
     }
@@ -642,7 +642,7 @@ impl<F: ArchFamily<S>, S: Data> ProgramState<F, S> {
     }
 }
 
-pub trait SyscallConvention<F: ArchFamily<S>, S: Data> {
+pub trait SyscallConvention<F: ArchFamily<S>, S: DataWidth> {
     /// Returns the syscall identified by number N, or none if no such syscall exists.
     fn number_to_syscall(n: SignedValue<S>) -> Option<Syscall>;
     /// Returns the number corresponding to the syscall, or -1 if it is unimplemented.
@@ -667,7 +667,7 @@ pub enum Syscall {
 }
 
 #[derive(Copy, Clone)]
-pub struct RegDataChange<S: Data> {
+pub struct RegDataChange<S: DataWidth> {
     pub old_value: RegValue<S>,
     pub new_value: RegValue<S>,
 }
@@ -681,7 +681,7 @@ pub type InstResult<F, S> = Result<DiffStack<F, S>, TermCause>;
 /// Represents an individual atomic change in the state of the machine.
 ///
 /// These diffs occur at one of three levels: user, OS/kernel, and hardware.
-pub enum StateDiff<F: ArchFamily<S>, S: Data> {
+pub enum StateDiff<F: ArchFamily<S>, S: DataWidth> {
     User(UserDiff<F, S>),
     Priv(PrivDiff<S>),
     Phys(PhysDiff),

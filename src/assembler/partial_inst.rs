@@ -2,7 +2,7 @@ use super::parser::{LabelDef, LabelRef};
 use crate::arch::*;
 use crate::program_state::*;
 
-pub(crate) enum NeededRegs<F: ArchFamily<S>, S: Data> {
+pub(crate) enum NeededRegs<F: ArchFamily<S>, S: DataWidth> {
     Two {
         assemble: fn(F::Register, F::Register, RegValue<S>) -> F::Instruction,
         reg1: F::Register,
@@ -17,12 +17,12 @@ pub(crate) enum NeededRegs<F: ArchFamily<S>, S: Data> {
     },
 }
 
-pub(crate) struct NeedsLabel<F: ArchFamily<S>, S: Data> {
+pub(crate) struct NeedsLabel<F: ArchFamily<S>, S: DataWidth> {
     tpe: NeededRegs<F, S>,
     needed_label: LabelRef,
 }
 
-impl<F: ArchFamily<S>, S: Data> NeedsLabel<F, S> {
+impl<F: ArchFamily<S>, S: DataWidth> NeedsLabel<F, S> {
     /// Attempts to replace the needed label with the provided immediate
     pub fn fulfill_label(&self, imm: RegValue<S>) -> F::Instruction {
         use NeededRegs::*;
@@ -38,18 +38,18 @@ impl<F: ArchFamily<S>, S: Data> NeedsLabel<F, S> {
     }
 }
 
-pub(crate) enum PartialInstType<F: ArchFamily<S>, S: Data> {
+pub(crate) enum PartialInstType<F: ArchFamily<S>, S: DataWidth> {
     Complete(F::Instruction),
     NeedsLabelRef(NeedsLabel<F, S>),
 }
 
-pub struct PartialInst<F: ArchFamily<S>, S: Data> {
+pub struct PartialInst<F: ArchFamily<S>, S: DataWidth> {
     pub(crate) tpe: PartialInstType<F, S>,
     /// A label pointing to this instructions.
     pub label: Option<LabelDef>,
 }
 
-impl<F: ArchFamily<S>, S: Data> PartialInst<F, S> {
+impl<F: ArchFamily<S>, S: DataWidth> PartialInst<F, S> {
     pub fn new_complete(inst: F::Instruction) -> PartialInst<F, S> {
         PartialInst {
             tpe: PartialInstType::Complete(inst),

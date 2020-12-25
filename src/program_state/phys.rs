@@ -34,7 +34,7 @@ pub enum PhysDiff {
 }
 
 impl PhysDiff {
-    pub fn into_state_diff<F: ArchFamily<S>, S: Data>(self) -> StateDiff<F, S> {
+    pub fn into_state_diff<F: ArchFamily<S>, S: DataWidth>(self) -> StateDiff<F, S> {
         StateDiff::Phys(self)
     }
 }
@@ -109,9 +109,9 @@ impl PhysState {
     fn check_alignment_unsized(
         &self,
         offs: PageOffs,
-        width: DataWidth,
+        width: DataWidthEnum,
     ) -> Result<(), MisalignedAccess> {
-        use DataWidth::*;
+        use DataWidthEnum::*;
         if !self.require_aligned
             || match width {
                 Byte => true,
@@ -416,7 +416,7 @@ impl MemPage {
 
 /// Trait to denote types that can be used to index into a page of memory.
 /// This approach is taken in lieu of enums.
-pub trait PageIndex: Data {
+pub trait PageIndex: DataWidth {
     fn set(self, page: &mut MemPage, offs: PageOffs);
     fn get(page: &MemPage, offs: PageOffs) -> RegValue<Self>;
 }

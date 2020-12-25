@@ -6,7 +6,7 @@ use crate::arch::*;
 use crate::program_state::*;
 use std::marker::PhantomData;
 
-pub struct RiscV<S: Data> {
+pub struct RiscV<S: DataWidth> {
     _phantom: PhantomData<S>,
 }
 

@@ -74,7 +74,7 @@ impl DirectiveLiterals {
     }
 }
 
-pub enum OkParseResult<F: ArchFamily<S>, S: Data> {
+pub enum OkParseResult<F: ArchFamily<S>, S: DataWidth> {
     Insts(ParsedInstStream<F, S>),
     Literals(DirectiveLiterals),
     None,
@@ -87,7 +87,7 @@ pub type LineParseResult<F, S> = Result<OkParseResult<F, S>, ParseError>;
 pub struct ParseResult<F, S>
 where
     F: ArchFamily<S>,
-    S: Data,
+    S: DataWidth,
 {
     pub file_id: FileId,
     pub insts: ParsedInstStream<F, S>,
@@ -127,7 +127,7 @@ pub type TokenIter = Peekable<IntoIter<Token>>;
 pub trait Parser<F, S>
 where
     F: ArchFamily<S>,
-    S: Data,
+    S: DataWidth,
 {
     fn parse_str(file_id: FileId, contents: &str) -> ParseResult<F, S> {
         Self::parse_lex_result(Lexer::lex_str(file_id, contents))

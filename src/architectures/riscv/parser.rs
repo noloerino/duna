@@ -885,10 +885,10 @@ impl<'a> DirectiveParser<'a> {
                 self.ok(0)
             }
             // literal insertions
-            "byte" => self.parse_data(DataWidth::Byte),
-            "2byte" | "half" | "short" => self.parse_data(DataWidth::Half),
-            "4byte" | "word" | "long" => self.parse_data(DataWidth::Lword),
-            "8byte" | "dword" | "quad" => self.parse_data(DataWidth::Dword),
+            "byte" => self.parse_data(DataWidthEnum::Byte),
+            "2byte" | "half" | "short" => self.parse_data(DataWidthEnum::Half),
+            "4byte" | "word" | "long" => self.parse_data(DataWidthEnum::Lword),
+            "8byte" | "dword" | "quad" => self.parse_data(DataWidthEnum::Dword),
             "zero" => self.parse_zero(),
             "ascii" => self.parse_string(false),
             "asciz" | "string" => self.parse_string(true),
@@ -903,7 +903,7 @@ impl<'a> DirectiveParser<'a> {
     }
 
     /// Emits zero or more integer literal declarations through .byte, .word, etc.
-    fn parse_data(mut self, kind: DataWidth) -> DirectiveParseResult {
+    fn parse_data(mut self, kind: DataWidthEnum) -> DirectiveParseResult {
         use ProgramSection::*;
         match self.state.curr_section {
             Text => Err(ParseError::unimplemented(
@@ -914,7 +914,7 @@ impl<'a> DirectiveParser<'a> {
                 let toks = self.consume_unbounded_commasep_args()?;
                 let mut data = DirectiveLiterals::new(section);
                 for tok in toks {
-                    use DataWidth::*;
+                    use DataWidthEnum::*;
                     match kind {
                         Byte => {
                             let val: u8 = self.try_parse_imm(8, tok)? as u8;

@@ -35,15 +35,15 @@ impl Default for SegmentStarts {
 }
 
 impl SegmentStarts {
-    pub fn text<S: Data>(&self) -> ByteAddrValue<S> {
+    pub fn text<S: DataWidth>(&self) -> ByteAddrValue<S> {
         UnsignedValue::<S>::from(self.text_start).into()
     }
 
-    pub fn data<S: Data>(&self) -> ByteAddrValue<S> {
+    pub fn data<S: DataWidth>(&self) -> ByteAddrValue<S> {
         UnsignedValue::<S>::from(self.data_start).into()
     }
 
-    pub fn stack<S: Data>(&self) -> ByteAddrValue<S> {
+    pub fn stack<S: DataWidth>(&self) -> ByteAddrValue<S> {
         UnsignedValue::<S>::from(self.stack_start).into()
     }
 }
@@ -85,7 +85,7 @@ impl Default for MemConfig {
 }
 
 impl MemConfig {
-    pub fn build_mem<S: Data>(&self) -> Box<dyn PageTable<S>> {
+    pub fn build_mem<S: DataWidth>(&self) -> Box<dyn PageTable<S>> {
         use crate::program_state::*;
         let kind = self.kind;
         match kind {
