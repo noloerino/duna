@@ -5,7 +5,7 @@ pub use super::priv_s::*;
 use super::registers::RegFile;
 pub use super::user::*;
 use crate::arch::*;
-use crate::assembler::{Linker, ParseErrorReport, SectionStore};
+use crate::assembler::{Linker, ErrorReport, SectionStore};
 use crate::config::SegmentStarts;
 use crate::instruction::ConcreteInst;
 use num_traits::cast::AsPrimitive;
@@ -138,7 +138,7 @@ impl<A: Architecture> Program<A> {
 }
 
 impl<A: Architecture> FromStr for Program<A> {
-    type Err = ParseErrorReport;
+    type Err = ErrorReport;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Linker::with_main_str(s).link::<A>(Default::default())

@@ -2,7 +2,7 @@ mod assembler_impl;
 mod datatypes;
 pub mod lexer;
 mod linker;
-mod parse_error;
+mod error;
 pub mod parser;
 pub mod partial_inst;
 
@@ -10,6 +10,6 @@ pub use assembler_impl::{Assembler, ProgramSection, SectionStore, UnlinkedProgra
 pub use datatypes::{FileData, FileId, Location};
 // pub use lexer::*;
 pub use linker::Linker;
-pub use parse_error::{ErrMetadata, ParseError, ParseErrorReport, ParseErrorReporter};
+pub use error::{ErrMetadata, ParseError, ErrorReport, ErrorReporter};
 pub use partial_inst::PartialInst;
 // pub use parser::*;

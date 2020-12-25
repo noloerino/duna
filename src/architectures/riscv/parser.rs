@@ -49,7 +49,7 @@ struct ParserData<'a, S: AtLeast32b> {
 pub struct RiscVParser<S: AtLeast32b> {
     file_id: FileId,
     lines: LineTokenStream,
-    reporter: ParseErrorReporter,
+    reporter: ErrorReporter,
     state: ParseState,
     _phantom: PhantomData<S>,
 }

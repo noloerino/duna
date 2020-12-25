@@ -1,5 +1,5 @@
 use super::datatypes::*;
-use super::parse_error::{ParseError, ParseErrorReporter};
+use super::error::{ParseError, ErrorReporter};
 use super::parser::{Label, LabelDef, LabelRef, ParseResult, Parser};
 use super::partial_inst::{PartialInst, PartialInstType};
 use crate::arch::*;
@@ -15,13 +15,13 @@ impl Assembler {
     pub fn assemble_str<S: Architecture>(
         file_id: FileId,
         contents: &str,
-    ) -> (UnlinkedProgram<S>, ParseErrorReporter) {
+    ) -> (UnlinkedProgram<S>, ErrorReporter) {
         Assembler::assemble(<S::Parser>::parse_str(file_id, contents))
     }
 
     fn assemble<S: Architecture>(
         parse_result: ParseResult<S::Family, S::DataWidth>,
-    ) -> (UnlinkedProgram<S>, ParseErrorReporter) {
+    ) -> (UnlinkedProgram<S>, ErrorReporter) {
         let ParseResult {
             file_id,
             insts,
@@ -245,8 +245,8 @@ impl<A: Architecture> UnlinkedProgram<A> {
         mut insts: Vec<FileIdAndInst<A>>,
         sections: SectionStore,
         declared_globals: HashSet<String>,
-    ) -> (UnlinkedProgram<A>, ParseErrorReporter) {
-        let mut reporter = ParseErrorReporter::new();
+    ) -> (UnlinkedProgram<A>, ErrorReporter) {
+        let mut reporter = ErrorReporter::new();
         let mut local_labels: HashMap<Label, LabelTarget> = Default::default();
         // Label definitions in instructions
         for (i, (_, partial_inst)) in insts.iter().enumerate() {
@@ -360,8 +360,8 @@ impl<A: Architecture> UnlinkedProgram<A> {
     }
 
     /// Produces a program, or an error report if some instructions are still missing labels.
-    pub fn into_program(self, config: &MachineConfig) -> Result<Program<A>, ParseErrorReporter> {
-        let mut reporter = ParseErrorReporter::new();
+    pub fn into_program(self, config: &MachineConfig) -> Result<Program<A>, ErrorReporter> {
+        let mut reporter = ErrorReporter::new();
         let insts = self
             .insts
             .into_iter()

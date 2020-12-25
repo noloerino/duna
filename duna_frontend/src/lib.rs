@@ -1,13 +1,13 @@
 mod utils;
 
 use duna::architectures::riscv::RV32;
-use duna::assembler::{Linker, ParseErrorReport, ParseErrorReporter};
+use duna::assembler::{Linker, ErrorReport, ErrorReporter};
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
 pub struct SimResult {
     stdout: Vec<u8>,
-    compile_errs: ParseErrorReport,
+    compile_errs: ErrorReport,
     pub exit_code: u8,
 }
 
@@ -31,7 +31,7 @@ pub fn simulate(program_text: &str) -> SimResult {
             let result = program.run();
             SimResult {
                 stdout: program.state.get_stdout().to_vec(),
-                compile_errs: ParseErrorReporter::new()
+                compile_errs: ErrorReporter::new()
                     .into_report_with_file_map(Default::default()),
                 exit_code: result,
             }

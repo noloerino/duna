@@ -1,5 +1,5 @@
 use super::datatypes::*;
-use super::parse_error::{ErrMetadata, ParseError, ParseErrorReporter};
+use super::error::{ErrMetadata, ParseError, ErrorReporter};
 use std::fmt;
 use std::iter::{Enumerate, Peekable};
 use std::str::Chars;
@@ -8,7 +8,7 @@ pub struct LexResult<'a> {
     pub file_id: FileId,
     pub lines: LineTokenStream,
     pub contents: &'a str,
-    pub reporter: ParseErrorReporter,
+    pub reporter: ErrorReporter,
 }
 
 #[derive(Eq, PartialEq, Debug)]
@@ -114,7 +114,7 @@ struct LineLexer<'a> {
     file_id: FileId,
     lineno: LineNo,
     iter: LineIter<'a>,
-    reporter: &'a mut ParseErrorReporter,
+    reporter: &'a mut ErrorReporter,
 }
 
 impl<'a> LineLexer<'a> {
@@ -350,7 +350,7 @@ impl<'a> LineLexer<'a> {
         file_id: FileId,
         content: &'a str,
         lineno: LineNo,
-        reporter: &'a mut ParseErrorReporter,
+        reporter: &'a mut ErrorReporter,
     ) -> LineLexer<'a> {
         LineLexer {
             file_id,
@@ -431,7 +431,7 @@ impl<'a> Lexer<'a> {
     /// Consume the lexer's iterator to produce a stream of tokens and any possible errors.
     fn lex(self) -> LexResult<'a> {
         let mut toks = Vec::<TokenStream>::new();
-        let mut reporter = ParseErrorReporter::new();
+        let mut reporter = ErrorReporter::new();
         for (lineno, line) in self.contents.lines().enumerate() {
             toks.push(LineLexer::new(self.file_id, line, lineno, &mut reporter).lex());
         }
@@ -448,13 +448,13 @@ impl<'a> Lexer<'a> {
 mod tests {
     use super::*;
 
-    fn get_test_reporter() -> ParseErrorReporter {
-        ParseErrorReporter::new()
+    fn get_test_reporter() -> ErrorReporter {
+        ErrorReporter::new()
     }
 
     // Gets a LineLexer instance and an initialized state for more fine-grained testing.
     fn get_line_lexer<'a>(
-        reporter: &'a mut ParseErrorReporter,
+        reporter: &'a mut ErrorReporter,
         line: &'a str,
     ) -> (LineLexer<'a>, LexState) {
         let head = line.chars().next().unwrap();

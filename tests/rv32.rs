@@ -1,5 +1,5 @@
 use duna::architectures::riscv::{RiscVRegister, RV32};
-use duna::assembler::{Linker, ParseErrorReport};
+use duna::assembler::{Linker, ErrorReport};
 use duna::program_state::Program;
 use std::path::Path;
 
@@ -20,7 +20,7 @@ fn program_from_file(filename: &str) -> Program<RV32> {
     program
 }
 
-fn err_report_from_files(main_filename: &str, others: Vec<&str>) -> ParseErrorReport {
+fn err_report_from_files(main_filename: &str, others: Vec<&str>) -> ErrorReport {
     let mut linker = Linker::with_main(&get_full_test_path(main_filename));
     for file in others {
         linker = linker.with_file(&get_full_test_path(file));

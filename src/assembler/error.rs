@@ -3,14 +3,14 @@ use super::lexer::{ImmRenderType, TokenType};
 use super::parser::{LabelDef, LabelRef};
 use std::fmt;
 
-pub struct ParseErrorReport {
+pub struct ErrorReport {
     /// Maps file id to a tuple of (file name, list of lines in the file).
     line_map: Vec<(String, Vec<String>)>,
     /// Assume the errors are sorted by location
     pub errs: Vec<ParseError>,
 }
 
-impl ParseErrorReport {
+impl ErrorReport {
     /// Prints errors.
     pub fn report(&self) {
         println!("{:?}", self)
@@ -28,7 +28,7 @@ impl ParseErrorReport {
 /// Line numbers are 1-indexed, as is convention for most editors.
 const FIRST_LINENO: usize = 1;
 
-impl fmt::Debug for ParseErrorReport {
+impl fmt::Debug for ErrorReport {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for err in &self.errs {
             // === LINE 0 (error description) ===
@@ -77,13 +77,13 @@ impl fmt::Debug for ParseErrorReport {
 
 /// Reports parse-time errors
 #[derive(Debug)]
-pub struct ParseErrorReporter {
+pub struct ErrorReporter {
     pub errs: Vec<ParseError>,
 }
 
-impl ParseErrorReporter {
-    pub fn new() -> ParseErrorReporter {
-        ParseErrorReporter { errs: Vec::new() }
+impl ErrorReporter {
+    pub fn new() -> ErrorReporter {
+        ErrorReporter { errs: Vec::new() }
     }
 
     pub fn add_error(&mut self, err: ParseError) {
@@ -100,28 +100,28 @@ impl ParseErrorReporter {
     }
 
     /// Consumes the other reporter.
-    pub fn merge(&mut self, mut other: ParseErrorReporter) {
+    pub fn merge(&mut self, mut other: ErrorReporter) {
         self.errs.append(&mut other.errs);
     }
 
     /// Generates a report with the provided map of file id to file contents.
-    pub fn into_report_with_file_map(self, file_map: FileMap) -> ParseErrorReport {
+    pub fn into_report_with_file_map(self, file_map: FileMap) -> ErrorReport {
         let line_map = file_map
             .into_iter()
             .map(|FileData { file_name, content }| {
                 (file_name, content.lines().map(|s| s.to_string()).collect())
             })
             .collect();
-        ParseErrorReport {
+        ErrorReport {
             line_map,
             errs: self.errs,
         }
     }
 }
 
-impl Default for ParseErrorReporter {
-    fn default() -> ParseErrorReporter {
-        ParseErrorReporter::new()
+impl Default for ErrorReporter {
+    fn default() -> ErrorReporter {
+        ErrorReporter::new()
     }
 }
 

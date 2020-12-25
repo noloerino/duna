@@ -1,7 +1,7 @@
 use super::assembler_impl::{ProgramSection, SectionStore};
 use super::datatypes::*;
 use super::lexer::*;
-use super::parse_error::{ParseError, ParseErrorReporter};
+use super::error::{ParseError, ErrorReporter};
 use super::partial_inst::PartialInst;
 use crate::arch::*;
 use crate::program_state::*;
@@ -93,7 +93,7 @@ where
     pub insts: ParsedInstStream<F, S>,
     pub sections: SectionStore,
     pub declared_globals: HashSet<String>,
-    pub reporter: ParseErrorReporter,
+    pub reporter: ErrorReporter,
 }
 
 /// State about the program being parsed.
