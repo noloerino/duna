@@ -7,5 +7,5 @@ export RUSTFLAGS="-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Co
 export RUSTDOCFLAGS="-Cpanic=abort"
 rustup run nightly cargo build
 rustup run nightly cargo test
-rustup run nightly grcov ./target/debug/ -s . -t html --llvm --branch --ignore-not-existing -o ./target/debug/coverage/
-
+rustup run nightly grcov ../target/debug/ -s . -t html --llvm --branch --ignore-not-existing -o ../target/debug/coverage/
+echo "Created coverage files at ../target/debug/coverage"
