@@ -1,13 +1,15 @@
 [package]
 name = "duna-core"
-version = "0.1.0"
+version = "0.0.1"
 authors = ["noloerino <jhshi07@gmail.com>"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[lib]
+crate-type = ["lib"]
+
 [dependencies]
-clap = "2.33.0"
 lazy_static = "1.4.0"
 num-traits = "0.2.14"
 duna-macro = { path = "../duna-macro"}

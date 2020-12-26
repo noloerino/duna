@@ -1,5 +1,9 @@
+# `cargo run` runs CLI by default
+# https://stackoverflow.com/questions/51785457/
+
 [workspace]
 members = [
+    "duna-cli",
     "duna-core",
     "duna-macro",
     "duna-web",

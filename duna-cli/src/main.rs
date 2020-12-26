@@ -1,4 +1,3 @@
-// #![allow(dead_code)]
 use clap::{App, Arg};
 use duna_core::arch::Architecture;
 use duna_core::architectures::riscv::{RV32, RV64};
