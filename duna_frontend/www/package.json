@@ -1,24 +1,28 @@
 {
   "name": "duna_frontend",
   "version": "0.1.0",
-  "description": "a versatile assembly emulator",
+  "description": "a versatile assembly simulator",
   "main": "index.js",
   "scripts": {
     "build": "webpack --config webpack.config.js",
     "start": "webpack-dev-server",
-    "lint": "prettier --write bootstrap.js index.ts index.html"
+    "lint": "prettier --write bootstrap.js index.ts components/** index.html"
   },
   "repository": {
     "type": "git",
     "url": ""
   },
   "dependencies": {
+    "@types/codemirror": "^0.0.102",
+    "codemirror": "^5.59.0",
     "duna_frontend": "file:../pkg"
   },
   "license": "MIT",
   "devDependencies": {
     "copy-webpack-plugin": "^6.0.0",
+    "css-loader": "^5.0.1",
     "prettier": "^2.0.5",
+    "style-loader": "^2.0.0",
     "ts-loader": "^7.0.5",
     "typescript": "^3.9.3",
     "webpack": "^4.43.0",
