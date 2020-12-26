@@ -115,7 +115,7 @@ impl Nop {
 pub struct Not;
 impl Not {
     pub fn expand<S: AtLeast32b>(rd: RiscVRegister, rs: RiscVRegister) -> RiscVInst<S> {
-        Xori::new(rd, rs, (-1).into())
+        Xori::new(rd, rs, (-1i64).into())
     }
 }
 

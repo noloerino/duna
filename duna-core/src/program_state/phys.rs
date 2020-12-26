@@ -7,6 +7,9 @@ use std::collections::HashMap;
 use std::fmt;
 
 /// Indexes into physical memory. Constrained by the number of pages.
+///
+/// Note: a u32 indexes up to 4GB of memory, but we're assuming that we'll never encounter
+/// the pathological case where we need >=4GB but the PageOffs is too short
 pub type PhysPn = usize;
 /// Indexes into a page. Constrained by the size of the page.
 pub type PageOffs = usize;

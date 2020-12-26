@@ -5,7 +5,7 @@ pub use super::priv_s::*;
 use super::registers::RegFile;
 pub use super::user::*;
 use crate::arch::*;
-use crate::assembler::{Linker, ErrorReport, SectionStore};
+use crate::assembler::{ErrorReport, Linker, SectionStore};
 use crate::config::SegmentStarts;
 use crate::instruction::ConcreteInst;
 use num_traits::cast::AsPrimitive;

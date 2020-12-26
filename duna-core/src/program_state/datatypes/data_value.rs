@@ -689,12 +689,6 @@ impl DataDword {
     }
 }
 
-impl<T: DataInterp> From<u64> for DataValue<W64b, T> {
-    fn from(value: u64) -> Self {
-        Self::from_unsigned(value)
-    }
-}
-
 impl<T: DataInterp> From<DataValue<W64b, T>> for u64 {
     fn from(value: DataValue<W64b, T>) -> u64 {
         value.as_unsigned().raw()
@@ -707,7 +701,13 @@ impl<T: DataInterp> From<DataValue<W64b, T>> for i64 {
     }
 }
 
-// All widths must implement From<i64> for immediate parsing
+// All widths must implement From<i64> for immediate parsing and From<u64> for configuration
+impl<S: DataWidth, T: DataInterp> From<u64> for DataValue<S, T> {
+    fn from(value: u64) -> Self {
+        Self::new(S::from_u64(value))
+    }
+}
+
 impl<S: DataWidth, T: DataInterp> From<i64> for DataValue<S, T> {
     fn from(value: i64) -> Self {
         // Hack to coerce values with high MSB that num_traits won't cast

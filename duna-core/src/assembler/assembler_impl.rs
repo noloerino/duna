@@ -1,5 +1,5 @@
 use super::datatypes::*;
-use super::error::{ParseError, ErrorReporter};
+use super::error::{ErrorReporter, ParseError};
 use super::parser::{Label, LabelDef, LabelRef, ParseResult, Parser};
 use super::partial_inst::{PartialInst, PartialInstType};
 use crate::arch::*;

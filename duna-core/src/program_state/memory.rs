@@ -8,7 +8,8 @@ use std::collections::HashMap;
 use std::fmt;
 use std::marker::PhantomData;
 
-type VirtPn = usize;
+// Because WASM is a 32-bit target, usize doesn't cut it
+type VirtPn = u64;
 
 /// Maps a virtual page to a physical one.
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -270,7 +271,7 @@ impl<S: DataWidth> FifoLinearPt<S> {
 
     fn get_vpn(&self, addr: ByteAddrValue<S>) -> VirtPn {
         let bits = addr.bits();
-        (bits >> self.page_offs_len) as usize
+        bits >> self.page_offs_len
     }
 
     fn get_page_offs(&self, addr: ByteAddrValue<S>) -> PageOffs {

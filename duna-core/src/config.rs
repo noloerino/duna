@@ -18,14 +18,14 @@ impl Default for AsmConfig {
 /// Configures the start of the text, stack, and data segments.
 #[derive(Debug, Copy, Clone)]
 pub struct SegmentStarts {
-    pub text_start: usize,
-    pub stack_start: usize,
-    pub data_start: usize,
+    pub text_start: u64,
+    pub stack_start: u64,
+    pub data_start: u64,
 }
 
 impl Default for SegmentStarts {
     fn default() -> Self {
-        // TODO configure boundaries for 64 vs 32-bit
+        // taken from Venus
         SegmentStarts {
             text_start: 0x1000_0000,
             stack_start: 0x7FFF_FFF0,
@@ -34,17 +34,28 @@ impl Default for SegmentStarts {
     }
 }
 
+// impl Default for SegmentStarts<W64b> {
+//     fn default() -> Self {
+//         // taken from the RISCV green card
+//         SegmentStarts {
+//             text_start: ByteAddr64::from_unsigned(0x1000_0000),
+//             stack_start: ByteAddr64::from_unsigned(0x003F_FFFF_FFF0),
+//             data_start: ByteAddr64::from_unsigned(0x0040_0000),
+//         }
+//     }
+// }
+
 impl SegmentStarts {
     pub fn text<S: DataWidth>(&self) -> ByteAddrValue<S> {
-        UnsignedValue::<S>::from(self.text_start).into()
+        ByteAddrValue::<S>::from(self.text_start)
     }
 
     pub fn data<S: DataWidth>(&self) -> ByteAddrValue<S> {
-        UnsignedValue::<S>::from(self.data_start).into()
+        ByteAddrValue::<S>::from(self.data_start)
     }
 
     pub fn stack<S: DataWidth>(&self) -> ByteAddrValue<S> {
-        UnsignedValue::<S>::from(self.stack_start).into()
+        ByteAddrValue::<S>::from(self.stack_start)
     }
 }
 
@@ -58,8 +69,8 @@ pub struct MachineConfig {
 impl Default for MachineConfig {
     fn default() -> Self {
         MachineConfig {
-            segment_starts: Default::default(),
-            mem_config: Default::default(),
+            segment_starts: SegmentStarts::default(),
+            mem_config: MemConfig::default(),
         }
     }
 }

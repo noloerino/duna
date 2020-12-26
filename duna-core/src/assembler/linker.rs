@@ -1,6 +1,6 @@
 use super::assembler_impl::{Assembler, LabelTarget, SectionStore, UnlinkedProgram};
 use super::datatypes::*;
-use super::error::{ParseError, ErrorReport, ErrorReporter};
+use super::error::{ErrorReport, ErrorReporter, ParseError};
 use super::parser::{Label, LabelDef};
 use crate::arch::*;
 use crate::config::*;
@@ -65,14 +65,14 @@ impl Linker {
     }
 
     /// Attempts to link the provided programs together into a single executable.
-    pub fn link<S: Architecture>(self, config: AsmConfig) -> Result<Program<S>, ErrorReport> {
+    pub fn link<A: Architecture>(self, config: AsmConfig) -> Result<Program<A>, ErrorReport> {
         assert!(
             !self.file_map.is_empty(),
             "Linker is missing a main program"
         );
         let mut reporter = ErrorReporter::new();
         // Link other programs' local labels
-        let mut programs: Vec<UnlinkedProgram<S>> = Vec::new();
+        let mut programs: Vec<UnlinkedProgram<A>> = Vec::new();
         for (i, FileData { content, .. }) in self.file_map.iter().enumerate() {
             let (prog, new_reporter) = Assembler::assemble_str(i, &content);
             programs.push(prog);
@@ -143,7 +143,7 @@ impl Linker {
             }
         }
         if reporter.is_empty() {
-            let (linked, errs) = UnlinkedProgram::<S>::new(
+            let (linked, errs) = UnlinkedProgram::<A>::new(
                 all_insts,
                 combined_sections,
                 // Need to keep track of definitions for _start/main
