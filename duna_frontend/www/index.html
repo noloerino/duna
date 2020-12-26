@@ -7,7 +7,15 @@
   <body>
     <noscript>Duna requires Javascript and WebAssembly to run.</noscript>
     <script src="./bootstrap.js"></script>
-    <div>
+    <!-- Putting the import first allows us to override codemirror styles after -->
+    <style type="text/css">
+      .CodeMirror {
+        min-width: 60em;
+        min-height: 30em;
+        border: solid 0.1em;
+      }
+    </style>
+    <div style="display: flex; flex-direction: row;">
       <textarea
         id="code"
         rows="20"
@@ -21,8 +29,8 @@
         disabled
         placeholder="console output appears here"
       ></textarea>
-      <p>Program exited with code <span id="exit-code">--</span></p>
     </div>
+    <p>Program exited with code <span id="exit-code">--</span></p>
     <!-- TODO replace this with assemble/simulate buttons -->
     <div>
       <button id="go">Go!</button>
