@@ -4,38 +4,35 @@
     <meta charset="utf-8" />
     <title>Duna Emulator</title>
   </head>
-  <body>
+  <body style="display: flex; flex-direction: column;">
     <noscript>Duna requires Javascript and WebAssembly to run.</noscript>
     <script src="./bootstrap.js"></script>
-    <!-- Putting the import first allows us to override codemirror styles after -->
+    <!-- Putting the JS import first allows us to override 3rd-party styles after -->
+    <h2>Duna (very alpha)</h2>
     <style type="text/css">
       .CodeMirror {
         min-width: 60em;
         min-height: 30em;
         border: solid 0.1em;
       }
+      .lm_content {
+        /* Forces Golden panes to act as flexboxes when needed */
+        display: flex;
+        flex-direction: column;
+      }
+      /*
+      This shenaniganry (as well as making <body></body> a flexbox) is to account for the fact that
+      for some reason, appending Golden to a non-body element makes the height of the div 0
+      */
+      html {
+        height: 100vh;
+      }
+      body {
+        height: 100%;
+        margin-top: 0;
+        margin-bottom: 0;
+      }
     </style>
-    <div style="display: flex; flex-direction: row;">
-      <textarea
-        id="code"
-        rows="20"
-        cols="80"
-        placeholder="your code here"
-      ></textarea>
-      <textarea
-        id="stdout"
-        rows="20"
-        cols="40"
-        disabled
-        placeholder="console output appears here"
-      ></textarea>
-    </div>
-    <p>Program exited with code <span id="exit-code">--</span></p>
-    <!-- TODO replace this with assemble/simulate buttons -->
-    <div>
-      <button id="go">Go!</button>
-    </div>
-    <pre id="compile-errors">
-    </pre>
+    <div id="golden-base" style="flex: 1"></div>
   </body>
 </html>

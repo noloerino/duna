@@ -6,7 +6,7 @@
   "scripts": {
     "build": "webpack --config webpack.config.js",
     "start": "webpack-dev-server",
-    "lint": "prettier --write bootstrap.js index.ts components/** index.html"
+    "lint": "prettier --write bootstrap.js js/** index.html"
   },
   "repository": {
     "type": "git",
@@ -15,10 +15,14 @@
   "dependencies": {
     "@types/codemirror": "^0.0.102",
     "codemirror": "^5.59.0",
-    "duna_web": "file:../pkg"
+    "duna_web": "file:../pkg",
+    "golden-layout": "^1.5.9"
   },
   "license": "MIT",
   "devDependencies": {
+    "@babel/core": "^7.12.10",
+    "@babel/plugin-transform-react-jsx": "^7.12.12",
+    "babel-loader": "^8.2.2",
     "copy-webpack-plugin": "^6.0.0",
     "css-loader": "^5.0.1",
     "prettier": "^2.0.5",

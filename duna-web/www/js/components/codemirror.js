@@ -8,19 +8,19 @@ import "codemirror/lib/codemirror.css";
 import "codemirror/mode/gas/gas";
 import "codemirror/theme/elegant.css";
 // import "codemirror/theme/monokai.css";
-import "codemirror/lib/codemirror.css";
 
-// TODO define custom types for RISC-V etc.
-// GAS supports ARM and x86-64
-const codeMirror = CodeMirror.fromTextArea(
-  document.getElementById("code"),
-  {
-    mode: "gas",
-    lineNumbers: "true",
-    theme: "elegant"
+export class CodeMirrorWrapper {
+  constructor() {
+    // TODO define custom types for RISC-V etc.
+    // GAS supports ARM and x86-64
+    this.codeMirror = CodeMirror.fromTextArea(document.getElementById("code"), {
+      mode: "gas",
+      lineNumbers: "true",
+      theme: "elegant",
+    });
   }
-);
 
-export const getProgram = function () {
-  return codeMirror.getValue();
-};
+  getProgram() {
+    return this.codeMirror.getValue();
+  }
+}

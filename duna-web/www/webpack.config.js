@@ -19,6 +19,16 @@ module.exports = {
         exclude: /node_modules/
       },
       {
+        test: /.jsx/,
+        exclude: /node_modules/,
+        use: {
+          loader: "babel-loader",
+          options: {
+            plugins: ["@babel/plugin-transform-react-jsx"]
+          }
+        }
+      },
+      {
         test: /\.css$/i,
         use: ["style-loader", "css-loader"],
       },
