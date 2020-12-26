@@ -1,5 +1,5 @@
-import { init, simulate } from "duna_frontend";
-import { memory } from "duna_frontend/duna_frontend_bg.wasm";
+import { init, simulate } from "duna_web";
+import { memory } from "duna_web/duna_web_bg.wasm";
 import { getProgram } from "./components/codemirror";
 
 init();

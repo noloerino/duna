@@ -1,7 +1,7 @@
 //! Some basic tests for the 64-bit variant of RISCV.
-use duna::architectures::riscv::{RiscVRegister, RV64};
-use duna::assembler::Linker;
-use duna::program_state::Program;
+use duna_core::architectures::riscv::{RiscVRegister, RV64};
+use duna_core::assembler::Linker;
+use duna_core::program_state::Program;
 
 /// Tests basic jump instructions.
 /// This is identical to the 32-bit local_labels test, with the only difference being a different

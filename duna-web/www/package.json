@@ -1,5 +1,5 @@
 {
-  "name": "duna_frontend",
+  "name": "duna_web",
   "version": "0.1.0",
   "description": "a versatile assembly simulator",
   "main": "index.js",
@@ -15,7 +15,7 @@
   "dependencies": {
     "@types/codemirror": "^0.0.102",
     "codemirror": "^5.59.0",
-    "duna_frontend": "file:../pkg"
+    "duna_web": "file:../pkg"
   },
   "license": "MIT",
   "devDependencies": {

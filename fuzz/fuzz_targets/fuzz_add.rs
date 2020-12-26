@@ -1,9 +1,9 @@
 #![no_main]
+use duna_core::instruction::RType;
+use duna_core::isa::Add;
+use duna_core::program_state::{DataWord, IRegister, ProgramState};
 use libfuzzer_sys::arbitrary;
 use libfuzzer_sys::fuzz_target;
-use duna::instruction::RType;
-use duna::isa::Add;
-use duna::program_state::{DataWord, IRegister, ProgramState};
 
 #[derive(Clone, Debug, arbitrary::Arbitrary)]
 struct FuzzData {

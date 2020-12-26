@@ -1,7 +1,7 @@
 mod utils;
 
-use duna::architectures::riscv::RV32;
-use duna::assembler::{Linker, ErrorReport, ErrorReporter};
+use duna_core::architectures::riscv::RV32;
+use duna_core::assembler::{ErrorReport, ErrorReporter, Linker};
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
@@ -31,8 +31,7 @@ pub fn simulate(program_text: &str) -> SimResult {
             let result = program.run();
             SimResult {
                 stdout: program.state.get_stdout().to_vec(),
-                compile_errs: ErrorReporter::new()
-                    .into_report_with_file_map(Default::default()),
+                compile_errs: ErrorReporter::new().into_report_with_file_map(Default::default()),
                 exit_code: result,
             }
         }

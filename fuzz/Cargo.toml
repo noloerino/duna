@@ -12,8 +12,8 @@ cargo-fuzz = true
 [dependencies]
 libfuzzer-sys = { version = "0.3", features = ["arbitrary-derive"] }
 
-[dependencies.duna]
-path = ".."
+[dependencies.duna-core]
+path = "../duna-core"
 
 # Prevent this from interfering with workspaces
 [workspace]
