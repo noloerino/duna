@@ -15,5 +15,6 @@ pub trait Architecture: Sized {
 pub trait ArchFamily<S: DataWidth>: Sized {
     type Register: IRegister;
     type Instruction: ConcreteInst<Self, S>;
+    // TODO make SyscallConvention dynamically modifiable
     type Syscalls: SyscallConvention<Self, S>;
 }

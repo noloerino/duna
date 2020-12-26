@@ -236,6 +236,66 @@ impl<S: AtLeast32b> ITypeArith<S> for Ori {
     }
 }
 
+pub struct Slli;
+impl<S: AtLeast32b> ITypeShift<S> for Slli {
+    fn inst_fields() -> IInstFields {
+        IInstFields {
+            funct3: f3(0b001),
+            opcode: I_OPCODE_ARITH,
+        }
+    }
+
+    fn f7() -> BitStr32 {
+        BitStr32::new(0, 7)
+    }
+
+    fn eval(rs1_val: RegValue<S>, imm: BitStr32) -> RegValue<S> {
+        let v1: SignedValue<S> = rs1_val.into();
+        let imm_val: SignedValue<S> = imm.into();
+        (v1 << imm_val).into()
+    }
+}
+
+pub struct Srai;
+impl<S: AtLeast32b> ITypeShift<S> for Srai {
+    fn inst_fields() -> IInstFields {
+        IInstFields {
+            funct3: f3(0b101),
+            opcode: I_OPCODE_ARITH,
+        }
+    }
+
+    fn f7() -> BitStr32 {
+        BitStr32::new(0b010_0000, 7)
+    }
+
+    fn eval(rs1_val: RegValue<S>, imm: BitStr32) -> RegValue<S> {
+        let v1: SignedValue<S> = rs1_val.into();
+        let imm_val: SignedValue<S> = imm.into();
+        (v1 >> imm_val).into()
+    }
+}
+
+pub struct Srli;
+impl<S: AtLeast32b> ITypeShift<S> for Srli {
+    fn inst_fields() -> IInstFields {
+        IInstFields {
+            funct3: f3(0b101),
+            opcode: I_OPCODE_ARITH,
+        }
+    }
+
+    fn f7() -> BitStr32 {
+        BitStr32::new(0, 7)
+    }
+
+    fn eval(rs1_val: RegValue<S>, imm: BitStr32) -> RegValue<S> {
+        let v1: UnsignedValue<S> = rs1_val.into();
+        let imm_val: UnsignedValue<S> = imm.into();
+        (v1 >> imm_val).into()
+    }
+}
+
 #[derive(ITypeArith)]
 pub struct Xori;
 impl<S: AtLeast32b> ITypeArith<S> for Xori {
@@ -267,6 +327,21 @@ mod tests_32 {
     /// Tests an I type arithmetic instruction. Assumes that the registers being read
     /// are independent of the registers being written.
     fn test_i_type_arith<T: ITypeArith<W32b>>(
+        state: &mut ProgramState<RiscV<W32b>, W32b>,
+        args: Vec<IArithTestData>,
+    ) {
+        for IArithTestData { imm, result } in args {
+            state.apply_inst_test(&T::new(RD, RS1, DataLword::from(imm)));
+            println!(
+                "rd actual:\t{:b}\nrd expected:\t{:b}",
+                i32::from(state.regfile_read(RD)),
+                result
+            );
+            assert_eq!(i32::from(state.regfile_read(RD)), result);
+        }
+    }
+
+    fn test_i_type_shift<T: ITypeShift<W32b>>(
         state: &mut ProgramState<RiscV<W32b>, W32b>,
         args: Vec<IArithTestData>,
     ) {
@@ -428,6 +503,56 @@ mod tests_32 {
         state.regfile_set(T0, DataLword::from(base_addr + 16));
         state.apply_inst_test(&Lw::new(T1, T0, DataLword::from(-16)));
         assert_eq!(state.regfile_read(T1), DataLword::from(test_data));
+    }
+
+    #[test]
+    fn test_shifts() {
+        let mut state = get_init_state();
+        test_i_type_shift::<Slli>(
+            &mut state,
+            vec![
+                IArithTestData {
+                    imm: 0,
+                    result: RS1_VAL,
+                },
+                IArithTestData {
+                    imm: 2,
+                    result: RS1_VAL << 2,
+                },
+            ],
+        );
+        test_i_type_shift::<Srai>(
+            &mut state,
+            vec![
+                IArithTestData {
+                    imm: 0,
+                    result: RS1_VAL,
+                },
+                IArithTestData {
+                    imm: 2,
+                    result: RS1_VAL as i32 >> 2,
+                },
+            ],
+        );
+        test_i_type_shift::<Srli>(
+            &mut state,
+            vec![
+                IArithTestData {
+                    imm: 0,
+                    result: RS1_VAL,
+                },
+                IArithTestData {
+                    imm: 2,
+                    result: ((RS1_VAL as u32) >> 2) as i32,
+                },
+            ],
+        );
+        // Test signed behavior
+        state.regfile_set(S1, DataLword::from(0xDEAD_BEEF_u32));
+        state.apply_inst_test(&Srai::new(S2, S1, DataLword::from(4)));
+        assert_eq!(state.regfile_read(S2), DataLword::from(0xFDEA_DBEE_u32));
+        state.apply_inst_test(&Srli::new(S2, S1, DataLword::from(4)));
+        assert_eq!(state.regfile_read(S2), DataLword::from(0x0DEA_DBEE_u32));
     }
 }
 

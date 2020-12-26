@@ -1,31 +1,31 @@
 use proc_macro::TokenStream;
 use quote::quote;
 
-#[proc_macro_derive(ITypeArith)]
 /// Automatically derives IType for an instance of ITypeArith.
+#[proc_macro_derive(ITypeArith)]
 pub fn itype_arith_derive(input: TokenStream) -> TokenStream {
     let ast = syn::parse(input).unwrap();
     impl_itype_arith_derive(&ast)
 }
 
-#[proc_macro_derive(ITypeArith64)]
 /// Automatically derives IType for an instance of ITypeArith that is implemented only for 64-bit
 /// instructions.
+#[proc_macro_derive(ITypeArith64)]
 pub fn itype_arith_64_derive(input: TokenStream) -> TokenStream {
     let ast = syn::parse(input).unwrap();
     impl_itype_arith_64_derive(&ast)
 }
 
-#[proc_macro_derive(ITypeLoad)]
 /// Automatically derives IType for an instance of ITypeLoad.
+#[proc_macro_derive(ITypeLoad)]
 pub fn itype_load_derive(input: TokenStream) -> TokenStream {
     let ast = syn::parse(input).unwrap();
     impl_itype_load_derive(&ast)
 }
 
-#[proc_macro_derive(ITypeLoad64)]
 /// Automatically derives IType for an instance of ITypeLoad that is implemented only for 64-bit
 /// instructions.
+#[proc_macro_derive(ITypeLoad64)]
 pub fn itype_load_64_derive(input: TokenStream) -> TokenStream {
     let ast = syn::parse(input).unwrap();
     impl_itype_load_64_derive(&ast)

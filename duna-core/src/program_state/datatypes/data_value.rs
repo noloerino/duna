@@ -3,7 +3,7 @@ use num_traits::{
     bounds::Bounded,
     cast::{AsPrimitive, FromPrimitive},
     int::PrimInt,
-    ops::wrapping::{WrappingAdd, WrappingSub},
+    ops::wrapping as wr,
     sign,
 };
 use std::fmt;
@@ -51,7 +51,9 @@ pub trait DataWidth: fmt::Debug + Clone + Copy + PartialEq + Sized + 'static {
         + sign::Unsigned
         + fmt::UpperHex
         + fmt::Display
-        + WrappingAdd
+        + wr::WrappingAdd
+        + wr::WrappingShl
+        + wr::WrappingShr
         + AsPrimitive<u8>
         + AsPrimitive<u32>
         + AsPrimitive<u64>
@@ -61,8 +63,10 @@ pub trait DataWidth: fmt::Debug + Clone + Copy + PartialEq + Sized + 'static {
     type S: PrimInt
         + sign::Signed
         + fmt::Display
-        + WrappingAdd
-        + WrappingSub
+        + wr::WrappingAdd
+        + wr::WrappingShl
+        + wr::WrappingShr
+        + wr::WrappingSub
         + AsPrimitive<isize>
         + Bounded
         + FromPrimitive;
@@ -321,6 +325,7 @@ impl<S: DataWidth, T: DataInterp> core::ops::Add for DataValue<S, T> {
     type Output = Self;
 
     fn add(self, other: Self) -> Self {
+        use wr::WrappingAdd;
         Self::from_signed(
             self.as_signed()
                 .raw()
@@ -329,7 +334,7 @@ impl<S: DataWidth, T: DataInterp> core::ops::Add for DataValue<S, T> {
     }
 }
 
-impl<S: DataWidth, T: DataInterp> WrappingAdd for DataValue<S, T> {
+impl<S: DataWidth, T: DataInterp> wr::WrappingAdd for DataValue<S, T> {
     fn wrapping_add(&self, v: &Self) -> Self {
         Self::from_signed(self.as_signed().raw().wrapping_add(&v.as_signed().raw()))
     }
@@ -339,6 +344,7 @@ impl<S: DataWidth, T: DataInterp> core::ops::Sub for DataValue<S, T> {
     type Output = Self;
 
     fn sub(self, other: Self) -> Self {
+        use wr::WrappingSub;
         Self::from_signed(
             self.as_signed()
                 .raw()
@@ -347,7 +353,7 @@ impl<S: DataWidth, T: DataInterp> core::ops::Sub for DataValue<S, T> {
     }
 }
 
-impl<S: DataWidth, T: DataInterp> WrappingSub for DataValue<S, T> {
+impl<S: DataWidth, T: DataInterp> wr::WrappingSub for DataValue<S, T> {
     fn wrapping_sub(&self, v: &Self) -> Self {
         Self::from_signed(self.as_signed().raw().wrapping_sub(&v.as_signed().raw()))
     }
@@ -374,6 +380,45 @@ impl<S: DataWidth, T: DataInterp> core::ops::BitXor for DataValue<S, T> {
 
     fn bitxor(self, other: Self) -> Self {
         Self::from_signed(self.as_signed().raw() ^ other.as_signed().raw())
+    }
+}
+
+impl<S: DataWidth, T: DataInterp> core::ops::Shl for DataValue<S, T> {
+    type Output = Self;
+
+    fn shl(self, other: Self) -> Self {
+        use wr::WrappingShl;
+        Self::from_signed(
+            self.as_signed()
+                .raw()
+                .wrapping_shl(AsPrimitive::<u32>::as_(other.as_unsigned().raw())),
+        )
+    }
+}
+
+impl<S: DataWidth> core::ops::Shr for SignedValue<S> {
+    type Output = Self;
+
+    fn shr(self, other: Self) -> Self {
+        use wr::WrappingShr;
+        Self::from_signed(
+            self.as_signed()
+                .raw()
+                .wrapping_shr(AsPrimitive::<u32>::as_(other.as_unsigned().raw())),
+        )
+    }
+}
+
+impl<S: DataWidth> core::ops::Shr for UnsignedValue<S> {
+    type Output = Self;
+
+    fn shr(self, other: Self) -> Self {
+        use wr::WrappingShr;
+        Self::from_unsigned(
+            self.as_unsigned()
+                .raw()
+                .wrapping_shr(AsPrimitive::<u32>::as_(other.as_unsigned().raw())),
+        )
     }
 }
 
@@ -509,6 +554,7 @@ pub type ByteAddr64 = DataValue<W64b, ByteAddr>;
 
 impl<S: DataWidth> ByteAddrValue<S> {
     pub fn plus_4(self) -> Self {
+        use wr::WrappingAdd;
         Self::from_unsigned(
             self.as_unsigned()
                 .raw()

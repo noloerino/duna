@@ -244,6 +244,29 @@ pub(crate) trait ITypeLoad<S: AtLeast32b>: IType<S> {
     ) -> Result<MemReadResult<S>, MemFault<S>>;
 }
 
+/// Shift instructions have truncated immediates
+pub trait ITypeShift<S: AtLeast32b> {
+    fn new(rd: RiscVRegister, rs1: RiscVRegister, imm: RegValue<S>) -> RiscVInst<S> {
+        let imm_vec = <Self as ITypeShift<S>>::f7().concat(imm.to_bit_str(5));
+        RiscVInst {
+            eval: Box::new(move |state| {
+                let new_rd_val =
+                    <Self as ITypeShift<S>>::eval(state.user_state.regfile.read(rs1), imm_vec);
+                Ok(UserDiff::reg_write_pc_p4(&state.user_state, rd, new_rd_val))
+            }),
+            data: RiscVInstData::I {
+                fields: Self::inst_fields(),
+                rd,
+                rs1,
+                imm: imm_vec,
+            },
+        }
+    }
+    fn f7() -> BitStr32;
+    fn inst_fields() -> IInstFields;
+    fn eval(rs1_val: RegValue<S>, imm: BitStr32) -> RegValue<S>;
+}
+
 pub trait EnvironInst<S: AtLeast32b> {
     fn new() -> RiscVInst<S> {
         RiscVInst {
