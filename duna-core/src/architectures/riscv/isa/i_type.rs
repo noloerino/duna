@@ -286,6 +286,48 @@ impl ITypeShift<W64b> for Slliw {
     }
 }
 
+#[derive(ITypeArith)]
+pub struct Slti;
+impl<S: AtLeast32b> ITypeArith<S> for Slti {
+    fn inst_fields() -> IInstFields {
+        IInstFields {
+            funct3: f3(0b010),
+            opcode: I_OPCODE_ARITH,
+        }
+    }
+
+    fn eval(rs1_val: RegValue<S>, imm: BitStr32) -> RegValue<S> {
+        let v1: SignedValue<S> = rs1_val.into();
+        let imm_val: SignedValue<S> = imm.into();
+        if v1 < imm_val {
+            RegValue::<S>::new(S::from_u64(1))
+        } else {
+            RegValue::<S>::zero()
+        }
+    }
+}
+
+#[derive(ITypeArith)]
+pub struct Sltiu;
+impl<S: AtLeast32b> ITypeArith<S> for Sltiu {
+    fn inst_fields() -> IInstFields {
+        IInstFields {
+            funct3: f3(0b010),
+            opcode: I_OPCODE_ARITH,
+        }
+    }
+
+    fn eval(rs1_val: RegValue<S>, imm: BitStr32) -> RegValue<S> {
+        let v1: UnsignedValue<S> = rs1_val.into();
+        let imm_val: UnsignedValue<S> = imm.into();
+        if v1 < imm_val {
+            RegValue::<S>::new(S::from_u64(1))
+        } else {
+            RegValue::<S>::zero()
+        }
+    }
+}
+
 pub struct Srai;
 impl<S: AtLeast32b> ITypeShift<S> for Srai {
     fn inst_fields() -> IInstFields {
@@ -428,6 +470,19 @@ mod tests_32 {
             );
             assert_eq!(i32::from(state.regfile_read(RD)), result);
         }
+    }
+
+    #[test]
+    fn test_slti_sltiu() {
+        use RiscVRegister::*;
+        let mut state = get_init_state();
+        let rs1_val = DataLword::from(-1i32);
+        state.regfile_set(S0, rs1_val);
+        state.apply_inst_test(&Slti::new(A0, S0, DataLword::zero()));
+        assert_eq!(state.regfile_read(A0), DataLword::from(1i32));
+        // Unsigned interpretation makes -1i32 the largest value
+        state.apply_inst_test(&Sltiu::new(A0, S0, DataLword::zero()));
+        assert_eq!(state.regfile_read(A0), DataLword::zero());
     }
 
     #[test]

@@ -6,25 +6,26 @@ use num_traits::{
     ops::wrapping as wr,
     sign,
 };
+use std::cmp;
 use std::fmt;
 use std::marker::PhantomData;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub struct W8b {
     value: u8,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub struct W16b {
     value: u16,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub struct W32b {
     value: u32,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub struct W64b {
     value: u64,
 }
@@ -56,7 +57,7 @@ impl AtLeast32b for W64b {
     }
 }
 
-pub trait DataWidth: fmt::Debug + Clone + Copy + PartialEq + Sized + 'static {
+pub trait DataWidth: fmt::Debug + Clone + Copy + PartialEq + PartialOrd + Sized + 'static {
     type U: PrimInt
         + sign::Unsigned
         + fmt::UpperHex
@@ -515,6 +516,12 @@ impl<S: DataWidth> UnsignedValue<S> {
     }
 }
 
+impl<S: DataWidth> PartialOrd for UnsignedValue<S> {
+    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
+        self.value.as_u().partial_cmp(&other.value.as_u())
+    }
+}
+
 impl<S: DataWidth> From<usize> for UnsignedValue<S> {
     fn from(value: usize) -> Self {
         DataValue::new(S::from_u64(value as u64))
@@ -532,6 +539,12 @@ pub type SignedValue<S> = DataValue<S, Signed>;
 impl<S: DataWidth> SignedValue<S> {
     pub fn raw(self) -> S::S {
         self.value().as_s()
+    }
+}
+
+impl<S: DataWidth> PartialOrd for SignedValue<S> {
+    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
+        self.value.as_s().partial_cmp(&other.value.as_s())
     }
 }
 

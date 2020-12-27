@@ -114,6 +114,46 @@ impl RType<W64b> for Sllw {
     }
 }
 
+pub struct Slt;
+impl<S: AtLeast32b> RType<S> for Slt {
+    fn inst_fields() -> RInstFields {
+        RInstFields {
+            funct7: f7(0b0),
+            funct3: f3(0b010),
+            opcode: R_OPCODE,
+        }
+    }
+
+    fn eval(rs1_val: RegValue<S>, rs2_val: RegValue<S>) -> RegValue<S> {
+        let v1: SignedValue<S> = rs1_val.into();
+        if v1 < rs2_val.into() {
+            RegValue::<S>::new(S::from_u64(1))
+        } else {
+            RegValue::<S>::zero()
+        }
+    }
+}
+
+pub struct Sltu;
+impl<S: AtLeast32b> RType<S> for Sltu {
+    fn inst_fields() -> RInstFields {
+        RInstFields {
+            funct7: f7(0b0),
+            funct3: f3(0b011),
+            opcode: R_OPCODE,
+        }
+    }
+
+    fn eval(rs1_val: RegValue<S>, rs2_val: RegValue<S>) -> RegValue<S> {
+        let v1: UnsignedValue<S> = rs1_val.into();
+        if v1 < rs2_val.into() {
+            RegValue::<S>::new(S::from_u64(1))
+        } else {
+            RegValue::<S>::zero()
+        }
+    }
+}
+
 pub struct Sra;
 impl<S: AtLeast32b> RType<S> for Sra {
     fn inst_fields() -> RInstFields {
@@ -237,6 +277,33 @@ mod tests_32 {
     struct RTestData {
         rs2: RiscVRegister,
         result: i32,
+    }
+
+    #[test]
+    fn test_slt_sltu() {
+        use RiscVRegister::*;
+        let mut state = get_init_state();
+        let rs1_val = DataLword::from(-1i32);
+        let rs2_val = DataLword::zero();
+        state.regfile_set(S0, rs1_val);
+        state.regfile_set(S1, rs2_val);
+        state.apply_inst_test(&Slt::new(A0, S0, S1));
+        assert_eq!(state.regfile_read(A0), DataLword::from(1i32));
+        // Unsigned interpretation makes -1i32 the largest value
+        state.apply_inst_test(&Sltu::new(A0, S0, S1));
+        assert_eq!(state.regfile_read(A0), DataLword::zero());
+    }
+
+    #[test]
+    fn test_shifts() {
+        use RiscVRegister::*;
+        let mut state = get_init_state();
+        state.regfile_set(S1, DataLword::from(0xDEAD_BEEF_u32));
+        state.regfile_set(S2, DataLword::from(4));
+        state.apply_inst_test(&Sra::new(A0, S1, S2));
+        assert_eq!(state.regfile_read(A0), DataLword::from(0xFDEA_DBEE_u32));
+        state.apply_inst_test(&Srl::new(A0, S1, S2));
+        assert_eq!(state.regfile_read(A0), DataLword::from(0x0DEA_DBEE_u32));
     }
 
     /// Tests an R type instruction. Assumes that the registers being read
