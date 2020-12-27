@@ -247,7 +247,12 @@ pub(crate) trait ITypeLoad<S: AtLeast32b>: IType<S> {
 /// Shift instructions have truncated immediates
 pub trait ITypeShift<S: AtLeast32b> {
     fn new(rd: RiscVRegister, rs1: RiscVRegister, imm: RegValue<S>) -> RiscVInst<S> {
-        let imm_vec = <Self as ITypeShift<S>>::f7().concat(imm.to_bit_str(5));
+        // For 32-bit instructions, imm is 5 bits, but for 64 it's 6
+        // In the ____w instructions, the imm is always 5 bits
+        let imm_vec = <Self as ITypeShift<S>>::f7()
+            .slice(6, 1)
+            .concat(imm.to_bit_str(6));
+        debug_assert!(imm_vec.len == 12);
         RiscVInst {
             eval: Box::new(move |state| {
                 let new_rd_val =

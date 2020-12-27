@@ -256,6 +256,26 @@ impl<S: AtLeast32b> ITypeShift<S> for Slli {
     }
 }
 
+pub struct Slliw;
+impl ITypeShift<W64b> for Slliw {
+    fn inst_fields() -> IInstFields {
+        IInstFields {
+            funct3: f3(0b001),
+            opcode: I_W_OPCODE_ARITH,
+        }
+    }
+
+    fn f7() -> BitStr32 {
+        BitStr32::new(0, 7)
+    }
+
+    fn eval(rs1_val: RegValue<W64b>, imm: BitStr32) -> RegValue<W64b> {
+        let v1 = rs1_val.lower_lword().as_unsigned();
+        let imm_val: UnsignedValue<W32b> = imm.into();
+        DataDword::sign_ext_from_lword((v1 << imm_val).as_reg_data())
+    }
+}
+
 pub struct Srai;
 impl<S: AtLeast32b> ITypeShift<S> for Srai {
     fn inst_fields() -> IInstFields {
@@ -271,8 +291,30 @@ impl<S: AtLeast32b> ITypeShift<S> for Srai {
 
     fn eval(rs1_val: RegValue<S>, imm: BitStr32) -> RegValue<S> {
         let v1: SignedValue<S> = rs1_val.into();
-        let imm_val: SignedValue<S> = imm.into();
-        (v1 >> imm_val).into()
+        // Cast to unsigned first to avoid accidentally sign extending
+        let imm_val: UnsignedValue<S> = imm.into();
+        (v1 >> imm_val.as_signed()).into()
+    }
+}
+
+pub struct Sraiw;
+impl ITypeShift<W64b> for Sraiw {
+    fn inst_fields() -> IInstFields {
+        IInstFields {
+            funct3: f3(0b101),
+            opcode: I_W_OPCODE_ARITH,
+        }
+    }
+
+    fn f7() -> BitStr32 {
+        BitStr32::new(0b010_0000, 7)
+    }
+
+    fn eval(rs1_val: RegValue<W64b>, imm: BitStr32) -> RegValue<W64b> {
+        let v1 = rs1_val.lower_lword().as_signed();
+        let imm_val: UnsignedValue<W32b> = imm.into();
+        // Cast to unsigned first to avoid accidentally sign extending
+        DataDword::sign_ext_from_lword((v1 >> imm_val.as_signed()).as_reg_data())
     }
 }
 
@@ -293,6 +335,26 @@ impl<S: AtLeast32b> ITypeShift<S> for Srli {
         let v1: UnsignedValue<S> = rs1_val.into();
         let imm_val: UnsignedValue<S> = imm.into();
         (v1 >> imm_val).into()
+    }
+}
+
+pub struct Srliw;
+impl ITypeShift<W64b> for Srliw {
+    fn inst_fields() -> IInstFields {
+        IInstFields {
+            funct3: f3(0b101),
+            opcode: I_W_OPCODE_ARITH,
+        }
+    }
+
+    fn f7() -> BitStr32 {
+        BitStr32::new(0, 7)
+    }
+
+    fn eval(rs1_val: RegValue<W64b>, imm: BitStr32) -> RegValue<W64b> {
+        let v1 = rs1_val.lower_lword().as_unsigned();
+        let imm_val: UnsignedValue<W32b> = imm.into();
+        DataDword::sign_ext_from_lword((v1 >> imm_val).as_reg_data())
     }
 }
 
@@ -589,5 +651,38 @@ mod tests_64 {
         state.regfile_set(T1, addr.into());
         state.apply_inst_test(&Lwu::new(T2, T1, DataDword::zero()));
         assert_eq!(state.regfile_read(T2), DataDword::zero_pad_from_lword(val2));
+    }
+
+    #[test]
+    fn test_w_shifts() {
+        let mut state = get_init_state();
+        // this value will be truncated to 32 bits, then sign extended
+        let val: DataDword = 0xDEAD_BEEFu64.into();
+        state.regfile_set(S0, val);
+        state.apply_inst_test(&Slliw::new(T2, S0, DataDword::from(4u64)));
+        assert_eq!(
+            state.regfile_read(T2),
+            DataDword::from(0xFFFF_FFFF_EADB_EEF0u64)
+        );
+        state.apply_inst_test(&Sraiw::new(T3, S0, DataDword::from(4u64)));
+        assert_eq!(
+            state.regfile_read(T3),
+            DataDword::from(0xFFFF_FFFF_FDEA_DBEEu64)
+        );
+        state.apply_inst_test(&Srliw::new(T4, S0, DataDword::from(4u64)));
+        assert_eq!(state.regfile_read(T4), DataDword::from(0x0DEA_DBEEu64));
+    }
+
+    #[test]
+    fn test_6b_shift() {
+        // Unlike RV32, RV64 supports shifts of up to 6 bits
+        let mut state = get_init_state();
+        let val: DataDword = 0x0123_4567_89AB_CDEFu64.into();
+        state.regfile_set(S0, val);
+        state.apply_inst_test(&Slli::new(S11, S0, DataDword::from(63u64)));
+        assert_eq!(
+            state.regfile_read(S11),
+            DataDword::from(0x8000_0000_0000_0000u64)
+        );
     }
 }
