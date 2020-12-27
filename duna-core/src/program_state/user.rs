@@ -4,10 +4,12 @@
 //! resides in physical memory and must be accessed through the page table. We're see where that
 //! ends up I guess.
 
-use super::datatypes::*;
-use super::memory::*;
-use super::program::{DiffStack, ProgramState, RegDataChange, StateDiff};
-use super::registers::*;
+use super::{
+    datatypes::*,
+    memory::*,
+    program::{DiffStack, ProgramState, RegDataChange, StateDiff},
+    registers::*,
+};
 use crate::arch::*;
 
 /// Contains program state that is visible to the user.

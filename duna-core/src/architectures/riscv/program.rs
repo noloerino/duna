@@ -1,9 +1,7 @@
-use super::arch::*;
-use super::registers::RiscVRegister;
+use super::{arch::*, registers::RiscVRegister};
 use crate::program_state::*;
 use num_traits::cast::AsPrimitive;
-use std::collections::HashMap;
-use std::marker::PhantomData;
+use std::{collections::HashMap, marker::PhantomData};
 
 pub struct RiscVProgramBehavior<S: DataWidth> {
     _phantom: PhantomData<S>,

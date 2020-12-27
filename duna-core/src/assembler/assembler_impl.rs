@@ -1,13 +1,15 @@
-use super::datatypes::*;
-use super::error::{ErrorReporter, ParseError};
-use super::parser::{Label, LabelDef, LabelRef, ParseResult, Parser};
-use super::partial_inst::{PartialInst, PartialInstType};
-use crate::arch::*;
-use crate::config::*;
-use crate::program_state::*;
+use super::{
+    datatypes::*,
+    error::{ErrorReporter, ParseError},
+    parser::{Label, LabelDef, LabelRef, ParseResult, Parser},
+    partial_inst::{PartialInst, PartialInstType},
+};
+use crate::{arch::*, config::*, program_state::*};
 use num_traits::cast::AsPrimitive;
-use std::collections::{HashMap, HashSet};
-use std::fmt;
+use std::{
+    collections::{HashMap, HashSet},
+    fmt,
+};
 
 pub struct Assembler;
 

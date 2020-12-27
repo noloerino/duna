@@ -1,5 +1,7 @@
-use crate::arch::*;
-use crate::program_state::{DataWidth, InstResult, ProgramState};
+use crate::{
+    arch::*,
+    program_state::{DataWidth, InstResult, ProgramState},
+};
 use std::fmt::Debug;
 
 pub trait ConcreteInst<F, S>: Debug

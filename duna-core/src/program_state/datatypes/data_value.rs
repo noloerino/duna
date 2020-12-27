@@ -6,9 +6,7 @@ use num_traits::{
     ops::wrapping as wr,
     sign,
 };
-use std::cmp;
-use std::fmt;
-use std::marker::PhantomData;
+use std::{cmp, fmt, marker::PhantomData};
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub struct W8b {

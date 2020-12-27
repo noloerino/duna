@@ -1,6 +1,5 @@
 use super::parser::{LabelDef, LabelRef};
-use crate::arch::*;
-use crate::program_state::*;
+use crate::{arch::*, program_state::*};
 
 pub(crate) enum NeededRegs<F: ArchFamily<S>, S: DataWidth> {
     Two {

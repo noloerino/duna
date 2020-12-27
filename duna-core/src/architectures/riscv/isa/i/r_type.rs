@@ -1,6 +1,10 @@
-use super::super::instruction::*;
-use super::{f3, f7};
-use crate::program_state::*;
+use crate::{
+    architectures::riscv::{
+        instruction::*,
+        isa::i::{f3, f7},
+    },
+    program_state::*,
+};
 use num_traits::ops::wrapping::{WrappingAdd, WrappingSub};
 
 const R_OPCODE: BitStr32 = BitStr32::new(0b011_0011, 7);
@@ -270,8 +274,7 @@ impl<S: AtLeast32b> RType<S> for Xor {
 
 #[cfg(test)]
 mod tests_32 {
-    use super::super::tests_32::*;
-    use super::*;
+    use super::{super::tests_32::*, *};
     use crate::architectures::riscv::*;
 
     struct RTestData {
@@ -408,8 +411,7 @@ mod tests_32 {
 
 #[cfg(test)]
 mod tests_64 {
-    use super::super::tests_64::get_init_state;
-    use super::*;
+    use super::{super::tests_64::get_init_state, *};
     use crate::architectures::riscv::*;
     use RiscVRegister::*;
 

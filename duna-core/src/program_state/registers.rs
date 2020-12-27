@@ -1,7 +1,5 @@
 use crate::program_state::*;
-use std::fmt;
-use std::fmt::Display;
-use std::marker::PhantomData;
+use std::{fmt, marker::PhantomData};
 
 /// Marker trait to denote an integer register.
 pub trait IRegister: Copy + Clone + PartialEq + From<u8> + fmt::Debug + fmt::Display {
@@ -37,7 +35,7 @@ impl<R: IRegister, S: DataWidth> RegFile<R, S> {
 }
 
 /// Dumps the contents of the register file.
-impl<R: IRegister, S: DataWidth> Display for RegFile<R, S> {
+impl<R: IRegister, S: DataWidth> fmt::Display for RegFile<R, S> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for i in 0..REGFILE_SIZE {
             let reg: R = (i as u8).into();

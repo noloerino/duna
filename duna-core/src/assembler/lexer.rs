@@ -1,8 +1,12 @@
-use super::datatypes::*;
-use super::error::{ErrMetadata, ParseError, ErrorReporter};
-use std::fmt;
-use std::iter::{Enumerate, Peekable};
-use std::str::Chars;
+use super::{
+    datatypes::*,
+    error::{ErrMetadata, ErrorReporter, ParseError},
+};
+use std::{
+    fmt,
+    iter::{Enumerate, Peekable},
+    str::Chars,
+};
 
 pub struct LexResult<'a> {
     pub file_id: FileId,

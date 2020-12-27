@@ -1,10 +1,11 @@
 //! Contains definitions for RISCV pseudo-instructions.
 //! These definitions are reexported by the isa module.
 
-use super::super::instruction::*;
-use super::super::registers::RiscVRegister;
 use super::*;
-use crate::program_state::*;
+use crate::{
+    architectures::riscv::{instruction::*, registers::RiscVRegister},
+    program_state::*,
+};
 use RiscVRegister::*;
 
 pub struct La;
@@ -164,8 +165,10 @@ impl SextW {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::architectures::riscv::RiscV;
-    use crate::program_state::{DataLword, ProgramState, W32b};
+    use crate::{
+        architectures::riscv::RiscV,
+        program_state::{DataLword, ProgramState, W32b},
+    };
 
     type Expanded = Vec<RiscVInst<W32b>>;
 

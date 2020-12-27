@@ -1,15 +1,12 @@
-use super::datatypes::*;
-use super::memory::*;
-pub use super::phys::*;
-pub use super::priv_s::*;
-use super::registers::RegFile;
-pub use super::user::*;
-use crate::arch::*;
-use crate::assembler::{ErrorReport, Linker, SectionStore};
-use crate::config::SegmentStarts;
-use crate::instruction::ConcreteInst;
-use num_traits::cast::AsPrimitive;
-use num_traits::ops::wrapping::WrappingSub;
+use super::{datatypes::*, memory::*, registers::RegFile};
+pub use super::{phys::*, priv_s::*, user::*};
+use crate::{
+    arch::*,
+    assembler::{ErrorReport, Linker, SectionStore},
+    config::SegmentStarts,
+    instruction::ConcreteInst,
+};
+use num_traits::{cast::AsPrimitive, ops::wrapping::WrappingSub};
 use std::str::FromStr;
 
 /// Defines architecture-specific behavior that defines the execution of a program.

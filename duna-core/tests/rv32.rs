@@ -1,6 +1,8 @@
-use duna_core::architectures::riscv::{RiscVRegister, RV32};
-use duna_core::assembler::{ErrorReport, Linker};
-use duna_core::program_state::Program;
+use duna_core::{
+    architectures::riscv::{RiscVRegister, RV32},
+    assembler::{ErrorReport, Linker},
+    program_state::Program,
+};
 use std::path::Path;
 
 fn get_full_test_path(relative_path: &str) -> String {

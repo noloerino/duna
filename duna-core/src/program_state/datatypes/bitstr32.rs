@@ -1,7 +1,9 @@
 use super::*;
-use std::cmp::{max, min};
-use std::num::Wrapping;
-use std::ops::Add;
+use std::{
+    cmp::{max, min},
+    num::Wrapping,
+    ops::Add,
+};
 
 /// A bit vector that can fit inside 32 bits. Used to represent instruction fields.
 #[derive(Debug, Copy, Clone)]

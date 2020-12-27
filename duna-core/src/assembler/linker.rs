@@ -1,12 +1,11 @@
-use super::assembler_impl::{Assembler, LabelTarget, SectionStore, UnlinkedProgram};
-use super::datatypes::*;
-use super::error::{ErrorReport, ErrorReporter, ParseError};
-use super::parser::{Label, LabelDef};
-use crate::arch::*;
-use crate::config::*;
-use crate::program_state::Program;
-use std::collections::HashMap;
-use std::fs;
+use super::{
+    assembler_impl::{Assembler, LabelTarget, SectionStore, UnlinkedProgram},
+    datatypes::*,
+    error::{ErrorReport, ErrorReporter, ParseError},
+    parser::{Label, LabelDef},
+};
+use crate::{arch::*, config::*, program_state::Program};
+use std::{collections::HashMap, fs};
 
 /// Links programs together.
 ///

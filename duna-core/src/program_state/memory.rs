@@ -1,12 +1,6 @@
-use super::bitmap::Bitmap;
-use super::datatypes::*;
-use super::phys::*;
-use super::priv_s::PrivDiff;
-use super::program::StateDiff;
+use super::{bitmap::Bitmap, datatypes::*, phys::*, priv_s::PrivDiff, program::StateDiff};
 use crate::arch::*;
-use std::collections::HashMap;
-use std::fmt;
-use std::marker::PhantomData;
+use std::{collections::HashMap, fmt, marker::PhantomData};
 
 // Because WASM is a 32-bit target, usize doesn't cut it
 type VirtPn = u64;

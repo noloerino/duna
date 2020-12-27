@@ -1,7 +1,7 @@
-use super::super::instruction::*;
-use super::super::*;
-use super::f3;
-use crate::program_state::*;
+use crate::{
+    architectures::riscv::{instruction::*, isa::i::f3, *},
+    program_state::*,
+};
 use duna_macro::*;
 use num_traits::ops::wrapping::WrappingAdd;
 
@@ -431,8 +431,7 @@ impl<S: AtLeast32b> ITypeArith<S> for Xori {
 
 #[cfg(test)]
 mod tests_32 {
-    use super::super::tests_32::*;
-    use super::*;
+    use super::{super::tests_32::*, *};
     use RiscVRegister::*;
 
     struct IArithTestData {
@@ -687,8 +686,7 @@ mod tests_32 {
 
 #[cfg(test)]
 mod tests_64 {
-    use super::super::tests_64::get_init_state;
-    use super::*;
+    use super::{super::tests_64::get_init_state, *};
     use RiscVRegister::*;
 
     #[test]

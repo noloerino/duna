@@ -1,9 +1,5 @@
-use super::instruction::*;
-use super::parser::RiscVParser;
-use super::program::*;
-use super::registers::RiscVRegister;
-use crate::arch::*;
-use crate::program_state::*;
+use super::{instruction::*, parser::RiscVParser, program::*, registers::RiscVRegister};
+use crate::{arch::*, program_state::*};
 use std::marker::PhantomData;
 
 pub struct RiscV<S: DataWidth> {

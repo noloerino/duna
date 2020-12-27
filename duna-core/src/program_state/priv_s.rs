@@ -1,10 +1,12 @@
 //! Represents the privileged state of a program: anything manipulated by the OS/kernel pertaining
 //! to the running process, such as file descriptors and the page table.
 
-use super::datatypes::*;
-use super::memory::*;
-use super::phys::PhysMem;
-use super::program::{DiffStack, ProgramState, StateDiff};
+use super::{
+    datatypes::*,
+    memory::*,
+    phys::PhysMem,
+    program::{DiffStack, ProgramState, StateDiff},
+};
 use crate::arch::*;
 use num_traits::cast::AsPrimitive;
 

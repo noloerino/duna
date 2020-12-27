@@ -1,13 +1,12 @@
-use super::assembler_impl::{ProgramSection, SectionStore};
-use super::datatypes::*;
-use super::lexer::*;
-use super::error::{ParseError, ErrorReporter};
-use super::partial_inst::PartialInst;
-use crate::arch::*;
-use crate::program_state::*;
-use std::collections::HashSet;
-use std::iter::Peekable;
-use std::vec::IntoIter;
+use super::{
+    assembler_impl::{ProgramSection, SectionStore},
+    datatypes::*,
+    error::{ErrorReporter, ParseError},
+    lexer::*,
+    partial_inst::PartialInst,
+};
+use crate::{arch::*, program_state::*};
+use std::{collections::HashSet, iter::Peekable, vec::IntoIter};
 
 pub type Label = String;
 

@@ -1,16 +1,9 @@
-use super::arch::*;
-use super::instruction::*;
-use super::isa;
-use super::isa::*;
-use super::registers::RiscVRegister;
-use crate::assembler::lexer::*;
-use crate::assembler::parser::*;
-use crate::assembler::*;
-use crate::program_state::*;
-use std::collections::HashMap;
-use std::iter::Peekable;
-use std::marker::PhantomData;
-use std::vec::IntoIter;
+use super::{arch::*, instruction::*, isa, isa::*, registers::RiscVRegister};
+use crate::{
+    assembler::{lexer::*, parser::*, *},
+    program_state::*,
+};
+use std::{collections::HashMap, iter::Peekable, marker::PhantomData, vec::IntoIter};
 
 #[derive(Copy, Clone)]
 /// Describes the arguments needed for a type of function.
@@ -1184,11 +1177,11 @@ impl<'a, S: AtLeast32b> LineParser<'a, S> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::isa::*;
-    use super::super::registers::RiscVRegister::*;
-    use super::*;
-    use crate::instruction::ConcreteInst;
-    use crate::program_state::DataLword;
+    use super::{
+        super::{isa::*, registers::RiscVRegister::*},
+        *,
+    };
+    use crate::{instruction::ConcreteInst, program_state::DataLword};
 
     /// Lexes a program. Asserts that the lex has no errors.
     fn lex(prog: &str) -> LexResult {

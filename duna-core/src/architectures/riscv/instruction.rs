@@ -1,8 +1,6 @@
 #![allow(clippy::new_ret_no_self)]
-use super::arch::*;
-use super::registers::RiscVRegister;
-use crate::instruction::ConcreteInst;
-use crate::program_state::*;
+use super::{arch::*, registers::RiscVRegister};
+use crate::{instruction::ConcreteInst, program_state::*};
 use std::fmt;
 
 pub struct RInstFields {

@@ -1,6 +1,8 @@
-use super::datatypes::*;
-use super::lexer::{ImmRenderType, TokenType};
-use super::parser::{LabelDef, LabelRef};
+use super::{
+    datatypes::*,
+    lexer::{ImmRenderType, TokenType},
+    parser::{LabelDef, LabelRef},
+};
 use std::fmt;
 
 pub struct ErrorReport {
