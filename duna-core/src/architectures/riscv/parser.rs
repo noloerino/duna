@@ -178,6 +178,7 @@ lazy_static! {
             ("j", LikeJ(J::expand)),
             ("jr", OneReg(Jr::expand)),
             ("ret", NoArgs(Ret::expand)),
+            ("sext.w", RegReg(SextW::expand)),
         ]
         .iter()
         .cloned()

@@ -36,3 +36,26 @@ fn test_jumps() {
         0x0BCD_0123u64
     );
 }
+
+/// Tests the sext.w pseudo-instruction.
+#[test]
+fn test_sext_w() {
+    let code = "
+        li t1, 0xDEAD_BEEF
+        li t2, 0x0123_4567
+        sext.w a0, t1
+        sext.w a1, t2
+        ";
+    let mut program: Program<RV64> = Linker::with_main_str(code)
+        .link::<RV64>(Default::default())
+        .unwrap();
+    program.run();
+    assert_eq!(
+        u64::from(program.state.regfile_read(RiscVRegister::A0)),
+        0xFFFF_FFFF_DEAD_BEEF
+    );
+    assert_eq!(
+        u64::from(program.state.regfile_read(RiscVRegister::A1)),
+        0x0123_4567
+    );
+}

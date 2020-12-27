@@ -154,6 +154,13 @@ impl Ret {
     }
 }
 
+pub struct SextW;
+impl SextW {
+    pub fn expand(rd: RiscVRegister, rs: RiscVRegister) -> RiscVInst<W64b> {
+        Addiw::new(rd, rs, DataDword::zero())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
