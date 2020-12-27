@@ -178,6 +178,12 @@ impl<S: AtLeast32b> fmt::UpperHex for RiscVInst<S> {
     }
 }
 
+impl<S: AtLeast32b> fmt::LowerHex for RiscVInst<S> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:#010x}", self.to_machine_code())
+    }
+}
+
 impl<S: AtLeast32b> fmt::Display for RiscVInst<S> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use InstFields::*;
@@ -426,4 +432,32 @@ pub trait JType<S: AtLeast32b> {
         rd: RiscVRegister,
         imm: BitStr32,
     ) -> DiffStack<RiscV<S>, S>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        super::isa::{Addi, Nop},
+        *,
+    };
+    use crate::program_state::W32b;
+    use RiscVRegister::*;
+
+    #[test]
+    fn test_inst_display() {
+        assert_eq!(
+            format!("{}", &Addi::new(SP, SP, DataLword::from(-4))),
+            "addi sp, sp, -4"
+        );
+        assert_eq!(format!("{:X}", &Nop::expand::<W32b>()), "0x00000013");
+        assert_eq!(
+            format!("{:X}", &Addi::new(A0, T5, DataLword::from(-5))),
+            "0xFFBF0513"
+        );
+        // Lowercase hex
+        assert_eq!(
+            format!("{:x}", &Addi::new(A0, T5, DataLword::from(-5))),
+            "0xffbf0513"
+        );
+    }
 }
