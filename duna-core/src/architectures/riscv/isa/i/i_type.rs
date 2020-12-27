@@ -63,6 +63,10 @@ impl<S: AtLeast32b> ITypeArith<S> for Andi {
 
 pub struct Jalr;
 impl<S: AtLeast32b> IType<S> for Jalr {
+    fn name() -> &'static str {
+        "jalr"
+    }
+
     fn inst_fields() -> IInstFields {
         IInstFields {
             opcode: BitStr32::new(0b110_0111, 7),
@@ -247,6 +251,10 @@ fn shamt<S: AtLeast32b>(n: RegValue<S>) -> RegValue<S> {
 
 pub struct Slli;
 impl<S: AtLeast32b> ITypeShift<S> for Slli {
+    fn name() -> &'static str {
+        "slli"
+    }
+
     fn inst_fields() -> IInstFields {
         IInstFields {
             funct3: f3(0b001),
@@ -267,6 +275,10 @@ impl<S: AtLeast32b> ITypeShift<S> for Slli {
 
 pub struct Slliw;
 impl ITypeShift<W64b> for Slliw {
+    fn name() -> &'static str {
+        "slliw"
+    }
+
     fn inst_fields() -> IInstFields {
         IInstFields {
             funct3: f3(0b001),
@@ -330,6 +342,10 @@ impl<S: AtLeast32b> ITypeArith<S> for Sltiu {
 
 pub struct Srai;
 impl<S: AtLeast32b> ITypeShift<S> for Srai {
+    fn name() -> &'static str {
+        "srai"
+    }
+
     fn inst_fields() -> IInstFields {
         IInstFields {
             funct3: f3(0b101),
@@ -350,6 +366,10 @@ impl<S: AtLeast32b> ITypeShift<S> for Srai {
 
 pub struct Sraiw;
 impl ITypeShift<W64b> for Sraiw {
+    fn name() -> &'static str {
+        "sraiw"
+    }
+
     fn inst_fields() -> IInstFields {
         IInstFields {
             funct3: f3(0b101),
@@ -372,6 +392,10 @@ impl ITypeShift<W64b> for Sraiw {
 
 pub struct Srli;
 impl<S: AtLeast32b> ITypeShift<S> for Srli {
+    fn name() -> &'static str {
+        "srli"
+    }
+
     fn inst_fields() -> IInstFields {
         IInstFields {
             funct3: f3(0b101),
@@ -392,6 +416,10 @@ impl<S: AtLeast32b> ITypeShift<S> for Srli {
 
 pub struct Srliw;
 impl ITypeShift<W64b> for Srliw {
+    fn name() -> &'static str {
+        "srliw"
+    }
+
     fn inst_fields() -> IInstFields {
         IInstFields {
             funct3: f3(0b101),

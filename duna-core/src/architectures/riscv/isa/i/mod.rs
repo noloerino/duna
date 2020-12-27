@@ -27,6 +27,10 @@ const S_OPCODE: BitStr32 = BitStr32::new(0b010_0011, 7);
 
 pub struct Auipc;
 impl<S: AtLeast32b> UType<S> for Auipc {
+    fn name() -> &'static str {
+        "auipc"
+    }
+
     fn inst_fields() -> UInstFields {
         UInstFields {
             opcode: BitStr32::new(0b001_0111, 7),
@@ -49,6 +53,10 @@ impl<S: AtLeast32b> UType<S> for Auipc {
 
 pub struct Beq;
 impl<S: AtLeast32b> BType<S> for Beq {
+    fn name() -> &'static str {
+        "beq"
+    }
+
     fn inst_fields() -> BInstFields {
         BInstFields {
             opcode: B_OPCODE,
@@ -63,6 +71,10 @@ impl<S: AtLeast32b> BType<S> for Beq {
 
 pub struct Bge;
 impl<S: AtLeast32b> BType<S> for Bge {
+    fn name() -> &'static str {
+        "bge"
+    }
+
     fn inst_fields() -> BInstFields {
         BInstFields {
             opcode: B_OPCODE,
@@ -77,6 +89,10 @@ impl<S: AtLeast32b> BType<S> for Bge {
 
 pub struct Bgeu;
 impl<S: AtLeast32b> BType<S> for Bgeu {
+    fn name() -> &'static str {
+        "bgeu"
+    }
+
     fn inst_fields() -> BInstFields {
         BInstFields {
             opcode: B_OPCODE,
@@ -91,6 +107,10 @@ impl<S: AtLeast32b> BType<S> for Bgeu {
 
 pub struct Blt;
 impl<S: AtLeast32b> BType<S> for Blt {
+    fn name() -> &'static str {
+        "blt"
+    }
+
     fn inst_fields() -> BInstFields {
         BInstFields {
             opcode: B_OPCODE,
@@ -105,6 +125,10 @@ impl<S: AtLeast32b> BType<S> for Blt {
 
 pub struct Bltu;
 impl<S: AtLeast32b> BType<S> for Bltu {
+    fn name() -> &'static str {
+        "bltu"
+    }
+
     fn inst_fields() -> BInstFields {
         BInstFields {
             opcode: B_OPCODE,
@@ -119,6 +143,10 @@ impl<S: AtLeast32b> BType<S> for Bltu {
 
 pub struct Bne;
 impl<S: AtLeast32b> BType<S> for Bne {
+    fn name() -> &'static str {
+        "bne"
+    }
+
     fn inst_fields() -> BInstFields {
         BInstFields {
             opcode: B_OPCODE,
@@ -133,6 +161,10 @@ impl<S: AtLeast32b> BType<S> for Bne {
 
 pub struct Ecall;
 impl<S: AtLeast32b> EnvironInst<S> for Ecall {
+    fn name() -> &'static str {
+        "ecall"
+    }
+
     fn funct12() -> BitStr32 {
         BitStr32::new(0, 12)
     }
@@ -153,6 +185,10 @@ impl<S: AtLeast32b> EnvironInst<S> for Ecall {
 
 pub struct Jal;
 impl<S: AtLeast32b> JType<S> for Jal {
+    fn name() -> &'static str {
+        "jal"
+    }
+
     fn inst_fields() -> JInstFields {
         JInstFields { opcode: J_OPCODE }
     }
@@ -175,6 +211,10 @@ impl<S: AtLeast32b> JType<S> for Jal {
 
 pub struct Lui;
 impl<S: AtLeast32b> UType<S> for Lui {
+    fn name() -> &'static str {
+        "lui"
+    }
+
     fn inst_fields() -> UInstFields {
         UInstFields {
             opcode: BitStr32::new(0b011_0111, 7),
@@ -193,6 +233,10 @@ impl<S: AtLeast32b> UType<S> for Lui {
 
 pub struct Sb;
 impl<S: AtLeast32b> SType<S> for Sb {
+    fn name() -> &'static str {
+        "sb"
+    }
+
     fn inst_fields() -> SInstFields {
         SInstFields {
             funct3: f3(0b000),
@@ -216,6 +260,10 @@ impl<S: AtLeast32b> SType<S> for Sb {
 
 pub struct Sd;
 impl SType<W64b> for Sd {
+    fn name() -> &'static str {
+        "sd"
+    }
+
     fn inst_fields() -> SInstFields {
         SInstFields {
             funct3: f3(0b011),
@@ -239,6 +287,10 @@ impl SType<W64b> for Sd {
 
 pub struct Sh;
 impl<S: AtLeast32b> SType<S> for Sh {
+    fn name() -> &'static str {
+        "sh"
+    }
+
     fn inst_fields() -> SInstFields {
         SInstFields {
             funct3: f3(0b001),
@@ -264,6 +316,10 @@ impl<S: AtLeast32b> SType<S> for Sh {
 
 pub struct Sw;
 impl<S: AtLeast32b> SType<S> for Sw {
+    fn name() -> &'static str {
+        "sw"
+    }
+
     fn inst_fields() -> SInstFields {
         SInstFields {
             funct3: f3(0b010),

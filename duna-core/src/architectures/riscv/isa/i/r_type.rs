@@ -12,6 +12,10 @@ const R_W_OPCODE: BitStr32 = BitStr32::new(0b011_1011, 7);
 
 pub struct Add;
 impl<S: AtLeast32b> RType<S> for Add {
+    fn name() -> &'static str {
+        "add"
+    }
+
     fn inst_fields() -> RInstFields {
         RInstFields {
             funct7: f7(0),
@@ -28,6 +32,10 @@ impl<S: AtLeast32b> RType<S> for Add {
 
 pub struct Addw;
 impl RType<W64b> for Addw {
+    fn name() -> &'static str {
+        "addw"
+    }
+
     fn inst_fields() -> RInstFields {
         RInstFields {
             funct7: f7(0),
@@ -46,6 +54,10 @@ impl RType<W64b> for Addw {
 
 pub struct And;
 impl<S: AtLeast32b> RType<S> for And {
+    fn name() -> &'static str {
+        "and"
+    }
+
     fn inst_fields() -> RInstFields {
         RInstFields {
             funct7: f7(0),
@@ -62,6 +74,10 @@ impl<S: AtLeast32b> RType<S> for And {
 
 pub struct Or;
 impl<S: AtLeast32b> RType<S> for Or {
+    fn name() -> &'static str {
+        "or"
+    }
+
     fn inst_fields() -> RInstFields {
         RInstFields {
             funct7: f7(0),
@@ -87,6 +103,10 @@ fn shamt<S: AtLeast32b>(n: RegValue<S>) -> RegValue<S> {
 
 pub struct Sll;
 impl<S: AtLeast32b> RType<S> for Sll {
+    fn name() -> &'static str {
+        "sll"
+    }
+
     fn inst_fields() -> RInstFields {
         RInstFields {
             funct7: f7(0),
@@ -103,6 +123,10 @@ impl<S: AtLeast32b> RType<S> for Sll {
 
 pub struct Sllw;
 impl RType<W64b> for Sllw {
+    fn name() -> &'static str {
+        "sllw"
+    }
+
     fn inst_fields() -> RInstFields {
         RInstFields {
             funct7: f7(0),
@@ -120,6 +144,10 @@ impl RType<W64b> for Sllw {
 
 pub struct Slt;
 impl<S: AtLeast32b> RType<S> for Slt {
+    fn name() -> &'static str {
+        "slt"
+    }
+
     fn inst_fields() -> RInstFields {
         RInstFields {
             funct7: f7(0b0),
@@ -140,6 +168,10 @@ impl<S: AtLeast32b> RType<S> for Slt {
 
 pub struct Sltu;
 impl<S: AtLeast32b> RType<S> for Sltu {
+    fn name() -> &'static str {
+        "sltu"
+    }
+
     fn inst_fields() -> RInstFields {
         RInstFields {
             funct7: f7(0b0),
@@ -160,6 +192,10 @@ impl<S: AtLeast32b> RType<S> for Sltu {
 
 pub struct Sra;
 impl<S: AtLeast32b> RType<S> for Sra {
+    fn name() -> &'static str {
+        "sra"
+    }
+
     fn inst_fields() -> RInstFields {
         RInstFields {
             funct7: f7(0b0100_0000),
@@ -176,6 +212,10 @@ impl<S: AtLeast32b> RType<S> for Sra {
 
 pub struct Sraw;
 impl RType<W64b> for Sraw {
+    fn name() -> &'static str {
+        "sraw"
+    }
+
     fn inst_fields() -> RInstFields {
         RInstFields {
             funct7: f7(0b0100_0000),
@@ -192,6 +232,10 @@ impl RType<W64b> for Sraw {
 
 pub struct Srl;
 impl<S: AtLeast32b> RType<S> for Srl {
+    fn name() -> &'static str {
+        "srl"
+    }
+
     fn inst_fields() -> RInstFields {
         RInstFields {
             funct7: f7(0),
@@ -208,6 +252,10 @@ impl<S: AtLeast32b> RType<S> for Srl {
 
 pub struct Srlw;
 impl RType<W64b> for Srlw {
+    fn name() -> &'static str {
+        "srlw"
+    }
+
     fn inst_fields() -> RInstFields {
         RInstFields {
             funct7: f7(0),
@@ -224,6 +272,10 @@ impl RType<W64b> for Srlw {
 
 pub struct Sub;
 impl<S: AtLeast32b> RType<S> for Sub {
+    fn name() -> &'static str {
+        "sub"
+    }
+
     fn inst_fields() -> RInstFields {
         RInstFields {
             funct7: f7(0b0100_0000),
@@ -240,6 +292,10 @@ impl<S: AtLeast32b> RType<S> for Sub {
 
 pub struct Subw;
 impl RType<W64b> for Subw {
+    fn name() -> &'static str {
+        "subw"
+    }
+
     fn inst_fields() -> RInstFields {
         RInstFields {
             funct7: f7(0b0100_0000),
@@ -258,6 +314,10 @@ impl RType<W64b> for Subw {
 
 pub struct Xor;
 impl<S: AtLeast32b> RType<S> for Xor {
+    fn name() -> &'static str {
+        "xor"
+    }
+
     fn inst_fields() -> RInstFields {
         RInstFields {
             funct7: f7(0),

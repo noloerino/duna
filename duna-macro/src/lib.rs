@@ -33,8 +33,18 @@ pub fn itype_load_64_derive(input: TokenStream) -> TokenStream {
 
 fn impl_itype_arith_derive(ast: &syn::DeriveInput) -> TokenStream {
     let name = &ast.ident;
+    let name_lower = {
+        let s: TokenStream = format!("{}{}{}", "\"", &ast.ident.to_string().to_lowercase(), "\"")
+            .parse()
+            .unwrap();
+        syn::parse_macro_input!(s as syn::LitStr)
+    };
     let gen = quote! {
         impl<S: AtLeast32b> IType<S> for #name {
+            fn name() -> &'static str {
+                #name_lower
+            }
+
             fn inst_fields() -> IInstFields {
                 <#name as ITypeArith<S>>::inst_fields()
             }
@@ -55,8 +65,18 @@ fn impl_itype_arith_derive(ast: &syn::DeriveInput) -> TokenStream {
 
 fn impl_itype_arith_64_derive(ast: &syn::DeriveInput) -> TokenStream {
     let name = &ast.ident;
+    let name_lower = {
+        let s: TokenStream = format!("{}{}{}", "\"", &ast.ident.to_string().to_lowercase(), "\"")
+            .parse()
+            .unwrap();
+        syn::parse_macro_input!(s as syn::LitStr)
+    };
     let gen = quote! {
         impl IType<W64b> for #name {
+            fn name() -> &'static str {
+                #name_lower
+            }
+
             fn inst_fields() -> IInstFields {
                 <#name as ITypeArith<W64b>>::inst_fields()
             }
@@ -77,8 +97,18 @@ fn impl_itype_arith_64_derive(ast: &syn::DeriveInput) -> TokenStream {
 
 fn impl_itype_load_derive(ast: &syn::DeriveInput) -> TokenStream {
     let name = &ast.ident;
+    let name_lower = {
+        let s: TokenStream = format!("{}{}{}", "\"", &ast.ident.to_string().to_lowercase(), "\"")
+            .parse()
+            .unwrap();
+        syn::parse_macro_input!(s as syn::LitStr)
+    };
     let gen = quote! {
         impl<S: AtLeast32b> IType<S> for #name {
+            fn name() -> &'static str {
+                #name_lower
+            }
+
             fn inst_fields() -> IInstFields {
                 <#name as ITypeLoad<S>>::inst_fields()
             }
@@ -109,8 +139,18 @@ fn impl_itype_load_derive(ast: &syn::DeriveInput) -> TokenStream {
 
 fn impl_itype_load_64_derive(ast: &syn::DeriveInput) -> TokenStream {
     let name = &ast.ident;
+    let name_lower = {
+        let s: TokenStream = format!("{}{}{}", "\"", &ast.ident.to_string().to_lowercase(), "\"")
+            .parse()
+            .unwrap();
+        syn::parse_macro_input!(s as syn::LitStr)
+    };
     let gen = quote! {
         impl IType<W64b> for #name {
+            fn name() -> &'static str {
+                #name_lower
+            }
+
             fn inst_fields() -> IInstFields {
                 <#name as ITypeLoad<W64b>>::inst_fields()
             }

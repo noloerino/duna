@@ -31,10 +31,21 @@ pub type InstApplyFn<S> = dyn Fn(&ProgramState<RiscV<S>, S>) -> InstResult<RiscV
 
 pub struct RiscVInst<S: AtLeast32b> {
     pub eval: Box<InstApplyFn<S>>,
-    data: RiscVInstData,
+    data: InstData,
 }
 
-enum RiscVInstData {
+struct InstData {
+    name: &'static str,
+    fields: InstFields,
+}
+
+impl InstData {
+    fn new(name: &'static str, fields: InstFields) -> Self {
+        Self { name, fields }
+    }
+}
+
+enum InstFields {
     R {
         fields: RInstFields,
         rd: RiscVRegister,
@@ -73,8 +84,8 @@ enum RiscVInstData {
 
 impl<S: AtLeast32b> ConcreteInst<RiscV<S>, S> for RiscVInst<S> {
     fn to_machine_code(&self) -> u32 {
-        match self.data {
-            RiscVInstData::R {
+        match self.data.fields {
+            InstFields::R {
                 fields:
                     RInstFields {
                         funct7,
@@ -85,13 +96,13 @@ impl<S: AtLeast32b> ConcreteInst<RiscV<S>, S> for RiscVInst<S> {
                 rs1,
                 rs2,
             } => funct7 + rs2.to_bit_str() + rs1.to_bit_str() + funct3 + rd.to_bit_str() + opcode,
-            RiscVInstData::I {
+            InstFields::I {
                 fields: IInstFields { funct3, opcode },
                 imm,
                 rd,
                 rs1,
             } => imm + rs1.to_bit_str() + funct3 + rd.to_bit_str() + opcode,
-            RiscVInstData::S {
+            InstFields::S {
                 fields: SInstFields { funct3, opcode },
                 imm,
                 rs1,
@@ -104,7 +115,7 @@ impl<S: AtLeast32b> ConcreteInst<RiscV<S>, S> for RiscVInst<S> {
                     + imm.slice(4, 0)
                     + opcode
             }
-            RiscVInstData::B {
+            InstFields::B {
                 fields: BInstFields { funct3, opcode },
                 imm,
                 rs1,
@@ -119,7 +130,7 @@ impl<S: AtLeast32b> ConcreteInst<RiscV<S>, S> for RiscVInst<S> {
                     + imm.index(11)
                     + opcode
             }
-            RiscVInstData::U {
+            InstFields::U {
                 fields: UInstFields { opcode },
                 imm,
                 rd,
@@ -128,7 +139,7 @@ impl<S: AtLeast32b> ConcreteInst<RiscV<S>, S> for RiscVInst<S> {
                 // don't slice because when we constructed the imm we already truncated it
                 imm + rd.to_bit_str() + opcode
             }
-            RiscVInstData::J {
+            InstFields::J {
                 fields: JInstFields { opcode },
                 imm,
                 rd,
@@ -157,26 +168,27 @@ impl<S: AtLeast32b> PartialEq<RiscVInst<S>> for RiscVInst<S> {
 
 impl<S: AtLeast32b> fmt::Debug for RiscVInst<S> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self)
+    }
+}
+
+impl<S: AtLeast32b> fmt::UpperHex for RiscVInst<S> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:#010X}", self.to_machine_code())
     }
 }
 
 impl<S: AtLeast32b> fmt::Display for RiscVInst<S> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        use RiscVInstData::*;
-        let args = match self.data {
+        use InstFields::*;
+        let args = match self.data.fields {
             R { rd, rs1, rs2, .. } => format!("{}, {}, {}", rd, rs1, rs2),
             I { rd, rs1, imm, .. } => format!("{}, {}, {}", rd, rs1, i32::from(imm)),
             S { rs1, rs2, imm, .. } => format!("{}, {}({})", rs2, i32::from(imm), rs1),
             B { rs1, rs2, imm, .. } => format!("{}, {}, {}", rs1, rs2, i32::from(imm)),
             U { rd, imm, .. } | J { rd, imm, .. } => format!("{}, {}", rd, i32::from(imm)),
         };
-        write!(
-            f,
-            "<no instruction name> {} | hex {}",
-            args,
-            self.to_machine_code()
-        )
+        write!(f, "{} {}", self.data.name, args)
     }
 }
 
@@ -189,14 +201,19 @@ pub trait RType<S: AtLeast32b> {
                     Self::eval(user_state.regfile.read(rs1), user_state.regfile.read(rs2));
                 Ok(UserDiff::reg_write_pc_p4(user_state, rd, new_rd_val))
             }),
-            data: RiscVInstData::R {
-                fields: Self::inst_fields(),
-                rd,
-                rs1,
-                rs2,
-            },
+            data: InstData::new(
+                Self::name(),
+                InstFields::R {
+                    fields: Self::inst_fields(),
+                    rd,
+                    rs1,
+                    rs2,
+                },
+            ),
         }
     }
+
+    fn name() -> &'static str;
 
     fn inst_fields() -> RInstFields;
 
@@ -210,14 +227,18 @@ pub trait IType<S: AtLeast32b> {
         let imm_vec = imm.to_bit_str(12);
         RiscVInst {
             eval: Box::new(move |state| <Self as IType<S>>::eval(&state, rd, rs1, imm_vec)),
-            data: RiscVInstData::I {
-                fields: Self::inst_fields(),
-                rd,
-                rs1,
-                imm: imm_vec,
-            },
+            data: InstData::new(
+                Self::name(),
+                InstFields::I {
+                    fields: Self::inst_fields(),
+                    rd,
+                    rs1,
+                    imm: imm_vec,
+                },
+            ),
         }
     }
+    fn name() -> &'static str;
     fn inst_fields() -> IInstFields;
     fn eval(
         state: &ProgramState<RiscV<S>, S>,
@@ -227,6 +248,7 @@ pub trait IType<S: AtLeast32b> {
     ) -> InstResult<RiscV<S>, S>;
 }
 
+// ITypeArith is going through a derive macro anyway, so we can fill name field there
 pub(crate) trait ITypeArith<S: AtLeast32b>: IType<S> {
     fn inst_fields() -> IInstFields;
     fn eval(rs1_val: RegValue<S>, imm: BitStr32) -> RegValue<S>;
@@ -234,6 +256,7 @@ pub(crate) trait ITypeArith<S: AtLeast32b>: IType<S> {
 
 pub(crate) type MemReadResult<S> = (RegValue<S>, DiffStack<RiscV<S>, S>);
 
+// ITypeLoad is going through a derive macro anyway, so we can fill name field there
 pub(crate) trait ITypeLoad<S: AtLeast32b>: IType<S> {
     fn inst_fields() -> IInstFields;
     fn eval(
@@ -257,14 +280,18 @@ pub trait ITypeShift<S: AtLeast32b> {
                     <Self as ITypeShift<S>>::eval(state.user_state.regfile.read(rs1), imm_vec);
                 Ok(UserDiff::reg_write_pc_p4(&state.user_state, rd, new_rd_val))
             }),
-            data: RiscVInstData::I {
-                fields: Self::inst_fields(),
-                rd,
-                rs1,
-                imm: imm_vec,
-            },
+            data: InstData::new(
+                Self::name(),
+                InstFields::I {
+                    fields: Self::inst_fields(),
+                    rd,
+                    rs1,
+                    imm: imm_vec,
+                },
+            ),
         }
     }
+    fn name() -> &'static str;
     fn f7() -> BitStr32;
     fn inst_fields() -> IInstFields;
     fn eval(rs1_val: RegValue<S>, imm: BitStr32) -> RegValue<S>;
@@ -274,14 +301,18 @@ pub trait EnvironInst<S: AtLeast32b> {
     fn new() -> RiscVInst<S> {
         RiscVInst {
             eval: Box::new(|state| Self::eval(state)),
-            data: RiscVInstData::I {
-                fields: Self::inst_fields(),
-                rd: RiscVRegister::ZERO,
-                rs1: RiscVRegister::ZERO,
-                imm: Self::funct12(),
-            },
+            data: InstData::new(
+                Self::name(),
+                InstFields::I {
+                    fields: Self::inst_fields(),
+                    rd: RiscVRegister::ZERO,
+                    rs1: RiscVRegister::ZERO,
+                    imm: Self::funct12(),
+                },
+            ),
         }
     }
+    fn name() -> &'static str;
     fn funct12() -> BitStr32;
     fn inst_fields() -> IInstFields;
     fn eval(state: &ProgramState<RiscV<S>, S>) -> InstResult<RiscV<S>, S>;
@@ -292,14 +323,18 @@ pub trait SType<S: AtLeast32b> {
         let imm_vec = imm.to_bit_str(12);
         RiscVInst {
             eval: Box::new(move |state| Self::eval(&state, rs1, rs2, imm_vec)),
-            data: RiscVInstData::S {
-                fields: Self::inst_fields(),
-                rs1,
-                rs2,
-                imm: imm_vec,
-            },
+            data: InstData::new(
+                Self::name(),
+                InstFields::S {
+                    fields: Self::inst_fields(),
+                    rs1,
+                    rs2,
+                    imm: imm_vec,
+                },
+            ),
         }
     }
+    fn name() -> &'static str;
     fn inst_fields() -> SInstFields;
     fn eval(
         state: &ProgramState<RiscV<S>, S>,
@@ -324,14 +359,19 @@ pub trait BType<S: AtLeast32b> {
                     Ok(UserDiff::pc_p4(user_state).into_diff_stack())
                 }
             }),
-            data: RiscVInstData::B {
-                fields: Self::inst_fields(),
-                rs1,
-                rs2,
-                imm: imm_vec, // chopping LSB is deferred to to_machine_code
-            },
+            data: InstData::new(
+                Self::name(),
+                InstFields::B {
+                    fields: Self::inst_fields(),
+                    rs1,
+                    rs2,
+                    imm: imm_vec, // chopping LSB is deferred to to_machine_code
+                },
+            ),
         }
     }
+
+    fn name() -> &'static str;
 
     fn inst_fields() -> BInstFields;
 
@@ -344,14 +384,18 @@ pub trait UType<S: AtLeast32b> {
         let imm_vec = imm.to_bit_str(20);
         RiscVInst {
             eval: Box::new(move |state| Ok(Self::eval(&state.user_state, rd, imm_vec))),
-            data: RiscVInstData::U {
-                fields: Self::inst_fields(),
-                rd,
-                imm: imm_vec,
-            },
+            data: InstData::new(
+                Self::name(),
+                InstFields::U {
+                    fields: Self::inst_fields(),
+                    rd,
+                    imm: imm_vec,
+                },
+            ),
         }
     }
 
+    fn name() -> &'static str;
     fn inst_fields() -> UInstFields;
     fn eval(
         state: &UserState<RiscV<S>, S>,
@@ -365,13 +409,17 @@ pub trait JType<S: AtLeast32b> {
         let imm_vec = imm.to_bit_str(20);
         RiscVInst {
             eval: Box::new(move |state| Ok(Self::eval(&state.user_state, rd, imm_vec))),
-            data: RiscVInstData::J {
-                fields: Self::inst_fields(),
-                rd,
-                imm: imm_vec, // chopping LSB is deferred to to_machine_code
-            },
+            data: InstData::new(
+                Self::name(),
+                InstFields::J {
+                    fields: Self::inst_fields(),
+                    rd,
+                    imm: imm_vec, // chopping LSB is deferred to to_machine_code
+                },
+            ),
         }
     }
+    fn name() -> &'static str;
     fn inst_fields() -> JInstFields;
     fn eval(
         state: &UserState<RiscV<S>, S>,

@@ -16,6 +16,10 @@ const R_W_OPCODE: BitStr32 = BitStr32::new(0b011_1011, 7);
 
 pub struct Mul;
 impl<S: AtLeast32b> RType<S> for Mul {
+    fn name() -> &'static str {
+        "mul"
+    }
+
     fn inst_fields() -> RInstFields {
         RInstFields {
             funct7: f7(1),
@@ -31,6 +35,10 @@ impl<S: AtLeast32b> RType<S> for Mul {
 
 pub struct Mulw;
 impl RType<W64b> for Mulw {
+    fn name() -> &'static str {
+        "mulw"
+    }
+
     fn inst_fields() -> RInstFields {
         RInstFields {
             funct7: f7(1),
@@ -57,6 +65,10 @@ impl RType<W64b> for Mulw {
 
 pub struct Div;
 impl<S: AtLeast32b> RType<S> for Div {
+    fn name() -> &'static str {
+        "div"
+    }
+
     fn inst_fields() -> RInstFields {
         RInstFields {
             funct7: f7(1),
@@ -88,6 +100,10 @@ impl<S: AtLeast32b> RType<S> for Div {
 
 pub struct Divw;
 impl RType<W64b> for Divw {
+    fn name() -> &'static str {
+        "divw"
+    }
+
     fn inst_fields() -> RInstFields {
         RInstFields {
             funct7: f7(1),
@@ -120,6 +136,10 @@ impl RType<W64b> for Divw {
 
 pub struct Divu;
 impl<S: AtLeast32b> RType<S> for Divu {
+    fn name() -> &'static str {
+        "divu"
+    }
+
     fn inst_fields() -> RInstFields {
         RInstFields {
             funct7: f7(1),
@@ -144,6 +164,10 @@ impl<S: AtLeast32b> RType<S> for Divu {
 
 pub struct Divuw;
 impl RType<W64b> for Divuw {
+    fn name() -> &'static str {
+        "divuw"
+    }
+
     fn inst_fields() -> RInstFields {
         RInstFields {
             funct7: f7(1),
@@ -169,6 +193,10 @@ impl RType<W64b> for Divuw {
 
 pub struct Rem;
 impl<S: AtLeast32b> RType<S> for Rem {
+    fn name() -> &'static str {
+        "rem"
+    }
+
     fn inst_fields() -> RInstFields {
         RInstFields {
             funct7: f7(1),
@@ -199,6 +227,10 @@ impl<S: AtLeast32b> RType<S> for Rem {
 
 pub struct Remw;
 impl RType<W64b> for Remw {
+    fn name() -> &'static str {
+        "remw"
+    }
+
     fn inst_fields() -> RInstFields {
         RInstFields {
             funct7: f7(1),
@@ -231,6 +263,10 @@ impl RType<W64b> for Remw {
 
 pub struct Remu;
 impl<S: AtLeast32b> RType<S> for Remu {
+    fn name() -> &'static str {
+        "remu"
+    }
+
     fn inst_fields() -> RInstFields {
         RInstFields {
             funct7: f7(1),
@@ -255,6 +291,10 @@ impl<S: AtLeast32b> RType<S> for Remu {
 
 pub struct Remuw;
 impl RType<W64b> for Remuw {
+    fn name() -> &'static str {
+        "remuw"
+    }
+
     fn inst_fields() -> RInstFields {
         RInstFields {
             funct7: f7(1),
