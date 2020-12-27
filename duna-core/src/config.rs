@@ -77,7 +77,7 @@ impl Default for MachineConfig {
 
 /// Configures a memory device.
 /// TODO add options for alignment and default value
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct MemConfig {
     pub phys_pn_bits: usize,
     pub pg_ofs_bits: usize,

@@ -98,7 +98,7 @@ impl Linker {
             // TODO implement for other sections
             // Ensure that the section is properly aligned for the next file
             combined_sections.zero_pad_until_doubleword_aligned();
-            let prev_data_size = combined_sections.data.len();
+            let prev_data_size = combined_sections.data().len();
             combined_sections.join(sections);
             let prev_inst_size = all_insts.len();
             all_insts.append(&mut new_insts);

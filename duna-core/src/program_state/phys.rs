@@ -14,15 +14,6 @@ pub type PageOffs = usize;
 
 pub type PhysMem = HashMap<PhysPn, MemPage>;
 
-pub struct PhysState {
-    endianness: Endianness,
-    require_aligned: bool,
-    pg_count: usize,
-    pg_ofs_bits: usize,
-    /// Physical memory, indexed by physical page numbers.
-    pub phys_mem: PhysMem,
-}
-
 #[derive(Debug, Copy, Clone)]
 pub enum PhysDiff {
     /// Updates the data stored at the specified location. Assumes the ppn exists.
@@ -51,6 +42,15 @@ impl fmt::Display for MisalignedAccess {
 
 impl std::error::Error for MisalignedAccess {}
 
+pub struct PhysState {
+    endianness: Endianness,
+    require_aligned: bool,
+    pg_count: usize,
+    pg_ofs_bits: usize,
+    /// Physical memory, indexed by physical page numbers.
+    pub phys_mem: PhysMem,
+}
+
 impl Default for PhysState {
     /// Produces a state with a memory with a 64-bit physical address space.
     /// Since pages are sparsely represented, we don't lose much runtime memory from allocating
@@ -74,6 +74,10 @@ impl PhysState {
             pg_ofs_bits,
             phys_mem: HashMap::new(),
         }
+    }
+
+    pub fn reset(&mut self) {
+        self.phys_mem.clear();
     }
 
     pub fn apply_diff(&mut self, diff: &PhysDiff) {

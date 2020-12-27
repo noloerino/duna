@@ -13,6 +13,8 @@ use num_traits::cast::AsPrimitive;
 /// Contains program state that is visited only to privileged entities, i.e. a kernel thread.
 /// TODO add kernel thread information (tid, file descriptors, etc.)
 pub struct PrivState<S: DataWidth> {
+    // used for reset information
+    original_heap_start: ByteAddrValue<S>,
     pub brk: ByteAddrValue<S>,
     pub heap_start: ByteAddrValue<S>,
     pub page_table: Box<dyn PageTable<S>>,
@@ -25,12 +27,21 @@ pub struct PrivState<S: DataWidth> {
 impl<S: DataWidth> PrivState<S> {
     pub fn new(heap_start: ByteAddrValue<S>, page_table: Box<dyn PageTable<S>>) -> Self {
         PrivState {
+            original_heap_start: heap_start,
             brk: heap_start,
             heap_start,
             page_table,
             stdout: Vec::new(),
             stderr: Vec::new(),
         }
+    }
+
+    pub fn reset(&mut self) {
+        self.stdout.clear();
+        self.stderr.clear();
+        self.page_table.reset();
+        self.brk = self.original_heap_start;
+        self.heap_start = self.original_heap_start;
     }
 
     /// Applies a diff to the privileged state.

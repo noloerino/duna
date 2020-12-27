@@ -207,16 +207,28 @@ fn test_aligned_directive_labels() {
         .unwrap();
     program.dump_insts();
     println!(
-        "at 18, I found {:#X}",
+        "at +0x18, I found {:#X}",
         u32::from(program.state.memory_inspect_word(0x2000_0018.into()))
     );
     println!(
-        "at 14, I found {:#X}",
+        "at +0x14, I found {:#X}",
         u32::from(program.state.memory_inspect_word(0x2000_0014.into()))
     );
     println!(
-        "at 0x10, I found {:#X}",
+        "at +0x10, I found {:#X}",
         u32::from(program.state.memory_inspect_word(0x2000_0010.into()))
+    );
+    println!(
+        "at +0x08, I found {:#X}",
+        u32::from(program.state.memory_inspect_word(0x2000_0008.into()))
+    );
+    println!(
+        "at +0x04, I found {:#X}",
+        u32::from(program.state.memory_inspect_word(0x2000_0004.into()))
+    );
+    println!(
+        "at +0x00, I found {:#X}",
+        u32::from(program.state.memory_inspect_word(0x2000_0000.into()))
     );
     program.run();
     use RiscVRegister::*;

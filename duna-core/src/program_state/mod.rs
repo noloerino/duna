@@ -10,4 +10,4 @@ mod user;
 pub use datatypes::*;
 pub use memory::*;
 pub use program::*;
-pub use registers::IRegister;
+pub use registers::{IRegister, RegFile};

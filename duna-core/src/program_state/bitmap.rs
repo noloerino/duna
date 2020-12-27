@@ -10,13 +10,19 @@ pub struct Bitmap {
 impl Bitmap {
     /// Constructs a new bitmap with bit_cnt entries.
     pub fn new(bit_cnt: usize) -> Bitmap {
-        // if we need 0 bits then we allocate 0 ints, but if we need 1 byte we need to allocate
-        // 1 int even though 1 / 64 = 0
-        let round_up = bit_cnt % 64 != 0;
-        Bitmap {
+        let mut b = Bitmap {
             bit_cnt,
-            bits: vec![0; bit_cnt / 64 + (if round_up { 1 } else { 0 })],
-        }
+            bits: vec![],
+        };
+        b.clear();
+        b
+    }
+
+    pub fn clear(&mut self) {
+        // if we need 0 bits then we allocate 0 ints, but if we need 1 bit we need to allocate
+        // 1 int even though 1 / 64 = 0
+        let round_up = self.bit_cnt % 64 != 0;
+        self.bits = vec![0; self.bit_cnt / 64 + (if round_up { 1 } else { 0 })];
     }
 
     fn bounds_check(&self, idx: usize) {

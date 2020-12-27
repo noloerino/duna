@@ -3,7 +3,7 @@ pub use super::{phys::*, priv_s::*, user::*};
 use crate::{
     arch::*,
     assembler::{ErrorReport, Linker, SectionStore},
-    config::SegmentStarts,
+    config::{MemConfig, SegmentStarts},
     instruction::ConcreteInst,
 };
 use num_traits::{cast::AsPrimitive, ops::wrapping::WrappingSub};
@@ -21,8 +21,17 @@ where
     fn return_register() -> F::Register;
 }
 
+#[derive(Clone)]
+pub struct ProgramResetParams {
+    start_inst_idx: usize,
+    segment_starts: SegmentStarts,
+    sections: SectionStore,
+    mem_config: MemConfig,
+}
+
 pub struct Program<A: Architecture> {
-    pub insts: Vec<<A::Family as ArchFamily<A::DataWidth>>::Instruction>,
+    insts: Vec<<A::Family as ArchFamily<A::DataWidth>>::Instruction>,
+    reset_params: ProgramResetParams,
     pub state: ProgramState<A::Family, A::DataWidth>,
     text_start: ByteAddrValue<A::DataWidth>,
 }
@@ -44,14 +53,42 @@ impl<A: Architecture> Program<A> {
         start_inst_idx: usize,
         segment_starts: SegmentStarts,
         sections: SectionStore,
-        pg_count: usize,
-        pg_ofs_len: usize,
-        page_table: Box<dyn PageTable<A::DataWidth>>,
+        mem_config: MemConfig,
     ) -> Self {
+        let pg_count = mem_config.phys_pn_bits;
+        let pg_ofs_len = mem_config.pg_ofs_bits;
+        let page_table = mem_config.build_mem();
+        let text_start: ByteAddrValue<A::DataWidth> = segment_starts.text();
+        let state = ProgramState::new(pg_count, pg_ofs_len, page_table);
+        let mut p = Program {
+            insts,
+            reset_params: ProgramResetParams {
+                start_inst_idx,
+                segment_starts,
+                sections,
+                mem_config,
+            },
+            state,
+            text_start,
+        };
+        p.reset();
+        p
+    }
+
+    /// Resets the state of this program.
+    pub fn reset(&mut self) {
+        let ProgramResetParams {
+            start_inst_idx,
+            segment_starts,
+            sections,
+            mem_config,
+        } = &self.reset_params;
+        let pg_ofs_len = mem_config.pg_ofs_bits;
         let text_start: ByteAddrValue<A::DataWidth> = segment_starts.text();
         let stack_start: ByteAddrValue<A::DataWidth> = segment_starts.stack();
         let data_start: ByteAddrValue<A::DataWidth> = segment_starts.data();
-        let mut state = ProgramState::new(pg_count, pg_ofs_len, page_table);
+        self.state.reset();
+        let state = &mut self.state;
         let mem = &mut state.phys_state.phys_mem;
         let pt = &mut state.priv_state.page_table;
         // Page in text, stack, and data
@@ -66,12 +103,16 @@ impl<A: Architecture> Program<A> {
             text_start + (UnsignedValue::<A::DataWidth>::from(4 * start_inst_idx)).into();
         // store instructions
         let mut next_addr: ByteAddrValue<A::DataWidth> = user_state.pc;
-        for inst in &insts {
+        for inst in &self.insts {
             state.memory_force_set(next_addr, DataLword::from(inst.to_machine_code()));
             next_addr = next_addr.plus_4()
         }
         // store data
-        let all_data = sections.data.into_iter().chain(sections.rodata.into_iter());
+        let all_data = sections
+            .data()
+            .iter()
+            .chain(sections.rodata().iter())
+            .cloned();
         let data_start_usize = AsPrimitive::<usize>::as_(data_start.as_unsigned().raw());
         let mut end_of_data: usize = data_start_usize;
         for (offs, byte) in all_data.enumerate() {
@@ -91,16 +132,15 @@ impl<A: Architecture> Program<A> {
                 UnsignedValue::<A::DataWidth>::from(heap_start).into(),
             )
             .unwrap();
-        Program {
-            insts,
-            state,
-            text_start,
-        }
+    }
+
+    pub fn insts(&self) -> &Vec<<A::Family as ArchFamily<A::DataWidth>>::Instruction> {
+        &self.insts
     }
 
     /// Prints out all the instructions that this program contains.
     pub fn dump_insts(&self) {
-        for inst in &self.insts {
+        for inst in self.insts() {
             println!("{:?}", inst);
         }
     }
@@ -115,7 +155,7 @@ impl<A: Architecture> Program<A> {
 
     /// Returns the instructions provided to this program.
     pub fn get_inst_vec(&self) -> &[<A::Family as ArchFamily<A::DataWidth>>::Instruction] {
-        self.insts.as_slice()
+        self.insts().as_slice()
     }
 
     /// Returns the current state of this program.
@@ -170,7 +210,7 @@ impl<A: Architecture> ProgramExecutor<A> {
 
     pub fn curr_inst(&self) -> Option<&<A::Family as ArchFamily<A::DataWidth>>::Instruction> {
         assert!(self.curr_inst_idx <= self.inst_stack.len());
-        self.program.insts.get(self.program.get_pc_word_index())
+        self.program.insts().get(self.program.get_pc_word_index())
     }
 
     /// Runs the next instruction of the program.
@@ -184,7 +224,7 @@ impl<A: Architecture> ProgramExecutor<A> {
             // TODO gracefully handle out of bounds instructions
             // for now, if we reach an oob instruction just report the return value
             if let Some(inst) = program.insts.get(program.get_pc_word_index()) {
-                let exec_result = program.state.apply_inst(&inst);
+                let exec_result = program.state.apply_inst(inst);
                 match exec_result {
                     Ok(inst_result) => {
                         self.inst_stack.push(inst_result);
@@ -594,6 +634,12 @@ impl<F: ArchFamily<S>, S: DataWidth> ProgramState<F, S> {
             // TODO make endianness/alignment configurable
             phys_state: PhysState::new(Endianness::default(), true, phys_pg_count, pg_ofs_len),
         }
+    }
+
+    pub fn reset(&mut self) {
+        self.user_state = UserState::new();
+        self.priv_state.reset();
+        self.phys_state.reset();
     }
 
     pub fn apply_inst(&mut self, inst: &F::Instruction) -> InstResult<F, S> {

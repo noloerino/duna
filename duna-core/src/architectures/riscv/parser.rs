@@ -1248,7 +1248,7 @@ mod tests {
             ..
         } = RiscVParser::<W32b>::parse_str(0, prog);
         assert!(reporter.is_empty(), insts.is_empty());
-        assert_eq!(sections.data, vec![0xef, 0xbe, 0xad, 0xde, 0x12]);
+        assert_eq!(sections.data(), vec![0xef, 0xbe, 0xad, 0xde, 0x12]);
     }
 
     #[test]

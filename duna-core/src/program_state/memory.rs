@@ -132,6 +132,9 @@ pub trait PageTable<S: DataWidth> {
 
     fn revert_update(&mut self, mem: &mut PhysMem, update: &PtUpdate);
 
+    /// Clears all mappings in this page table, resetting all internal state.
+    fn reset(&mut self);
+
     /// Maps a page and updates the state of the page table. The resulting updates are not saved
     /// anywhere, as they are instantly applied.
     ///
@@ -194,6 +197,8 @@ impl<S: DataWidth> PageTable<S> for AllMappedPt<S> {
     fn revert_update(&mut self, _mem: &mut PhysMem, _update: &PtUpdate) {
         panic!("Attempted to revert an update, but AllMappedPt should not produce any updates");
     }
+
+    fn reset(&mut self) {}
 
     fn map_page(&self, vaddr: ByteAddrValue<S>) -> Result<Vec<PtUpdate>, MemFault<S>> {
         if vaddr.bits() == 0 {
@@ -302,6 +307,12 @@ impl<S: DataWidth> PageTable<S> for FifoLinearPt<S> {
     }
 
     fn revert_update(&mut self, _mem: &mut PhysMem, _update: &PtUpdate) {}
+
+    fn reset(&mut self) {
+        self.page_table.clear();
+        self.freemap.clear();
+        self.swapfile.clear();
+    }
 
     fn map_page(&self, addr: ByteAddrValue<S>) -> Result<Vec<PtUpdate>, MemFault<S>> {
         // This isn't really FIFO if pages aren't mapped in vaddr order...

@@ -5,5 +5,5 @@
 .globl l7
 .data
     l5: .byte 0xEE
-    l6: .half 0XFEDC
+    l6: .half 0xFEDC
     l7: .word 0x9876_5432

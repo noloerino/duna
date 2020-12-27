@@ -64,12 +64,13 @@ impl fmt::Display for ProgramSection {
     }
 }
 
+#[derive(Clone)]
 pub struct SectionStore {
     /// Stores the contents of the .data section. The first element is at the lowest address.
-    pub data: Vec<u8>,
+    data: Vec<u8>,
     /// Stores the contents of the .rodata section. The first element is at the lowest address.
-    pub rodata: Vec<u8>,
-    pub labels: Vec<(LabelDef, ProgramSection, usize)>,
+    rodata: Vec<u8>,
+    labels: Vec<(LabelDef, ProgramSection, usize)>,
     require_align: bool,
 }
 
@@ -81,6 +82,18 @@ impl SectionStore {
             labels: Vec::new(),
             require_align: true,
         }
+    }
+
+    pub fn data(&self) -> &[u8] {
+        &self.data
+    }
+
+    pub fn rodata(&self) -> &[u8] {
+        &self.rodata
+    }
+
+    pub fn labels(&self) -> &[(LabelDef, ProgramSection, usize)] {
+        &self.labels
     }
 
     /// Adds a label to the next element in that section.
@@ -397,9 +410,7 @@ impl<A: Architecture> UnlinkedProgram<A> {
                 main_inst_idx,
                 config.segment_starts,
                 self.sections,
-                config.mem_config.phys_pn_bits,
-                config.mem_config.pg_ofs_bits,
-                config.mem_config.build_mem(),
+                config.mem_config,
             ))
         } else {
             Err(reporter)
