@@ -61,3 +61,44 @@ fn test_sext_w() {
         0x0123_4567
     );
 }
+
+/// Sanity checks instructions from the M extension; does not check overflow or sign extension
+/// edge cases
+#[test]
+fn test_m_sanity() {
+    let code = "
+        li t0, 9
+        li t1, 3
+        mul a0, t0, t1   # a0 = 27
+        mulw a1, t0, t1  # a1 = 27
+        div a2, t0, t1   # a2 = 3
+        divu a3, t0, t1  # a3 = 3
+        divw a4, t0, t1  # a4 = 3
+        divuw a5, t0, t1 # a5 = 3
+        rem a6, t0, t1   # a6 = 0
+        remu a7, t0, t1  # a7 = 0
+        remw s0, t0, t1  # s0 = 0
+        remuw s1, t0, t1 # s1 = 0
+        # div by 0 => all 1s in rd
+        div s2, t0, x0   # s2 = -1
+        # rem by 0 => source in output
+        rem s3, t0, x0   # s3 = 9
+        ";
+    let mut program: Program<RV64> = Linker::with_main_str(code)
+        .link::<RV64>(Default::default())
+        .unwrap();
+    program.run();
+    let state = program.state;
+    assert_eq!(u64::from(state.regfile_read(RiscVRegister::A0)), 27);
+    assert_eq!(u64::from(state.regfile_read(RiscVRegister::A1)), 27);
+    assert_eq!(u64::from(state.regfile_read(RiscVRegister::A2)), 3);
+    assert_eq!(u64::from(state.regfile_read(RiscVRegister::A3)), 3);
+    assert_eq!(u64::from(state.regfile_read(RiscVRegister::A4)), 3);
+    assert_eq!(u64::from(state.regfile_read(RiscVRegister::A5)), 3);
+    assert_eq!(u64::from(state.regfile_read(RiscVRegister::A6)), 0);
+    assert_eq!(u64::from(state.regfile_read(RiscVRegister::A7)), 0);
+    assert_eq!(u64::from(state.regfile_read(RiscVRegister::S0)), 0);
+    assert_eq!(u64::from(state.regfile_read(RiscVRegister::S1)), 0);
+    assert_eq!(i64::from(state.regfile_read(RiscVRegister::S2)), -1);
+    assert_eq!(i64::from(state.regfile_read(RiscVRegister::S3)), 9);
+}

@@ -1,3 +1,4 @@
+//! Instructions from the base integer instruction set.
 mod i_type;
 mod pseudo;
 mod r_type;

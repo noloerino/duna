@@ -3,7 +3,7 @@ use num_traits::{
     bounds::Bounded,
     cast::{AsPrimitive, FromPrimitive},
     int::PrimInt,
-    ops::wrapping as wr,
+    ops::{checked as ch, wrapping as wr},
     sign,
 };
 use std::{cmp, fmt, marker::PhantomData};
@@ -60,7 +60,10 @@ pub trait DataWidth: fmt::Debug + Clone + Copy + PartialEq + PartialOrd + Sized 
         + sign::Unsigned
         + fmt::UpperHex
         + fmt::Display
+        + ch::CheckedDiv
+        + ch::CheckedRem
         + wr::WrappingAdd
+        + wr::WrappingMul
         + wr::WrappingShl
         + wr::WrappingShr
         + AsPrimitive<u8>
@@ -72,7 +75,10 @@ pub trait DataWidth: fmt::Debug + Clone + Copy + PartialEq + PartialOrd + Sized 
     type S: PrimInt
         + sign::Signed
         + fmt::Display
+        + ch::CheckedDiv
+        + ch::CheckedRem
         + wr::WrappingAdd
+        + wr::WrappingMul
         + wr::WrappingShl
         + wr::WrappingShr
         + wr::WrappingSub
@@ -275,6 +281,10 @@ impl<S: DataWidth, T: DataInterp> DataValue<S, T> {
         Self::from_unsigned(<S as DataWidth>::U::from_usize(0usize).unwrap())
     }
 
+    pub fn is_zero(&self) -> bool {
+        self.value == Self::zero().value
+    }
+
     pub fn from_unsigned(value: <S as DataWidth>::U) -> Self {
         DataValue::<S, T> {
             value: <S as DataWidth>::from_u(value),
@@ -427,6 +437,32 @@ impl<S: DataWidth> core::ops::Shr for UnsignedValue<S> {
             self.as_unsigned()
                 .raw()
                 .wrapping_shr(AsPrimitive::<u32>::as_(other.as_unsigned().raw())),
+        )
+    }
+}
+
+impl<S: DataWidth> core::ops::Mul for UnsignedValue<S> {
+    type Output = Self;
+
+    fn mul(self, other: Self) -> Self {
+        use wr::WrappingMul;
+        Self::from_unsigned(
+            self.as_unsigned()
+                .raw()
+                .wrapping_mul(&other.as_unsigned().raw()),
+        )
+    }
+}
+
+impl<S: DataWidth> core::ops::Mul for SignedValue<S> {
+    type Output = Self;
+
+    fn mul(self, other: Self) -> Self {
+        use wr::WrappingMul;
+        Self::from_signed(
+            self.as_signed()
+                .raw()
+                .wrapping_mul(&other.as_signed().raw()),
         )
     }
 }

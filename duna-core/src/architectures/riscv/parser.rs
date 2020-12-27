@@ -53,6 +53,7 @@ lazy_static! {
         use super::isa::*;
         use ParseType::*;
         [
+            // === Base ===
             ("add", R(Add::new)),
             ("addi", Arith(Addi::new)),
             ("and", R(And::new)),
@@ -65,6 +66,7 @@ lazy_static! {
             ("bltu", B(Bltu::new)),
             ("bne", B(Bne::new)),
             // ("ebreak", Env),
+            // ("fence", ???),
             ("ecall", Env(Ecall::new)),
             ("jal", ParseType::Jal),
             ("jalr", ParseType::Jalr),
@@ -92,6 +94,7 @@ lazy_static! {
             ("sw", MemS(Sw::new)),
             ("xor", R(Xor::new)),
             ("xori", Arith(Xori::new)),
+            // === Pseudo ===
             ("la", ParseType::La),
             ("li", Li(Li32::expand)),
             ("mv", RegReg(Mv::expand)),
@@ -101,6 +104,15 @@ lazy_static! {
             ("j", LikeJ(J::expand)),
             ("jr", OneReg(Jr::expand)),
             ("ret", NoArgs(Ret::expand)),
+            // === M extension ===
+            ("mul", R(Mul::new)),
+            // ("mulh", R(Mulh::new)),
+            // ("mulhu", R(Mulhu::new)),
+            // ("mulhsu", R(Mulsu::new)),
+            ("div", R(Div::new)),
+            ("divu", R(Divu::new)),
+            ("rem", R(Rem::new)),
+            ("remu", R(Remu::new)),
         ]
         .iter()
         .cloned()
@@ -111,6 +123,7 @@ lazy_static! {
         use super::isa::*;
         use ParseType::*;
         [
+            // === Base ===
             ("add", R(Add::new)),
             ("addw", R(Addw::new)),
             ("addi", Arith(Addi::new)),
@@ -125,6 +138,7 @@ lazy_static! {
             ("bltu", B(Bltu::new)),
             ("bne", B(Bne::new)),
             // ("ebreak", Env),
+            // ("fence", ???),
             ("ecall", Env(Ecall::new)),
             ("jal", ParseType::Jal),
             ("jalr", ParseType::Jalr),
@@ -162,6 +176,7 @@ lazy_static! {
             ("sw", MemS(Sw::new)),
             ("xor", R(Xor::new)),
             ("xori", Arith(Xori::new)),
+            // === Pseudo ===
             ("la", ParseType::La),
             ("li", Li(Li64::expand)),
             ("mv", RegReg(Mv::expand)),
@@ -172,6 +187,20 @@ lazy_static! {
             ("jr", OneReg(Jr::expand)),
             ("ret", NoArgs(Ret::expand)),
             ("sext.w", RegReg(SextW::expand)),
+            // === M extension ===
+            ("mul", R(Mul::new)),
+            ("mulw", R(Mulw::new)),
+            // ("mulh", R(Mulh::new)),
+            // ("mulhu", R(Mulhu::new)),
+            // ("mulhsu", R(Mulsu::new)),
+            ("div", R(Div::new)),
+            ("divw", R(Divw::new)),
+            ("divu", R(Divu::new)),
+            ("divuw", R(Divuw::new)),
+            ("rem", R(Rem::new)),
+            ("remw", R(Remw::new)),
+            ("remu", R(Remu::new)),
+            ("remuw", R(Remuw::new)),
         ]
         .iter()
         .cloned()
