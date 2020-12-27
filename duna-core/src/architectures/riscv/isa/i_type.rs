@@ -236,6 +236,15 @@ impl<S: AtLeast32b> ITypeArith<S> for Ori {
     }
 }
 
+/// If S is W32b, masks lower 5 bits; else lower 6 bits
+fn shamt<S: AtLeast32b>(n: RegValue<S>) -> RegValue<S> {
+    n & RegValue::<S>::new(<S as DataWidth>::from_u64(if <S as AtLeast32b>::is_32() {
+        0b1_1111
+    } else {
+        0b11_1111
+    }))
+}
+
 pub struct Slli;
 impl<S: AtLeast32b> ITypeShift<S> for Slli {
     fn inst_fields() -> IInstFields {
@@ -251,8 +260,8 @@ impl<S: AtLeast32b> ITypeShift<S> for Slli {
 
     fn eval(rs1_val: RegValue<S>, imm: BitStr32) -> RegValue<S> {
         let v1: SignedValue<S> = rs1_val.into();
-        let imm_val: SignedValue<S> = imm.into();
-        (v1 << imm_val).into()
+        let imm_val: UnsignedValue<S> = imm.into();
+        (v1 << shamt(imm_val.as_reg_data()).as_signed()).into()
     }
 }
 
@@ -272,7 +281,8 @@ impl ITypeShift<W64b> for Slliw {
     fn eval(rs1_val: RegValue<W64b>, imm: BitStr32) -> RegValue<W64b> {
         let v1 = rs1_val.lower_lword().as_unsigned();
         let imm_val: UnsignedValue<W32b> = imm.into();
-        DataDword::sign_ext_from_lword((v1 << imm_val).as_reg_data())
+        DataDword::sign_ext_from_lword(v1.as_reg_data() << shamt(imm_val.as_reg_data()))
+            .as_reg_data()
     }
 }
 
@@ -291,9 +301,8 @@ impl<S: AtLeast32b> ITypeShift<S> for Srai {
 
     fn eval(rs1_val: RegValue<S>, imm: BitStr32) -> RegValue<S> {
         let v1: SignedValue<S> = rs1_val.into();
-        // Cast to unsigned first to avoid accidentally sign extending
         let imm_val: UnsignedValue<S> = imm.into();
-        (v1 >> imm_val.as_signed()).into()
+        (v1 >> shamt(imm_val.as_reg_data()).as_signed()).into()
     }
 }
 
@@ -313,8 +322,9 @@ impl ITypeShift<W64b> for Sraiw {
     fn eval(rs1_val: RegValue<W64b>, imm: BitStr32) -> RegValue<W64b> {
         let v1 = rs1_val.lower_lword().as_signed();
         let imm_val: UnsignedValue<W32b> = imm.into();
-        // Cast to unsigned first to avoid accidentally sign extending
-        DataDword::sign_ext_from_lword((v1 >> imm_val.as_signed()).as_reg_data())
+        DataDword::sign_ext_from_lword(
+            (v1 >> shamt(imm_val.as_reg_data()).as_signed()).as_reg_data(),
+        )
     }
 }
 
@@ -334,7 +344,7 @@ impl<S: AtLeast32b> ITypeShift<S> for Srli {
     fn eval(rs1_val: RegValue<S>, imm: BitStr32) -> RegValue<S> {
         let v1: UnsignedValue<S> = rs1_val.into();
         let imm_val: UnsignedValue<S> = imm.into();
-        (v1 >> imm_val).into()
+        (v1 >> shamt(imm_val.as_reg_data()).as_unsigned()).into()
     }
 }
 
@@ -354,7 +364,9 @@ impl ITypeShift<W64b> for Srliw {
     fn eval(rs1_val: RegValue<W64b>, imm: BitStr32) -> RegValue<W64b> {
         let v1 = rs1_val.lower_lword().as_unsigned();
         let imm_val: UnsignedValue<W32b> = imm.into();
-        DataDword::sign_ext_from_lword((v1 >> imm_val).as_reg_data())
+        DataDword::sign_ext_from_lword(
+            (v1 >> shamt(imm_val.as_reg_data()).as_unsigned()).as_reg_data(),
+        )
     }
 }
 

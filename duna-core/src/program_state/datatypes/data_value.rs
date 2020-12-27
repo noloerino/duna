@@ -32,7 +32,9 @@ pub struct W64b {
 // Marker traits to allow relevant sign extension methods etc.
 pub trait AtLeast8b: DataWidth {}
 pub trait AtLeast16b: AtLeast8b {}
-pub trait AtLeast32b: AtLeast16b {}
+pub trait AtLeast32b: AtLeast16b {
+    fn is_32() -> bool;
+}
 
 impl AtLeast8b for W8b {}
 impl AtLeast8b for W16b {}
@@ -43,8 +45,16 @@ impl AtLeast16b for W16b {}
 impl AtLeast16b for W32b {}
 impl AtLeast16b for W64b {}
 
-impl AtLeast32b for W32b {}
-impl AtLeast32b for W64b {}
+impl AtLeast32b for W32b {
+    fn is_32() -> bool {
+        true
+    }
+}
+impl AtLeast32b for W64b {
+    fn is_32() -> bool {
+        false
+    }
+}
 
 pub trait DataWidth: fmt::Debug + Clone + Copy + PartialEq + Sized + 'static {
     type U: PrimInt

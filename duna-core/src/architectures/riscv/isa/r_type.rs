@@ -72,6 +72,112 @@ impl<S: AtLeast32b> RType<S> for Or {
     }
 }
 
+/// If S is W32b, masks lower 5 bits; else lower 6 bits
+fn shamt<S: AtLeast32b>(n: RegValue<S>) -> RegValue<S> {
+    n & RegValue::<S>::new(<S as DataWidth>::from_u64(if <S as AtLeast32b>::is_32() {
+        0b1_1111
+    } else {
+        0b11_1111
+    }))
+}
+
+pub struct Sll;
+impl<S: AtLeast32b> RType<S> for Sll {
+    fn inst_fields() -> RInstFields {
+        RInstFields {
+            funct7: f7(0),
+            funct3: f3(0b001),
+            opcode: R_OPCODE,
+        }
+    }
+
+    fn eval(rs1_val: RegValue<S>, rs2_val: RegValue<S>) -> RegValue<S> {
+        let v1: UnsignedValue<S> = rs1_val.into();
+        (v1 << shamt(rs2_val).into()).into()
+    }
+}
+
+pub struct Sllw;
+impl RType<W64b> for Sllw {
+    fn inst_fields() -> RInstFields {
+        RInstFields {
+            funct7: f7(0),
+            funct3: f3(0b001),
+            opcode: R_W_OPCODE,
+        }
+    }
+
+    fn eval(rs1_val: RegValue<W64b>, rs2_val: RegValue<W64b>) -> RegValue<W64b> {
+        let v1: SignedValue<W64b> = rs1_val.into();
+        // Take only lower 6 bits
+        (v1 << shamt(rs2_val).into()).into()
+    }
+}
+
+pub struct Sra;
+impl<S: AtLeast32b> RType<S> for Sra {
+    fn inst_fields() -> RInstFields {
+        RInstFields {
+            funct7: f7(0b0100_0000),
+            funct3: f3(0b101),
+            opcode: R_OPCODE,
+        }
+    }
+
+    fn eval(rs1_val: RegValue<S>, rs2_val: RegValue<S>) -> RegValue<S> {
+        let v1: SignedValue<S> = rs1_val.into();
+        (v1 >> shamt(rs2_val).into()).into()
+    }
+}
+
+pub struct Sraw;
+impl RType<W64b> for Sraw {
+    fn inst_fields() -> RInstFields {
+        RInstFields {
+            funct7: f7(0b0100_0000),
+            funct3: f3(0b101),
+            opcode: R_W_OPCODE,
+        }
+    }
+
+    fn eval(rs1_val: RegValue<W64b>, rs2_val: RegValue<W64b>) -> RegValue<W64b> {
+        let v1: SignedValue<W64b> = rs1_val.into();
+        (v1 >> shamt(rs2_val).into()).into()
+    }
+}
+
+pub struct Srl;
+impl<S: AtLeast32b> RType<S> for Srl {
+    fn inst_fields() -> RInstFields {
+        RInstFields {
+            funct7: f7(0),
+            funct3: f3(0b101),
+            opcode: R_OPCODE,
+        }
+    }
+
+    fn eval(rs1_val: RegValue<S>, rs2_val: RegValue<S>) -> RegValue<S> {
+        let v1: UnsignedValue<S> = rs1_val.into();
+        (v1 >> shamt(rs2_val).into()).into()
+    }
+}
+
+pub struct Srlw;
+impl RType<W64b> for Srlw {
+    fn inst_fields() -> RInstFields {
+        RInstFields {
+            funct7: f7(0),
+            funct3: f3(0b101),
+            opcode: R_W_OPCODE,
+        }
+    }
+
+    fn eval(rs1_val: RegValue<W64b>, rs2_val: RegValue<W64b>) -> RegValue<W64b> {
+        let v1: UnsignedValue<W64b> = rs1_val.into();
+        (v1 >> shamt(rs2_val).into()).into()
+    }
+}
+
 pub struct Sub;
 impl<S: AtLeast32b> RType<S> for Sub {
     fn inst_fields() -> RInstFields {
