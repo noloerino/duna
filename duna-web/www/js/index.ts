@@ -23,3 +23,7 @@ const assembleAndRunProgram = () => {
 
 const goButton = document.getElementById("go");
 goButton.onclick = (e) => assembleAndRunProgram();
+
+window.onbeforeunload = () => {
+    cm.save();
+};
