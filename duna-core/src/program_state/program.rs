@@ -168,6 +168,11 @@ impl<A: Architecture> ProgramExecutor<A> {
         }
     }
 
+    pub fn curr_inst(&self) -> Option<&<A::Family as ArchFamily<A::DataWidth>>::Instruction> {
+        assert!(self.curr_inst_idx <= self.inst_stack.len());
+        self.program.insts.get(self.program.get_pc_word_index())
+    }
+
     /// Runs the next instruction of the program.
     /// Returns the exit code if the program terminates, and None otherwise.
     pub fn step(&mut self) -> Option<u8> {
@@ -318,7 +323,7 @@ impl<F: ArchFamily<S>, S: DataWidth> ProgramState<F, S> {
         &self.user_state.regfile
     }
 
-    pub fn get_pc(&mut self) -> ByteAddrValue<S> {
+    pub fn get_pc(&self) -> ByteAddrValue<S> {
         self.user_state.pc
     }
 

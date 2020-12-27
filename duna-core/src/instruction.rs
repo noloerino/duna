@@ -2,9 +2,9 @@ use crate::{
     arch::*,
     program_state::{DataWidth, InstResult, ProgramState},
 };
-use std::fmt::Debug;
+use std::fmt;
 
-pub trait ConcreteInst<F, S>: Debug
+pub trait ConcreteInst<F, S>: fmt::Debug + fmt::Display
 where
     F: ArchFamily<S>,
     S: DataWidth,

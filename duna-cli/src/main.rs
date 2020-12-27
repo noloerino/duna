@@ -90,8 +90,18 @@ fn link_and_repl<A: Architecture>(config: AsmConfig, linker: Linker) {
         // for now, just match directly
         match input {
             "s" | "step" => {
+                let curr_inst = executor.curr_inst();
+                println!(
+                    "{} @ {}",
+                    if let Some(inst) = curr_inst {
+                        format!("{}", inst)
+                    } else {
+                        "<no instruction>".to_string()
+                    },
+                    executor.program.state.get_pc()
+                );
                 executor.step();
-                println!("PC: {}", executor.program.state.get_pc())
+                // println!("new PC: {}", executor.program.state.get_pc())
             }
             "c" | "continue" => {
                 executor.step_to_completion(1000);
@@ -99,7 +109,8 @@ fn link_and_repl<A: Architecture>(config: AsmConfig, linker: Linker) {
             "info registers" | "i r" | "i registers" | "info r" => {
                 println!("{}", executor.program.state.regfile())
             }
-            "" => println!(),
+            // Because we called trim(), no need for new newline
+            "" => (),
             "q" | "quit" => {
                 exited = true;
             }
