@@ -82,6 +82,7 @@ export const goldenInit = () => {
           <button id="assemble">Assemble</button>
           <button id="step">Step</button>
           <button id="run">Run</button>
+          <button id="reset">Reset</button>
           <div style={{flex: 6}}></div>
         </div>
         <textarea
@@ -122,17 +123,15 @@ export const goldenInit = () => {
   layout.registerComponent(
     "state",
     goldenComponent(() => (
-      <span id="sim-state" className="flexCol" style={{
+      <textarea id="sim-state" className="flexCol"
+        disabled
+        placeholder="program state appears here during simulation -- press assemble & step to begin"
+        style={{
           fontSize: "14px",
           whiteSpace: "pre-wrap",
           margin: "0.5em"
         }}>
-        <span>
-          program state appears here during simulation
-          <br/>
-          press assemble & step to begin
-        </span>
-      </span>
+      </textarea>
     ))
   );
   layout.init();

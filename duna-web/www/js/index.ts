@@ -18,29 +18,27 @@ const assembleProgram = () => {
   );
   const program = cm.getProgram();
   simState.assemble(program);
-  compileErrors.innerText = simState.get_errors() ?? "No errors!";
+  let errs = simState.get_errors();
+  compileErrors.innerText = errs ?? "No errors!";
+  if (!errs) {
+    updateState();
+  }
 };
 
 const updateState = () => {
   const stdout = <HTMLTextAreaElement>document.getElementById("stdout");
   const exitCode = <HTMLSpanElement>document.getElementById("exit-code");
   let ec = simState.result();
-  if (ec) {
-    exitCode.innerText = ec!!.toString();
-  }
+  exitCode.innerText = ec?.toString() ?? "--";
   let stdoutText = simState.stdout();
-  if (stdoutText) {
-    stdout.value = stdoutText;
-  }
+  stdout.value = stdoutText ?? "";
   let snapshot = simState.snapshot();
-  if (!snapshot) {
-    return;
-  }
   const state = <HTMLTextAreaElement>document.getElementById("sim-state");
-  state.innerText =
-    (`PC: ${snapshot.curr_pc()}\n` +
-    `next instruction: ${snapshot.curr_inst()}\n\n` +
-    `${snapshot.reg_dump()}`);
+  state.value = snapshot
+    ? (`PC: ${snapshot.curr_pc()}\n` +
+      `next instruction: ${snapshot.curr_inst()}\n\n` +
+      `${snapshot.reg_dump()}`)
+    : "" ;
 }
 
 const step = () => {
@@ -53,6 +51,11 @@ const run = () => {
   updateState();
 };
 
+const reset = () => {
+  simState.reset();
+  updateState();
+}
+
 const assembleButton = document.getElementById("assemble");
 assembleButton.onclick = (e) => assembleProgram();
 
@@ -61,6 +64,10 @@ stepButton.onclick = (e) => step();
 
 const runButton = document.getElementById("run");
 runButton.onclick = (e) => run();
+
+const resetButton = document.getElementById("reset");
+resetButton.onclick = (e) => reset();
+
 
 window.onbeforeunload = () => {
   cm.save();

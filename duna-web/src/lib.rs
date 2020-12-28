@@ -121,7 +121,7 @@ impl SimState {
 
     pub fn get_errors(&self) -> Option<String> {
         if let Err(errs) = self.assemble_result.as_ref()? {
-            Some(format!("{:?}", errs.report()))
+            Some(format!("{:?}", errs))
         } else {
             None
         }

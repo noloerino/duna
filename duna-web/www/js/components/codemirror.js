@@ -18,7 +18,7 @@ export class CodeMirrorWrapper {
     this.localStorage = window.localStorage;
     let textArea = document.getElementById("code");
     // This needs to be set instead of the "value" parameter of the cm constructor
-    textArea.innerText = this.localStorage.getItem(STORAGE_MAIN_FILE_KEY);
+    textArea.value = this.localStorage.getItem(STORAGE_MAIN_FILE_KEY);
     let cm = CodeMirror.fromTextArea(textArea, {
       mode: "gas",
       lineNumbers: "true",
