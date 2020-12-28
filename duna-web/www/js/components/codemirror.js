@@ -38,9 +38,6 @@ export class CodeMirrorWrapper {
   // Saves the text of the main file in local storage for the time being
   // this will change when multiple files become supported
   save() {
-    this.localStorage.setItem(
-      STORAGE_MAIN_FILE_KEY,
-      this.getProgram()
-    );
+    this.localStorage.setItem(STORAGE_MAIN_FILE_KEY, this.getProgram());
   }
 }

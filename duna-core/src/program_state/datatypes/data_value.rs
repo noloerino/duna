@@ -82,7 +82,7 @@ pub trait DataWidth: fmt::Debug + Clone + Copy + PartialEq + PartialOrd + Sized 
         + wr::WrappingShl
         + wr::WrappingShr
         + wr::WrappingSub
-        + AsPrimitive<isize>
+        + AsPrimitive<i64>
         + Bounded
         + FromPrimitive;
 

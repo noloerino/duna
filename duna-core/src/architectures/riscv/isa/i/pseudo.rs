@@ -1,5 +1,7 @@
 //! Contains definitions for RISCV pseudo-instructions.
 //! These definitions are reexported by the isa module.
+//!
+//! Immediates produced from labels are the value calculated by the assembler/linker.
 
 use super::*;
 use crate::{
@@ -10,19 +12,13 @@ use RiscVRegister::*;
 
 pub struct La;
 impl La {
-    /// Since the AUIPC is emitted immediately before the ADDI, the offset of the ADDI must be
-    /// adjusted by the size of one instruction to account for this difference.
-    fn get_lower(imm: BitStr32) -> BitStr32 {
-        let lower = imm.slice(11, 0);
-        BitStr32::new(lower.as_u32() + 4, 12)
-    }
-
     pub fn expand_upper<S: AtLeast32b>(reg: RiscVRegister, data: RegValue<S>) -> RiscVInst<S> {
         let imm: BitStr32 = data.to_bit_str(32);
         let mut upper = imm.slice(31, 12);
-        let lower = La::get_lower(imm);
-        // offset sign extension
-        if lower.index(11).as_u32() > 0 {
+        // Offset sign extension if needed
+        // Do NOT add 4 to lower - lower adds 4 to its immediate because the immediate it sees
+        // is already decremented by 4 since it's provided 1 instruction later
+        if imm.index(11).as_u32() > 0 {
             upper = BitStr32::new(upper.as_u32() + 1, 20);
         }
         Auipc::new(reg, UnsignedValue::<S>::from(upper).into())
@@ -30,7 +26,9 @@ impl La {
 
     pub fn expand_lower<S: AtLeast32b>(reg: RiscVRegister, data: RegValue<S>) -> RiscVInst<S> {
         let imm: BitStr32 = data.to_bit_str(32);
-        let lower = La::get_lower(imm);
+        // Because auipc was one instruction before us and data is the offset from ourselves,
+        // add 4 to the difference to account for the extra instruction
+        let lower = BitStr32::new(imm.slice(11, 0).as_u32() + 4, 12);
         Addi::new(reg, reg, SignedValue::<S>::from(lower).into())
     }
 }
@@ -214,5 +212,24 @@ mod tests {
         assert_eq!(state.regfile_read(A0), (-v1).into());
         state.apply_inst_test(&Neg::expand(A0, A0));
         assert_eq!(state.regfile_read(A0), v1.into());
+    }
+
+    /// This expansion is generated from the following code snippet, and cross-checked with Venus
+    ///
+    /// addi a0, zero, 5
+    /// la t0, v
+    /// lw a1, 0(t0)
+    /// sw a0, 0(t0)
+    /// .data
+    /// v: .word 4
+    #[test]
+    fn test_la_auipc_expansion() {
+        let offs = DataLword::from(0x1000_0000i32 - 4);
+        let offs_p4 = DataLword::from(0x1000_0000i32 - 8);
+        assert_eq!(La::expand_upper(A0, offs), Auipc::new(A0, 65536i32.into()));
+        assert_eq!(
+            La::expand_lower(A0, offs_p4),
+            Addi::new(A0, A0, (-4i32).into())
+        );
     }
 }

@@ -1,14 +1,15 @@
-// JQuery is required for GoldenLayout, meaning it's available even if it's not a direct
-// dependency
-import $ from "jquery";
+// JQuery is required for GoldenLayout, meaning it's available even if it's not a direct dependency
+import "jquery";
 import GoldenLayout from "golden-layout";
 import "golden-layout/src/css/goldenlayout-base.css";
 import "golden-layout/src/css/goldenlayout-light-theme.css";
 // Needed for JSX
 import React from "../no-react";
 
-// Takes in a function of the form (state) => jsx
-// and appends it to the golden container
+// Takes in a function of the form ((state) => jsx) and appends it to the golden container
+//
+// The second arg to registerComponent needs to be a function keyword, not a lambda
+// because reasons
 const goldenComponent = (jsxFn) => {
   return function (container, state) {
     container.getElement()[0].appendChild(jsxFn(state));
@@ -18,7 +19,8 @@ const goldenComponent = (jsxFn) => {
 const config = {
   settings: {
     showPopoutIcon: false,
-    showMaximizeIcon: false,
+    showMaximiseIcon: false,
+    showCloseIcon: false,
   },
   content: [
     {
@@ -26,22 +28,36 @@ const config = {
       height: 100,
       content: [
         {
-          type: "component",
-          componentName: "editor",
-          componentState: {},
-        },
-        {
           type: "column",
           content: [
             {
               type: "component",
-              componentName: "console",
+              componentName: "editor",
               componentState: {},
+              isClosable: false,
             },
             {
               type: "component",
               componentName: "errors",
               componentState: {},
+              isClosable: false,
+            },
+          ],
+        },
+        {
+          type: "stack",
+          content: [
+            {
+              type: "component",
+              componentName: "state",
+              componentState: {},
+              isClosable: false,
+            },
+            {
+              type: "component",
+              componentName: "console",
+              componentState: {},
+              isClosable: false,
             },
           ],
         },
@@ -51,48 +67,72 @@ const config = {
 };
 
 export const goldenInit = () => {
-  let layout = new GoldenLayout(config,
-    // document.getElementById("golden-base")
-    $("#golden-base")
-    // null
-    );
-  // The second arg to registerComponent needs to be a function keyword, not a lambda
-  // because reasons
+  let layout = new GoldenLayout(
+    config,
+    document.getElementById("golden-base")
+  );
   layout.registerComponent(
     "editor",
     goldenComponent(() => (
-      <div style="flex: 1;">
+      <div>
+        {/* TODO put this in a toolbar */}
+        <div id="buttons" className="flexRow" style={{
+            margin: "0.5em",
+        }}>
+          <button id="assemble">Assemble</button>
+          <button id="step">Step</button>
+          <button id="run">Run</button>
+          <div style={{flex: 6}}></div>
+        </div>
         <textarea
           id="code"
           rows="20"
           cols="80"
           placeholder="your code here"
         ></textarea>
-        <div style="margin-left: 1em;">
-          <p>
-            Program exited with code <span id="exit-code">--</span>
-          </p>
-          {/* TODO replace this with assemble/simulate buttons */}
-          <button id="go">Go!</button>
-        </div>
       </div>
-    )
-  ));
+    ))
+  );
   layout.registerComponent(
     "console",
     goldenComponent(() => (
-      <textarea
-        id="stdout"
-        disabled
-        placeholder="console output appears here"
-        style="flex: 1;"
-      ></textarea>
+      // Fragment isn't implemented :(
+      <div className="flexCol">
+        <p style={{ fontSize: "14px", marginLeft: "0.5em" }}>
+          Program exited with code <span id="exit-code">--</span>
+        </p>
+        <textarea
+          id="stdout"
+          disabled
+          placeholder="console output appears here"
+          style={{ flex: 1, fontSize: "14px" }}
+        ></textarea>
+      </div>
     ))
   );
   layout.registerComponent(
     "errors",
     goldenComponent(() => (
-      <pre id="compile-errors" style="margin-left: 2em; margin-right: 2em;"></pre>
+      <pre
+        id="compile-errors"
+        style={{ marginLeft: "0.5em", marginRight: "0.5em", fontSize: "14px" }}
+      ></pre>
+    ))
+  );
+  layout.registerComponent(
+    "state",
+    goldenComponent(() => (
+      <span id="sim-state" className="flexCol" style={{
+          fontSize: "14px",
+          whiteSpace: "pre-wrap",
+          margin: "0.5em"
+        }}>
+        <span>
+          program state appears here during simulation
+          <br/>
+          press assemble & step to begin
+        </span>
+      </span>
     ))
   );
   layout.init();

@@ -802,7 +802,13 @@ impl<'a, S: AtLeast32b> InstParser<'a, S> {
                 match last_arg {
                     ImmOrLabelRef::Imm(imm) => Ok(vec![
                         PartialInst::new_complete(isa::La::expand_upper(rd, imm)),
-                        PartialInst::new_complete(isa::La::expand_lower(rd, imm)),
+                        PartialInst::new_complete(isa::La::expand_lower(
+                            rd,
+                            // Since the AUIPC is emitted immediately before the ADDI, the offset
+                            // of the ADDI must be adjusted by the size of one instruction to
+                            // because the pseudo instruction expansion will automatically add 4
+                            imm + RegValue::<S>::from(-4i64),
+                        )),
                     ]),
                     ImmOrLabelRef::LabelRef(tgt_label) => Ok(vec![
                         PartialInst::new_one_reg_needs_label(

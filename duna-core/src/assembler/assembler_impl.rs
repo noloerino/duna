@@ -342,10 +342,11 @@ impl<A: Architecture> UnlinkedProgram<A> {
                         if section != ProgramSection::Data {
                             unimplemented!()
                         }
-                        // since inst_index is in words, we need to multiply by 4
-                        let small_distance = (data_index as isize) - ((inst_index * 4) as isize);
-                        let byte_distance = small_distance + (data_start - text_start).raw().as_();
-                        byte_distance as i64
+                        let data_loc = data_start + (data_index as i64).into();
+                        // inst index is in words, so multiply by 4
+                        let pc = text_start + ((inst_index * 4) as i64).into();
+                        let byte_distance = data_loc - pc;
+                        AsPrimitive::<i64>::as_(byte_distance.raw())
                     }
                 };
                 let (file_id, old_inst) = &insts[inst_index];

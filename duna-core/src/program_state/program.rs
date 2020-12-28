@@ -150,7 +150,20 @@ impl<A: Architecture> Program<A> {
     /// The lower 7 bits are the value passed to the exit handler (or the default register for the
     /// first argument of a syscall if exit is not explicitly invoked), and will be truncated.
     pub fn run(&mut self) -> u8 {
-        ProgramExecutor::run(self)
+        // for now, just use the instruction vec to determine the next instruction
+        // for now, if we're out of instructions just call it a day
+        // if pc dipped below pc_start, panic for now is also fine
+        while let Some(inst) = self.insts.get(self.get_pc_word_index()) {
+            if let Err(cause) = self.state.apply_inst(inst) {
+                return cause.handle_exit(&mut self.state);
+            }
+        }
+        let a0 =
+            <A::ProgramBehavior as ProgramBehavior<A::Family, A::DataWidth>>::return_register();
+        let a0_val: UnsignedValue<A::DataWidth> = self.state.regfile_read(a0).into();
+        // For a non-abnormal exit, downcast to u8 and set upper bit to 0
+        let val_u8 = AsPrimitive::<u8>::as_(a0_val.raw());
+        val_u8 & 0b0111_1111
     }
 
     /// Returns the instructions provided to this program.
@@ -206,6 +219,19 @@ impl<A: Architecture> ProgramExecutor<A> {
             curr_inst_idx: 0,
             curr_step_idx: 0,
         }
+    }
+
+    /// Returns a reference to the underlying program state.
+    pub fn state(&self) -> &ProgramState<A::Family, A::DataWidth> {
+        &self.program.state
+    }
+
+    /// Resets the program state and starts execution from the begining.
+    pub fn reset(&mut self) {
+        self.program.reset();
+        self.inst_stack.clear();
+        self.curr_inst_idx = 0;
+        self.curr_step_idx = 0;
     }
 
     pub fn curr_inst(&self) -> Option<&<A::Family as ArchFamily<A::DataWidth>>::Instruction> {
@@ -294,21 +320,9 @@ impl<A: Architecture> ProgramExecutor<A> {
 
     /// Runs the program to completion, returning an exit code.
     /// Hangs on an infinite loop.
-    pub fn run(program: &mut Program<A>) -> u8 {
-        // for now, just use the instruction vec to determine the next instruction
-        // for now, if we're out of instructions just call it a day
-        // if pc dipped below pc_start, panic for now is also fine
-        while let Some(inst) = program.insts.get(program.get_pc_word_index()) {
-            if let Err(cause) = program.state.apply_inst(inst) {
-                return cause.handle_exit(&mut program.state);
-            }
-        }
-        let a0 =
-            <A::ProgramBehavior as ProgramBehavior<A::Family, A::DataWidth>>::return_register();
-        let a0_val: UnsignedValue<A::DataWidth> = program.state.regfile_read(a0).into();
-        // For a non-abnormal exit, downcast to u8 and set upper bit to 0
-        let val_u8 = AsPrimitive::<u8>::as_(a0_val.raw());
-        val_u8 & 0b0111_1111
+    /// TODO replace this with a function that updates executor state properly
+    pub fn run(&mut self) -> u8 {
+        self.program.run()
     }
 }
 
@@ -359,7 +373,7 @@ impl<F: ArchFamily<S>, S: DataWidth> ProgramState<F, S> {
         self.user_state.regfile.set(reg, val);
     }
 
-    pub fn regfile(&mut self) -> &RegFile<F::Register, S> {
+    pub fn regfile(&self) -> &RegFile<F::Register, S> {
         &self.user_state.regfile
     }
 
@@ -782,5 +796,56 @@ mod tests {
         assert_eq!(executor.revert(), Some(()));
         assert_eq!(executor.program.state.regfile_read(A0), 4u32.into());
         assert_eq!(executor.program.state.regfile_read(A1), 2u32.into());
+    }
+
+    /// Checks reset behavior of the executor.
+    /// Note the code under test also checks an edge case of loading from an offset of exactly
+    /// 0x0FFF_FFFC, which tests wrapping behavior for the auipc/addi expansion of addi.
+    #[test]
+    fn test_reset() {
+        let code = "
+            addi a0, zero, 5
+            la t0, v
+            lw a1, 0(t0)
+            sw a0, 0(t0)
+
+            .data
+            v: .word 4
+            ";
+        let mut executor = ProgramExecutor::<RV32>::new(code.parse::<Program<RV32>>().unwrap());
+        // Sanity check of initialization
+        assert_eq!(executor.program.state.regfile_read(A0), 0u32.into());
+        assert_eq!(executor.step(), None);
+        assert_eq!(executor.program.state.regfile_read(A0), 5u32.into());
+        assert_eq!(executor.program.state.regfile_read(A1), 0u32.into());
+        // Observe after reset
+        executor.reset();
+        assert_eq!(executor.program.state.regfile_read(A0), 0u32.into());
+        // Shouldn't be able to revert at beginning
+        assert_eq!(executor.revert(), None);
+        // Step 4 times to skip pseudo-op expansion of la, then the lw
+        for _ in 0..4 {
+            println!("{:?}", executor.curr_inst());
+            assert_eq!(executor.step(), None);
+        }
+        // Check result of memory load
+        assert_eq!(executor.program.state.regfile_read(A1), 4u32.into());
+        let v_addr = executor.program.state.regfile_read(T0).as_byte_addr();
+        assert_eq!(
+            executor.program.state.memory_inspect_word(v_addr),
+            4u32.into()
+        );
+        // Check result of store
+        assert_eq!(executor.step(), None);
+        assert_eq!(
+            executor.program.state.memory_inspect_word(v_addr),
+            5u32.into()
+        );
+        // Reset again, ensure memory reset
+        executor.reset();
+        assert_eq!(
+            executor.program.state.memory_inspect_word(v_addr),
+            4u32.into()
+        );
     }
 }
