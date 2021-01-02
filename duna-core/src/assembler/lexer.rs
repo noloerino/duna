@@ -107,7 +107,8 @@ fn is_delim(c: char) -> bool {
 
 fn is_name_start(c: char) -> bool {
     // minus signs and numbers cannot start names; for now we're conservative
-    c == '_' || c.is_alphabetic()
+    // dollar signs prefix registers in MIPS
+    c == '$' || c == '_' || c.is_alphabetic()
 }
 
 fn is_imm_start(c: char) -> bool {
