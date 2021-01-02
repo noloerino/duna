@@ -1,5 +1,5 @@
 use super::{instruction::*, parser::MipsParser, program::*, registers::MipsRegister};
-use crate::{arch::*, program_state::*};
+use crate::{arch::*, data_structures::*};
 use std::marker::PhantomData;
 
 pub struct Mips<S: DataWidth> {

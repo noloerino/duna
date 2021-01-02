@@ -5,12 +5,11 @@
 //! ends up I guess.
 
 use super::{
-    datatypes::*,
     memory::*,
     program::{DiffStack, ProgramState, RegDataChange, StateDiff},
     registers::*,
 };
-use crate::arch::*;
+use crate::{arch::*, data_structures::*};
 
 /// Contains program state that is visible to the user.
 pub struct UserState<F: ArchFamily<S>, S: DataWidth> {

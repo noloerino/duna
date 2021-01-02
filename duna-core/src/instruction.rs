@@ -1,6 +1,7 @@
 use crate::{
     arch::*,
-    program_state::{DataWidth, InstResult, ProgramState},
+    data_structures::DataWidth,
+    program_state::{InstResult, ProgramState},
 };
 use std::fmt;
 

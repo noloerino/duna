@@ -1,7 +1,7 @@
 use super::arch::Mips;
 use crate::{
     assembler::{lexer::*, parser::*},
-    program_state::*,
+    data_structures::*,
 };
 use std::marker::PhantomData;
 

@@ -1,5 +1,8 @@
 //! Defines a few traits needed to add support for a new architecture to duna.
-use crate::{assembler::parser::Parser, instruction::ConcreteInst, program_state::*};
+use crate::{
+    assembler::parser::Parser, data_structures::DataWidth, instruction::ConcreteInst,
+    program_state::*,
+};
 
 /// Represents an architecture including word size, e.g. "x86-64" or "riscv-32".
 pub trait Architecture: Sized {

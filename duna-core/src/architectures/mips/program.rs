@@ -1,5 +1,5 @@
 use super::{arch::*, registers::MipsRegister};
-use crate::program_state::*;
+use crate::{data_structures::*, program_state::*};
 use num_traits::cast::AsPrimitive;
 use std::{collections::HashMap, marker::PhantomData};
 

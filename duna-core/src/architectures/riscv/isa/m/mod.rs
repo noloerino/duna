@@ -7,7 +7,7 @@ use crate::{
         instruction::*,
         isa::i::{f3, f7},
     },
-    program_state::*,
+    data_structures::*,
 };
 use num_traits::ops::checked::{CheckedDiv, CheckedRem};
 

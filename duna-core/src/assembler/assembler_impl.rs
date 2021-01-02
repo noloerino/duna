@@ -4,7 +4,7 @@ use super::{
     parser::{Label, LabelDef, LabelRef, ParseResult, Parser},
     partial_inst::{PartialInst, PartialInstType},
 };
-use crate::{arch::*, config::*, program_state::*};
+use crate::{arch::*, config::*, data_structures::*, program_state::*};
 use num_traits::cast::AsPrimitive;
 use std::{
     collections::{HashMap, HashSet},

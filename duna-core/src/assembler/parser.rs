@@ -5,7 +5,7 @@ use super::{
     lexer::*,
     partial_inst::PartialInst,
 };
-use crate::{arch::*, program_state::*};
+use crate::{arch::*, data_structures::*};
 use std::{collections::HashSet, iter::Peekable, vec::IntoIter};
 
 pub type Label = String;

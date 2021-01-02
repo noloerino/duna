@@ -1,5 +1,6 @@
 use crate::{
     architectures::riscv::{instruction::*, isa::i::f3, *},
+    data_structures::*,
     program_state::*,
 };
 use duna_macro::*;

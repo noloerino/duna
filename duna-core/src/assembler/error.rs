@@ -443,7 +443,7 @@ impl fmt::Display for ParseError {
 mod tests {
     use super::super::parser::Parser;
     use crate::architectures::riscv::RiscVParser;
-    use crate::program_state::W32b;
+    use crate::data_structures::W32b;
 
     #[test]
     /// Tests that an error produced by the lexer makes it so the affected line is not passed

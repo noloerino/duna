@@ -1,6 +1,6 @@
 #![allow(clippy::new_ret_no_self)]
 use super::{arch::Mips, exception::Exception, registers::MipsRegister};
-use crate::{instruction::*, program_state::*};
+use crate::{data_structures::*, instruction::*, program_state::*};
 use std::fmt;
 
 pub type InstApplyFn<S> = dyn Fn(&ProgramState<Mips<S>, S>) -> InstResult<Mips<S>, S>;

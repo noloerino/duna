@@ -8,3 +8,4 @@ pub mod assembler;
 pub mod config;
 pub mod instruction;
 pub mod program_state;
+mod data_structures;

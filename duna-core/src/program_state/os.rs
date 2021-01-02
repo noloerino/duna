@@ -2,17 +2,17 @@
 //! to the running process, such as file descriptors and the page table.
 
 use super::{
-    datatypes::*,
     memory::*,
     phys::PhysMem,
     program::{DiffStack, ProgramState, StateDiff},
 };
-use crate::arch::*;
+use crate::{arch::*, data_structures::*};
 use num_traits::cast::AsPrimitive;
 
-/// Contains program state that is visited only to privileged entities, i.e. a kernel thread.
+/// Contains architecture-agnostic program state that is visited only to privileged entities,
+/// i.e. a kernel thread.
 /// TODO add kernel thread information (tid, file descriptors, etc.)
-pub struct PrivState<S: DataWidth> {
+pub struct OsState<S: DataWidth> {
     // used for reset information
     original_heap_start: ByteAddrValue<S>,
     pub brk: ByteAddrValue<S>,
@@ -24,9 +24,9 @@ pub struct PrivState<S: DataWidth> {
     // file_descriptors: Vec<Vec<u8>>
 }
 
-impl<S: DataWidth> PrivState<S> {
+impl<S: DataWidth> OsState<S> {
     pub fn new(heap_start: ByteAddrValue<S>, page_table: Box<dyn PageTable<S>>) -> Self {
-        PrivState {
+        OsState {
             original_heap_start: heap_start,
             brk: heap_start,
             heap_start,

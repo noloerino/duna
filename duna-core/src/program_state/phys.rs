@@ -1,7 +1,7 @@
 //! Represents the physical devices accessible to the machine, such as the disk and RAM.
 
-use super::{datatypes::*, program::StateDiff};
-use crate::arch::*;
+use super::program::StateDiff;
+use crate::{arch::*, data_structures::*};
 use std::{collections::HashMap, fmt};
 
 /// Indexes into physical memory. Constrained by the number of pages.

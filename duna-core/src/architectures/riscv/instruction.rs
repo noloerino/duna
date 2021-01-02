@@ -1,6 +1,6 @@
 #![allow(clippy::new_ret_no_self)]
 use super::{arch::*, registers::RiscVRegister};
-use crate::{instruction::ConcreteInst, program_state::*};
+use crate::{data_structures::*, instruction::ConcreteInst, program_state::*};
 use std::fmt;
 
 pub struct RInstFields {
@@ -440,7 +440,7 @@ mod tests {
         super::isa::{Addi, Nop},
         *,
     };
-    use crate::program_state::W32b;
+    use crate::data_structures::W32b;
     use RiscVRegister::*;
 
     #[test]

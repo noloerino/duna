@@ -1,7 +1,7 @@
 use super::{arch::*, instruction::*, isa, isa::*, registers::RiscVRegister};
 use crate::{
     assembler::{lexer::*, parser::*, *},
-    program_state::*,
+    data_structures::*,
 };
 use std::{collections::HashMap, iter::Peekable, marker::PhantomData, vec::IntoIter};
 
@@ -1216,7 +1216,7 @@ mod tests {
         super::{isa::*, registers::RiscVRegister::*},
         *,
     };
-    use crate::{instruction::ConcreteInst, program_state::DataLword};
+    use crate::{data_structures::DataLword, instruction::ConcreteInst};
 
     /// Lexes a program. Asserts that the lex has no errors.
     fn lex(prog: &str) -> LexResult {

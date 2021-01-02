@@ -5,6 +5,7 @@ mod r_type;
 
 use crate::{
     architectures::riscv::{arch::*, instruction::*, registers::RiscVRegister},
+    data_structures::*,
     program_state::*,
 };
 pub use i_type::*;

@@ -3,7 +3,7 @@ use crate::{
         instruction::*,
         isa::i::{f3, f7},
     },
-    program_state::*,
+    data_structures::*,
 };
 use num_traits::ops::wrapping::{WrappingAdd, WrappingSub};
 
@@ -335,7 +335,7 @@ impl<S: AtLeast32b> RType<S> for Xor {
 #[cfg(test)]
 mod tests_32 {
     use super::{super::tests_32::*, *};
-    use crate::architectures::riscv::*;
+    use crate::{architectures::riscv::*, program_state::ProgramState};
 
     struct RTestData {
         rs2: RiscVRegister,

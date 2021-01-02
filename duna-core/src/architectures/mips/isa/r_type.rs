@@ -1,6 +1,6 @@
 use crate::{
     architectures::mips::{exception::Exception, instruction::*, isa::*},
-    program_state::*,
+    data_structures::*,
 };
 use num_traits::ops::checked::CheckedAdd;
 
@@ -37,7 +37,10 @@ impl<S: AtLeast32b> RType<S> for Add {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::architectures::mips::{arch::Mips, registers::MipsRegister::*};
+    use crate::{
+        architectures::mips::{arch::Mips, registers::MipsRegister::*},
+        program_state::*,
+    };
 
     pub fn get_init_state() -> ProgramState<Mips<W32b>, W32b> {
         let state: ProgramState<Mips<W32b>, W32b> = Default::default();

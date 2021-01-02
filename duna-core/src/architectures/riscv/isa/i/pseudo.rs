@@ -6,7 +6,7 @@
 use super::*;
 use crate::{
     architectures::riscv::{instruction::*, registers::RiscVRegister},
-    program_state::*,
+    data_structures::*,
 };
 use RiscVRegister::*;
 
@@ -165,7 +165,8 @@ mod tests {
     use super::*;
     use crate::{
         architectures::riscv::RiscV,
-        program_state::{DataLword, ProgramState, W32b},
+        data_structures::{DataLword, W32b},
+        program_state::ProgramState,
     };
 
     type Expanded = Vec<RiscVInst<W32b>>;

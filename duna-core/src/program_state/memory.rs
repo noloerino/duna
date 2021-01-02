@@ -1,5 +1,5 @@
-use super::{bitmap::Bitmap, datatypes::*, phys::*, priv_s::PrivDiff, program::StateDiff};
-use crate::arch::*;
+use super::{os::PrivDiff, phys::*, program::StateDiff};
+use crate::{arch::*, data_structures::*};
 use std::{collections::HashMap, fmt, marker::PhantomData};
 
 // Because WASM is a 32-bit target, usize doesn't cut it

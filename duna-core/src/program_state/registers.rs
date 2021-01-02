@@ -1,4 +1,4 @@
-use crate::program_state::*;
+use crate::data_structures::*;
 use std::{fmt, marker::PhantomData};
 
 /// Marker trait to denote an integer register.

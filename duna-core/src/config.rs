@@ -1,4 +1,4 @@
-use crate::program_state::*;
+use crate::{data_structures::*, program_state::*};
 
 /// Options for the assembler.
 #[derive(Debug)]

@@ -1,4 +1,5 @@
-use crate::program_state::*;
+use crate::data_structures::*;
+use crate::program_state::IRegister;
 use std::fmt;
 
 #[derive(Copy, Clone, PartialEq, Debug)]

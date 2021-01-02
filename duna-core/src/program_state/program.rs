@@ -1,9 +1,10 @@
-use super::{datatypes::*, memory::*, registers::RegFile};
-pub use super::{phys::*, priv_s::*, user::*};
+use super::{memory::*, registers::RegFile};
+pub use super::{os::*, phys::*, user::*};
 use crate::{
     arch::*,
     assembler::{ErrorReport, Linker, SectionStore},
     config::{MemConfig, SegmentStarts},
+    data_structures::*,
     instruction::ConcreteInst,
 };
 use num_traits::{cast::AsPrimitive, ops::wrapping::WrappingSub};
@@ -328,7 +329,7 @@ impl<A: Architecture> ProgramExecutor<A> {
 
 pub struct ProgramState<F: ArchFamily<S>, S: DataWidth> {
     pub(crate) user_state: UserState<F, S>,
-    pub(crate) priv_state: PrivState<S>,
+    pub(crate) priv_state: OsState<S>,
     pub(crate) phys_state: PhysState,
 }
 
@@ -645,7 +646,7 @@ impl<F: ArchFamily<S>, S: DataWidth> ProgramState<F, S> {
         ProgramState {
             user_state: UserState::new(),
             // Initialize heap to zero (program initialization will set it properly)
-            priv_state: PrivState::new(RegValue::<S>::zero().into(), pt),
+            priv_state: OsState::new(RegValue::<S>::zero().into(), pt),
             // TODO make endianness/alignment configurable
             phys_state: PhysState::new(Endianness::default(), true, phys_pg_count, pg_ofs_len),
         }
