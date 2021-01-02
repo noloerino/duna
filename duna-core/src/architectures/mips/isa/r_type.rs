@@ -52,10 +52,10 @@ mod tests {
     // #[test]
     // fn test_add_overflow() {
     //     let mut state = get_init_state();
-    //     state.regfile_set(S0, 0xFFFF_FFFF.into());
+    //     state.regfile_set(S0, 0xFFFF_FFFFu32.into());
     //     state.regfile_set(S1, 0x1.into());
-    //     let result = state.apply_inst(&Add::new(A0, S0, S1)).unwrap_err();
-    //     assert_eq!(result, Exception::Overflow);
+    //     state.apply_inst(&Add::new(A0, S0, S1)).ok();
+    //     assert_eq!(state.priv_state.overflow, true);
     // }
 
     #[test]

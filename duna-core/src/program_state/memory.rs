@@ -1,4 +1,4 @@
-use super::{os::PrivDiff, phys::*, program::StateDiff};
+use super::{priv_s::PrivDiff, phys::*, program::StateDiff};
 use crate::{arch::*, data_structures::*};
 use std::{collections::HashMap, fmt, marker::PhantomData};
 

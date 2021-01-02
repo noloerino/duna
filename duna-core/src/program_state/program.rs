@@ -1,5 +1,5 @@
 use super::{memory::*, registers::RegFile};
-pub use super::{os::*, phys::*, user::*};
+pub use super::{priv_s::*, phys::*, user::*};
 use crate::{
     arch::*,
     assembler::{ErrorReport, Linker, SectionStore},
@@ -329,7 +329,7 @@ impl<A: Architecture> ProgramExecutor<A> {
 
 pub struct ProgramState<F: ArchFamily<S>, S: DataWidth> {
     pub(crate) user_state: UserState<F, S>,
-    pub(crate) priv_state: OsState<S>,
+    pub(crate) priv_state: PrivState<S>,
     pub(crate) phys_state: PhysState,
 }
 
@@ -513,7 +513,7 @@ impl<F: ArchFamily<S>, S: DataWidth> ProgramState<F, S> {
                 MemFaultCause::BusError => PrivDiff::Terminate(TermCause::BusError),
             }
             .into_diff_stack()),
-            TrapKind::IntOverflow => todo!(),
+            _ => todo!(),
         }
     }
 
@@ -646,7 +646,7 @@ impl<F: ArchFamily<S>, S: DataWidth> ProgramState<F, S> {
         ProgramState {
             user_state: UserState::new(),
             // Initialize heap to zero (program initialization will set it properly)
-            priv_state: OsState::new(RegValue::<S>::zero().into(), pt),
+            priv_state: PrivState::new(RegValue::<S>::zero().into(), pt),
             // TODO make endianness/alignment configurable
             phys_state: PhysState::new(Endianness::default(), true, phys_pg_count, pg_ofs_len),
         }

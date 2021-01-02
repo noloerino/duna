@@ -12,7 +12,7 @@ use num_traits::cast::AsPrimitive;
 /// Contains architecture-agnostic program state that is visited only to privileged entities,
 /// i.e. a kernel thread.
 /// TODO add kernel thread information (tid, file descriptors, etc.)
-pub struct OsState<S: DataWidth> {
+pub struct PrivState<S: DataWidth> {
     // used for reset information
     original_heap_start: ByteAddrValue<S>,
     pub brk: ByteAddrValue<S>,
@@ -24,9 +24,9 @@ pub struct OsState<S: DataWidth> {
     // file_descriptors: Vec<Vec<u8>>
 }
 
-impl<S: DataWidth> OsState<S> {
+impl<S: DataWidth> PrivState<S> {
     pub fn new(heap_start: ByteAddrValue<S>, page_table: Box<dyn PageTable<S>>) -> Self {
-        OsState {
+        PrivState {
             original_heap_start: heap_start,
             brk: heap_start,
             heap_start,

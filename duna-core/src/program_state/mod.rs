@@ -1,6 +1,6 @@
 mod memory;
 mod phys;
-mod os;
+mod priv_s;
 mod program;
 mod registers;
 mod user;
