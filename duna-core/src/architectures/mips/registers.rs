@@ -3,7 +3,7 @@ use std::fmt;
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum MipsRegister {
-    R0,
+    ZERO,
     AT,
     V0,
     V1,
@@ -53,9 +53,11 @@ impl From<u8> for MipsRegister {
 
 use MipsRegister::*;
 impl MipsRegister {
+    pub const R0: MipsRegister = ZERO;
+    pub const FP: MipsRegister = S8;
     pub const REG_ARRAY: [MipsRegister; 32] = [
-        R0, AT, V0, V1, A0, A1, A2, A3, T0, T1, T2, T3, T4, T5, T6, T7, S0, S1, S2, S3, S4, S5, S6,
-        S7, T8, S9, K0, K1, GP, SP, S8, RA,
+        ZERO, AT, V0, V1, A0, A1, A2, A3, T0, T1, T2, T3, T4, T5, T6, T7, S0, S1, S2, S3, S4, S5,
+        S6, S7, T8, S9, K0, K1, GP, SP, S8, RA,
     ];
     pub const fn to_bit_str(self) -> BitStr32 {
         BitStr32::new(self as u32, 5)

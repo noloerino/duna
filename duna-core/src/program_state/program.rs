@@ -512,6 +512,7 @@ impl<F: ArchFamily<S>, S: DataWidth> ProgramState<F, S> {
                 MemFaultCause::BusError => PrivDiff::Terminate(TermCause::BusError),
             }
             .into_diff_stack()),
+            TrapKind::IntOverflow => todo!(),
         }
     }
 

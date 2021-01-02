@@ -1,5 +1,5 @@
 #![allow(clippy::new_ret_no_self)]
-use super::{arch::Mips, registers::MipsRegister};
+use super::{arch::Mips, exception::Exception, registers::MipsRegister};
 use crate::{instruction::*, program_state::*};
 use std::fmt;
 
@@ -53,14 +53,7 @@ impl<S: AtLeast32b> ConcreteInst<Mips<S>, S> for MipsInst<S> {
                         shamt,
                         funct,
                     },
-            } => {
-                opcode.to_bit_str()
-                    + rs.to_bit_str()
-                    + rt.to_bit_str()
-                    + rd.to_bit_str()
-                    + shamt
-                    + funct
-            }
+            } => opcode + rs.to_bit_str() + rt.to_bit_str() + rd.to_bit_str() + shamt + funct,
             InstFields::I {
                 opcode,
                 rs,
@@ -115,9 +108,9 @@ impl<S: AtLeast32b> fmt::Display for MipsInst<S> {
 }
 
 pub struct RInstFields {
-    opcode: MipsRegister,
-    shamt: BitStr32,
-    funct: BitStr32,
+    pub opcode: BitStr32,
+    pub shamt: BitStr32,
+    pub funct: BitStr32,
 }
 
 pub trait RType<S: AtLeast32b> {
@@ -125,9 +118,17 @@ pub trait RType<S: AtLeast32b> {
         MipsInst {
             eval: Box::new(move |state| {
                 let user_state = &state.user_state;
-                let new_rd_val =
+                let maybe_new_rd_val =
                     Self::eval(user_state.regfile.read(rs), user_state.regfile.read(rt));
-                Ok(UserDiff::reg_write_pc_p4(user_state, rd, new_rd_val))
+                Ok(maybe_new_rd_val
+                    .map(|new_rd_val| UserDiff::reg_write_pc_p4(user_state, rd, new_rd_val))
+                    .unwrap_or_else(|e| {
+                        vec![UserDiff::Trap(match e {
+                            Exception::Overflow => TrapKind::IntOverflow,
+                            // _ => unimplemented!(),
+                        })
+                        .into_state_diff()]
+                    }))
             }),
             data: InstData::new(
                 Self::name(),
@@ -147,7 +148,7 @@ pub trait RType<S: AtLeast32b> {
 
     // JR is the only R-type that doesn't set rd, so we can just special case that
     /// Calculates the new value of rd given values of rs1 and rs2.
-    fn eval(rs1_val: RegValue<S>, rs2_val: RegValue<S>) -> RegValue<S>;
+    fn eval(rs1_val: RegValue<S>, rs2_val: RegValue<S>) -> Result<RegValue<S>, Exception>;
 }
 
 pub trait IType<S: AtLeast32b> {

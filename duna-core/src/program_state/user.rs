@@ -159,12 +159,18 @@ impl<F: ArchFamily<S>, S: DataWidth> UserDiff<F, S> {
 }
 
 /// Represents the type of trap being raised from user mode.
-/// See "Machine Cause Register" in the RISCV privileged spec for details.
+/// The exact consequences of these traps and the scenarios in which they occur are specific to
+/// particular ISAs; for example, MIPS arithmetic instructions raise exceptions on overflow,
+/// while RISC-V ones do not.
+///
+/// RISC-V: See "Machine Cause Register" in the RISC-V privileged spec.
+/// MIPS: See "A.7: Exceptions and Interrupts" in the SPIM manual.
 #[derive(Copy, Clone)]
 pub enum TrapKind<S: DataWidth> {
     /// Corresponds to an ecall instruction issued from user mode.
     Ecall,
     MemFault(MemFault<S>),
+    IntOverflow,
 }
 
 /// Converts a memory fault into a trap.

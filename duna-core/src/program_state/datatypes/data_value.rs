@@ -75,6 +75,7 @@ pub trait DataWidth: fmt::Debug + Clone + Copy + PartialEq + PartialOrd + Sized 
     type S: PrimInt
         + sign::Signed
         + fmt::Display
+        + ch::CheckedAdd
         + ch::CheckedDiv
         + ch::CheckedRem
         + wr::WrappingAdd
@@ -350,6 +351,14 @@ impl<S: DataWidth, T: DataInterp> core::ops::Add for DataValue<S, T> {
                 .raw()
                 .wrapping_add(&other.as_signed().raw()),
         )
+    }
+}
+
+impl<S: DataWidth, T: DataInterp> ch::CheckedAdd for DataValue<S, T> {
+    fn checked_add(&self, v: &Self) -> Option<Self> {
+        Some(Self::from_signed(
+            self.as_signed().raw().checked_add(&v.as_signed().raw())?,
+        ))
     }
 }
 

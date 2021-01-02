@@ -381,8 +381,8 @@ mod tests_32 {
         }
     }
 
-    #[test]
     /// The RISCV spec defines all arithmetic to be wrapping.
+    #[test]
     fn test_add_overflow() {
         let mut state = get_init_state();
         let rs1_val = 11_0729_6010_i32;
