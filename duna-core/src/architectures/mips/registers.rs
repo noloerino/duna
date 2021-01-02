@@ -4,7 +4,7 @@ use std::fmt;
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum MipsRegister {
-    ZERO,
+    ZERO = 0,
     AT,
     V0,
     V1,

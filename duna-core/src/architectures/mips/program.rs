@@ -9,11 +9,11 @@ pub struct MipsProgramBehavior<T: DataWidth> {
 
 impl ProgramBehavior<Mips<W32b>, W32b> for MipsProgramBehavior<W32b> {
     fn sp_register() -> MipsRegister {
-        unimplemented!()
+        MipsRegister::SP
     }
 
     fn return_register() -> MipsRegister {
-        unimplemented!()
+        MipsRegister::V0
     }
 }
 
@@ -60,14 +60,28 @@ impl<S: AtLeast32b> SyscallConvention<Mips<S>, S> for MipsSyscallConvention<S> {
     }
 
     fn syscall_number_reg() -> MipsRegister {
-        unimplemented!()
+        MipsRegister::V0
     }
 
     fn syscall_arg_regs() -> Vec<MipsRegister> {
-        unimplemented!()
+        use MipsRegister::*;
+        vec![A0, A1, A2, A3]
     }
 
     fn syscall_return_regs() -> Vec<MipsRegister> {
-        unimplemented!()
+        vec![MipsRegister::V0, MipsRegister::V1]
     }
+}
+
+/// Addresses of control registers implemented by the MIPS architecture. These are the same subset
+/// that is implemented by SPIM.
+pub enum MipsCsr {
+    /// "The memory address at which memory reference occurred"
+    BadVAddr = 8,
+    /// "Interrupt mask/enable bits"
+    Status = 12,
+    /// "Exception type and pending interrupt bits"
+    Cause = 13,
+    /// "Address of instruction that caused the instruction"
+    EPC = 14,
 }

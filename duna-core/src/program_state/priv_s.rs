@@ -8,6 +8,7 @@ use super::{
 };
 use crate::{arch::*, data_structures::*};
 use num_traits::cast::AsPrimitive;
+use std::collections::HashMap;
 
 /// Contains architecture-agnostic program state that is visited only to privileged entities,
 /// i.e. a kernel thread.
@@ -22,6 +23,9 @@ pub struct PrivState<S: DataWidth> {
     pub(crate) stdout: Vec<u8>,
     pub(crate) stderr: Vec<u8>,
     // file_descriptors: Vec<Vec<u8>>
+    /// Control registers used for managing exceptions and interrupts. Their usage is determined
+    /// by architecture.
+    csrs: HashMap<usize, RegValue<S>>,
 }
 
 impl<S: DataWidth> PrivState<S> {
@@ -33,6 +37,7 @@ impl<S: DataWidth> PrivState<S> {
             page_table,
             stdout: Vec::new(),
             stderr: Vec::new(),
+            csrs: HashMap::new(),
         }
     }
 
@@ -87,6 +92,10 @@ impl<S: DataWidth> PrivState<S> {
                 self.brk = *new;
                 Ok(())
             }
+            CsrWrite { addr, new, .. } => {
+                self.csrs.insert(*addr, *new);
+                Ok(())
+            }
         }
     }
 
@@ -100,13 +109,21 @@ impl<S: DataWidth> PrivState<S> {
             BrkUpdate { old, .. } => {
                 self.brk = *old;
             }
+            CsrWrite { addr, old, .. } => {
+                self.csrs.insert(*addr, *old);
+            }
             _ => unimplemented!(),
         }
+    }
+
+    pub fn csr_read(&self, addr: usize) -> RegValue<S> {
+        *self.csrs.get(&addr).unwrap_or(&RegValue::<S>::zero())
     }
 }
 
 /// Encodes a change that occurred to the state of the privileged aspects of a program,
-/// such as a write to a file.
+/// such as a write to a file. The validity of all these operations has already been confirmed;
+/// these simply represent actions to be taken.
 pub enum PrivDiff<S: DataWidth> {
     /// Indicates that the program is to be terminated.
     Terminate(TermCause),
@@ -122,9 +139,22 @@ pub enum PrivDiff<S: DataWidth> {
         old: ByteAddrValue<S>,
         new: ByteAddrValue<S>,
     },
+    CsrWrite {
+        addr: usize,
+        old: RegValue<S>,
+        new: RegValue<S>,
+    },
 }
 
 impl<S: DataWidth> PrivDiff<S> {
+    pub fn csr_write(priv_state: &PrivState<S>, addr: usize, value: RegValue<S>) -> PrivDiff<S> {
+        PrivDiff::CsrWrite {
+            addr,
+            old: priv_state.csr_read(addr),
+            new: value,
+        }
+    }
+
     pub fn into_state_diff<F: ArchFamily<S>>(self) -> StateDiff<F, S> {
         StateDiff::Priv(self)
     }

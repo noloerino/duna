@@ -354,7 +354,7 @@ impl<S: DataWidth, T: DataInterp> core::ops::Add for DataValue<S, T> {
     }
 }
 
-impl<S: DataWidth, T: DataInterp> ch::CheckedAdd for DataValue<S, T> {
+impl<S: DataWidth> ch::CheckedAdd for SignedValue<S> {
     fn checked_add(&self, v: &Self) -> Option<Self> {
         Some(Self::from_signed(
             self.as_signed().raw().checked_add(&v.as_signed().raw())?,

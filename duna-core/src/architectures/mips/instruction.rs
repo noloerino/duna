@@ -1,5 +1,5 @@
 #![allow(clippy::new_ret_no_self)]
-use super::{arch::Mips, exception::Exception, registers::MipsRegister};
+use super::{arch::Mips, exception::Exception, program::MipsCsr, registers::MipsRegister};
 use crate::{data_structures::*, instruction::*, program_state::*};
 use std::fmt;
 
@@ -118,16 +118,38 @@ pub trait RType<S: AtLeast32b> {
         MipsInst {
             eval: Box::new(move |state| {
                 let user_state = &state.user_state;
+                let priv_state = &state.priv_state;
                 let maybe_new_rd_val =
                     Self::eval(user_state.regfile.read(rs), user_state.regfile.read(rt));
                 Ok(maybe_new_rd_val
                     .map(|new_rd_val| UserDiff::reg_write_pc_p4(user_state, rd, new_rd_val))
                     .unwrap_or_else(|e| {
-                        vec![UserDiff::Trap(match e {
-                            Exception::Overflow => TrapKind::IntOverflow,
+                        // TODO find some way to trap to OS on exceptions
+                        match e {
+                            Exception::Overflow => vec![
+                                // Save PC
+                                PrivDiff::csr_write(
+                                    priv_state,
+                                    MipsCsr::EPC as usize,
+                                    user_state.pc.plus_4().into(),
+                                )
+                                .into_state_diff(),
+                                // TODO Update status register (see SPIM manual)
+                                PrivDiff::csr_write(
+                                    priv_state,
+                                    MipsCsr::Cause as usize,
+                                    RegValue::<S>::from(
+                                        // arith overflow is 12; exception code starts at bit 2
+                                        (12 << 2) as u64,
+                                    ),
+                                )
+                                .into_state_diff(),
+                                // for now, pretend that no interrupt handles integer overflow and
+                                // we just go to the next instruction
+                                UserDiff::pc_p4(user_state).into_state_diff(),
+                            ],
                             // _ => unimplemented!(),
-                        })
-                        .into_state_diff()]
+                        }
                     }))
             }),
             data: InstData::new(

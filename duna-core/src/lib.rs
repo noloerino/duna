@@ -6,6 +6,6 @@ pub mod arch;
 pub mod architectures;
 pub mod assembler;
 pub mod config;
+mod data_structures;
 pub mod instruction;
 pub mod program_state;
-mod data_structures;

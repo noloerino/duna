@@ -1,5 +1,5 @@
 use super::{memory::*, registers::RegFile};
-pub use super::{priv_s::*, phys::*, user::*};
+pub use super::{phys::*, priv_s::*, user::*};
 use crate::{
     arch::*,
     assembler::{ErrorReport, Linker, SectionStore},
@@ -364,6 +364,10 @@ impl<F: ArchFamily<S>, S: DataWidth> ProgramState<F, S> {
 
     pub fn set_user_pc(&mut self, addr: ByteAddrValue<S>) {
         self.user_state.pc = addr
+    }
+
+    pub fn csr_read(&self, i: usize) -> RegValue<S> {
+        self.priv_state.csr_read(i)
     }
 
     pub fn regfile_read(&self, reg: F::Register) -> RegValue<S> {

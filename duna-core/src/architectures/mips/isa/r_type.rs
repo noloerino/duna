@@ -38,7 +38,11 @@ impl<S: AtLeast32b> RType<S> for Add {
 mod tests {
     use super::*;
     use crate::{
-        architectures::mips::{arch::Mips, registers::MipsRegister::*},
+        architectures::mips::{
+            arch::Mips,
+            program::MipsCsr,
+            registers::{MipsRegister, MipsRegister::*},
+        },
         program_state::*,
     };
 
@@ -47,16 +51,23 @@ mod tests {
         state
     }
 
-    // /// Checks that an exception is raised on addition
-    // /// TODO check no exception for addu
-    // #[test]
-    // fn test_add_overflow() {
-    //     let mut state = get_init_state();
-    //     state.regfile_set(S0, 0xFFFF_FFFFu32.into());
-    //     state.regfile_set(S1, 0x1.into());
-    //     state.apply_inst(&Add::new(A0, S0, S1)).ok();
-    //     assert_eq!(state.priv_state.overflow, true);
-    // }
+    /// Checks that an exception is raised on addition
+    /// TODO check no exception for addu
+    #[test]
+    fn test_add_overflow() {
+        let mut state = get_init_state();
+        let rd_orig = state.regfile_read(MipsRegister::FP);
+        state.regfile_set(S0, 0x7FFF_FFFFu32.into());
+        state.regfile_set(S1, 0x3.into());
+        state.apply_inst(&Add::new(MipsRegister::FP, S0, S1)).ok();
+        // Ensure A0 hasn't changed
+        assert_eq!(state.regfile_read(MipsRegister::FP), rd_orig);
+        // Check bits 2-5 of CSR
+        assert_eq!(
+            (u32::from(state.csr_read(MipsCsr::Cause as usize)) >> 2) & 0b1111,
+            12
+        );
+    }
 
     #[test]
     fn test_add_no_overflow() {
