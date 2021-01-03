@@ -387,6 +387,14 @@ impl<S: DataWidth, T: DataInterp> wr::WrappingSub for DataValue<S, T> {
     }
 }
 
+impl<S: DataWidth, T: DataInterp> core::ops::Not for DataValue<S, T> {
+    type Output = Self;
+
+    fn not(self) -> Self {
+        Self::from_signed(!self.as_signed().raw())
+    }
+}
+
 impl<S: DataWidth, T: DataInterp> core::ops::BitAnd for DataValue<S, T> {
     type Output = Self;
 

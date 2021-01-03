@@ -102,3 +102,23 @@ fn test_m_sanity() {
     assert_eq!(i64::from(state.regfile_read(RiscVRegister::S2)), -1);
     assert_eq!(i64::from(state.regfile_read(RiscVRegister::S3)), 9);
 }
+
+/// Sanity checks CSR instructions.
+#[test]
+fn test_csr_sanity() {
+    let code = "
+        li t0, 0x234
+        csrrw a0, t0, 0xFF
+        csrrs a0, x0, 0xFF
+        li t0, 0xFF0
+        csrrs x0, t0, 0xFF
+        csrrs a1, x0, 0xFF
+    ";
+    let mut program: Program<RV64> = Linker::with_main_str(code)
+        .link::<RV64>(Default::default())
+        .unwrap();
+    program.run();
+    let state = program.state;
+    assert_eq!(state.regfile_read(RiscVRegister::A0), 0x234u64.into());
+    assert_eq!(state.regfile_read(RiscVRegister::A1), 0xFF4u64.into());
+}

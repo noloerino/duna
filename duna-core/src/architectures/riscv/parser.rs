@@ -113,6 +113,27 @@ lazy_static! {
             ("divu", R(Divu::new)),
             ("rem", R(Rem::new)),
             ("remu", R(Remu::new)),
+            // === Zicsr ===
+            ("csrrw", Arith(Csrrw::new)),
+            ("csrrs", Arith(Csrrs::new)),
+            ("csrrc", Arith(Csrrc::new)),
+            // ("csrrwi", Arith(Csrrwi::new)),
+            // ("csrrsi", Arith(Csrrsi::new)),
+            // ("csrrci", Arith(Csrrci::new)),
+            // === Zicsr pseudo
+            // ("rdinstret", ???),
+            // ("rdinstreth", ???),
+            // ("rdcycle", ???),
+            // ("rdcycleh", ???),
+            // ("rdtime", ???),
+            // ("rdtimeh", ???),
+            // ("csrr", ???),
+            // ("csrw", ???),
+            // ("csrs", ???),
+            // ("csrc", ???),
+            // ("csrwi", ???),
+            // ("csrsi", ???),
+            // ("csrci", ???),
         ]
         .iter()
         .cloned()
@@ -201,6 +222,27 @@ lazy_static! {
             ("remw", R(Remw::new)),
             ("remu", R(Remu::new)),
             ("remuw", R(Remuw::new)),
+            // === Zicsr ===
+            ("csrrw", Arith(Csrrw::new)),
+            ("csrrs", Arith(Csrrs::new)),
+            ("csrrc", Arith(Csrrc::new)),
+            // ("csrrwi", Arith(Csrrwi::new)),
+            // ("csrrsi", Arith(Csrrsi::new)),
+            // ("csrrci", Arith(Csrrci::new)),
+            // === Zicsr pseudo
+            // ("rdinstret", ???),
+            // ("rdinstreth", ???),
+            // ("rdcycle", ???),
+            // ("rdcycleh", ???),
+            // ("rdtime", ???),
+            // ("rdtimeh", ???),
+            // ("csrr", ???),
+            // ("csrw", ???),
+            // ("csrs", ???),
+            // ("csrc", ???),
+            // ("csrwi", ???),
+            // ("csrsi", ???),
+            // ("csrci", ???),
         ]
         .iter()
         .cloned()

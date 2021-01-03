@@ -161,7 +161,7 @@ impl<S: AtLeast32b> BType<S> for Bne {
 }
 
 pub struct Ecall;
-impl<S: AtLeast32b> EnvironInst<S> for Ecall {
+impl<S: AtLeast32b> SystemInst<S> for Ecall {
     fn name() -> &'static str {
         "ecall"
     }

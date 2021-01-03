@@ -119,6 +119,10 @@ impl<S: DataWidth> PrivState<S> {
     pub fn csr_read(&self, addr: usize) -> RegValue<S> {
         *self.csrs.get(&addr).unwrap_or(&RegValue::<S>::zero())
     }
+
+    pub fn csr_write(&mut self, addr: usize, value: RegValue<S>) {
+        self.csrs.insert(addr, value);
+    }
 }
 
 /// Encodes a change that occurred to the state of the privileged aspects of a program,

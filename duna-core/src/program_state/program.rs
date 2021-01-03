@@ -370,6 +370,10 @@ impl<F: ArchFamily<S>, S: DataWidth> ProgramState<F, S> {
         self.priv_state.csr_read(i)
     }
 
+    pub fn csr_write(&mut self, i: usize, value: RegValue<S>) {
+        self.priv_state.csr_write(i, value);
+    }
+
     pub fn regfile_read(&self, reg: F::Register) -> RegValue<S> {
         self.user_state.regfile.read(reg)
     }

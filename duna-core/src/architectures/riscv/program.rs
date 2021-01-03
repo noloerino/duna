@@ -83,3 +83,10 @@ impl<S: AtLeast32b> SyscallConvention<RiscV<S>, S> for RiscVSyscallConvention<S>
         vec![A0, A1]
     }
 }
+
+/// Addresses of the subset of special RISC-V control and status registers implemented.
+/// See the RISC-V privileged spec.
+pub enum MipsCsr {
+    Mepc = 0x341,
+    Mcause = 0x342,
+}

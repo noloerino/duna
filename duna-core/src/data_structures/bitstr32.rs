@@ -69,6 +69,10 @@ impl BitStr32 {
     pub const fn as_u32(self) -> u32 {
         self.value
     }
+
+    pub const fn as_usize(self) -> usize {
+        self.value as usize
+    }
 }
 
 impl Add for BitStr32 {

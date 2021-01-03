@@ -303,7 +303,7 @@ pub trait ITypeShift<S: AtLeast32b> {
     fn eval(rs1_val: RegValue<S>, imm: BitStr32) -> RegValue<S>;
 }
 
-pub trait EnvironInst<S: AtLeast32b> {
+pub trait SystemInst<S: AtLeast32b> {
     fn new() -> RiscVInst<S> {
         RiscVInst {
             eval: Box::new(|state| Self::eval(state)),

@@ -1,4 +1,4 @@
-//! Instructions from the base instruction set and M (multiplication/division) extension.
+//! Instructions from the M (multiplication/division) extension.
 //!
 //! All these instructions follow R-type encodings from the base ISA, and in fact share the same
 //! opcodes.
