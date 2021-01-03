@@ -2,39 +2,51 @@
 ![](https://github.com/noloerino/duna/workflows/Rust/badge.svg)
 [![Coverage Status](https://coveralls.io/repos/github/noloerino/duna/badge.svg?branch=master)](https://coveralls.io/github/noloerino/duna?branch=master)
 
-A 32-bit RISCV simulator built in Rust. Inspired by [Venus](https://github.com/ThaumicMekanism/venus).
+An assembly simulator built in Rust.
+
+## See also
+- [Venus](https://github.com/ThaumicMekanism/venus)
+- [SPIM](http://spimsimulator.sourceforge.net/)
 
 ## Current functionality
-- Supports most of the base ISA (haven't implemented a few arithmetic operations yet since I'm still
-figuring out the proper abstractions)
-- Supports the print ecall :P
 - Run by CLI with `cargo run <INPUT_FILE>`
+- RISC-V
+    - Supports most of RV32IM and RV64IM
+    - Supports a few ecalls
+- MIPS
+    - WIP
 
-## Roadmap - RISCV
-- [ ] Finish base ISA
-- [ ] Multiplication extension
+## Roadmap
+### RISC-V
+- Finish multiplication extension
+- Figure out which CSRs to support
 
-## Roadmap - General Features
-### Near term
-- [ ] Basic repl that allows stepping/viewing
-- [ ] Standard library functions
-- [ ] CLI configuration
-- [ ] Labels in data section
-- [ ] Support assembler [relocation functions](https://github.com/riscv/riscv-asm-manual/blob/master/riscv-asm.md#assembler-relocation-functions)
+### OS/Memory
+- Fix page table/TLB lol
+- Instruction decoding + instruction fetches
+- Distinguish between IMEM/DMEM
+- Interrupts?
+- Kernel memory?
+- Fence instructions
+- Configurable cache hierarchy, store buffers
 
-### Long term
-- [ ] Make interface for stepping through instructions
-- [ ] Display regfile, memory, and cache info
-- [ ] Provide debugger support a la GDB, possibly valgrind-like tools as well?
-- [ ] Implement peephole optimizations + visualizations
+### Interface
+- Standard library functions
+- CLI configuration
+- Support assembler [relocation functions](https://github.com/riscv/riscv-asm-manual/blob/master/riscv-asm.md#assembler-relocation-functions)
+- Display regfile, memory, and cache info
+- Ability to poke values in registers, memory, etc. (add sources/causes to diff structs?)
+- Provide debugger support a la GDB, possibly valgrind-like tools as well?
+- Implement peephole optimizations + visualizations
 
 ### Niceties
-- [ ] Add hints/warnings
-- [ ] Run [riscv compliance tests](https://github.com/riscv/riscv-compliance)
+- Add hints/warnings
+- Run [riscv compliance tests](https://github.com/riscv/riscv-compliance)
 
-## Roadmap - Other ISAs?
-- [ ] MIPS 32/64bit? whatever they're called?
-- [ ] x86-64
-- [ ] ARM
-- [ ] wasm
-- [ ] some LLVM IR
+### Other ISAs?
+- MIPS 32/64bit? whatever they're called?
+- Atmel AVR
+- ARM
+- x86-64
+- wasm
+- some LLVM IR
