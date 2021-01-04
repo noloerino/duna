@@ -1,4 +1,4 @@
-use super::{instruction::*, parser::MipsParser, program::*, registers::MipsRegister};
+use super::{instruction::*, parser::MipsInstParser, program::*, registers::MipsRegister};
 use crate::{arch::*, data_structures::*};
 use std::marker::PhantomData;
 
@@ -18,5 +18,5 @@ impl Architecture for Mips32 {
     type DataWidth = W32b;
     type Family = Mips<W32b>;
     type ProgramBehavior = MipsProgramBehavior<W32b>;
-    type Parser = MipsParser<W32b>;
+    type InstParser = MipsInstParser<W32b>;
 }

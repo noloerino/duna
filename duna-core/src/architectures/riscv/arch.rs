@@ -1,4 +1,4 @@
-use super::{instruction::*, parser::RiscVParser, program::*, registers::RiscVRegister};
+use super::{instruction::*, parser::RiscVInstParser, program::*, registers::RiscVRegister};
 use crate::{arch::*, data_structures::*};
 use std::marker::PhantomData;
 
@@ -18,7 +18,7 @@ impl Architecture for RV32 {
     type DataWidth = W32b;
     type Family = RiscV<W32b>;
     type ProgramBehavior = RiscVProgramBehavior<W32b>;
-    type Parser = RiscVParser<W32b>;
+    type InstParser = RiscVInstParser<W32b>;
 }
 
 pub struct RV64;
@@ -27,5 +27,5 @@ impl Architecture for RV64 {
     type DataWidth = W64b;
     type Family = RiscV<W64b>;
     type ProgramBehavior = RiscVProgramBehavior<W64b>;
-    type Parser = RiscVParser<W64b>;
+    type InstParser = RiscVInstParser<W64b>;
 }

@@ -9,6 +9,3 @@ pub use arch::*;
 pub use instruction::RiscVInst;
 pub use program::*;
 pub use registers::RiscVRegister;
-
-#[cfg(test)]
-pub(crate) use parser::RiscVParser;

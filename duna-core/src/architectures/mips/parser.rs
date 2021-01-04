@@ -1,11 +1,8 @@
-use super::arch::Mips;
-use crate::{
-    assembler::{lexer::*, parser::*},
-    data_structures::*,
-};
-use std::marker::PhantomData;
+use super::{arch::Mips, registers::MipsRegister};
+use crate::{assembler::parser::*, data_structures::*};
+use std::{collections::HashMap, marker::PhantomData};
 
-pub struct MipsParser<S: DataWidth> {
+pub struct MipsInstParser<S: DataWidth> {
     // file_id: FileId,
     // lines: LineTokenStream,
     // reporter: ParseErrorReporter,
@@ -13,8 +10,25 @@ pub struct MipsParser<S: DataWidth> {
     _phantom: PhantomData<S>,
 }
 
-impl<S: AtLeast32b> Parser<Mips<S>, S> for MipsParser<S> {
-    fn parse_lex_result(_: LexResult<'_>) -> ParseResult<Mips<S>, S> {
+pub enum ParseType {}
+
+type MipsParseState<'a, S> = InstParseState<'a, Mips<S>, S, ParseType>;
+
+impl<S: AtLeast32b> InstParser<Mips<S>, S> for MipsInstParser<S> {
+    type ParseType = ParseType;
+
+    fn inst_expansion_table() -> &'static HashMap<String, Self::ParseType> {
+        todo!()
+    }
+
+    fn reg_expansion_table() -> &'static HashMap<String, MipsRegister> {
+        todo!()
+    }
+
+    fn try_expand_found_inst<'a>(
+        _state: MipsParseState<'a, S>,
+        _parse_type: &ParseType,
+    ) -> InstParseResult<Mips<S>, S> {
         todo!()
     }
 }

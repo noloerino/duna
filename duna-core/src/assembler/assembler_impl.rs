@@ -14,16 +14,16 @@ use std::{
 pub struct Assembler;
 
 impl Assembler {
-    pub fn assemble_str<S: Architecture>(
+    pub fn assemble_str<A: Architecture>(
         file_id: FileId,
         contents: &str,
-    ) -> (UnlinkedProgram<S>, ErrorReporter) {
-        Assembler::assemble(<S::Parser>::parse_str(file_id, contents))
+    ) -> (UnlinkedProgram<A>, ErrorReporter) {
+        Assembler::assemble(Parser::<A>::parse_str(file_id, contents))
     }
 
-    fn assemble<S: Architecture>(
-        parse_result: ParseResult<S::Family, S::DataWidth>,
-    ) -> (UnlinkedProgram<S>, ErrorReporter) {
+    fn assemble<A: Architecture>(
+        parse_result: ParseResult<A::Family, A::DataWidth>,
+    ) -> (UnlinkedProgram<A>, ErrorReporter) {
         let ParseResult {
             file_id,
             insts,
