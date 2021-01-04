@@ -54,7 +54,6 @@ impl From<u8> for MipsRegister {
 
 use MipsRegister::*;
 impl MipsRegister {
-    pub const R0: MipsRegister = ZERO;
     pub const FP: MipsRegister = S8;
     pub const REG_ARRAY: [MipsRegister; 32] = [
         ZERO, AT, V0, V1, A0, A1, A2, A3, T0, T1, T2, T3, T4, T5, T6, T7, S0, S1, S2, S3, S4, S5,

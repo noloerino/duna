@@ -4,7 +4,8 @@ use duna_core::{
     architectures::riscv::RV32,
     assembler::{ErrorReport, Linker},
     config::AsmConfig,
-    program_state::{ByteAddr32, ProgramExecutor},
+    data_structures::ByteAddr32,
+    program_state::ProgramExecutor,
 };
 use wasm_bindgen::prelude::*;
 

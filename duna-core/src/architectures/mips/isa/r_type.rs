@@ -4,7 +4,7 @@ use crate::{
 };
 use num_traits::ops::checked::CheckedAdd;
 
-const OPCODE_ZERO: BitStr32 = BitStr32::new(0, 7);
+const OPCODE_ZERO: BitStr32 = BitStr32::new(0, 6);
 const SHAMT_ZERO: BitStr32 = BitStr32::new(0, 5);
 
 pub struct Add;

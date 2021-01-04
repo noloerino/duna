@@ -6,19 +6,20 @@ use crate::{
 use std::{collections::HashMap, marker::PhantomData};
 
 /// Describes the arguments needed for a type of function.
-/// Due to their unique parsing rules, Jal, Jalr, and Li are hardcoded.
+/// Due to their unique parsing rules, Jal, Jalr, and La are hardcoded.
 #[derive(Copy, Clone)]
 pub enum ParseType<S: AtLeast32b> {
     // Base ISA
     R(fn(RiscVRegister, RiscVRegister, RiscVRegister) -> RiscVInst<S>),
     Arith(fn(RiscVRegister, RiscVRegister, RegValue<S>) -> RiscVInst<S>),
+    // "ecall" and "ebreak"
     Env(fn() -> RiscVInst<S>),
     MemL(fn(RiscVRegister, RiscVRegister, RegValue<S>) -> RiscVInst<S>),
     MemS(fn(RiscVRegister, RiscVRegister, RegValue<S>) -> RiscVInst<S>),
     B(fn(RiscVRegister, RiscVRegister, RegValue<S>) -> RiscVInst<S>),
     // Covers "jal ra, label", "jal label", "jal -4" etc.
     Jal,
-    // Covers "jalr ra, 0(x1)", "jalr x1", etc.
+    // Covers "jalr ra, x1, 0", "jalr x1", etc. ("jalr ra, 0(x1)" not yet supported)
     Jalr,
     U(fn(RiscVRegister, RegValue<S>) -> RiscVInst<S>),
     // Pseudo-instructions
@@ -34,7 +35,7 @@ pub enum ParseType<S: AtLeast32b> {
 }
 
 lazy_static! {
-    static ref RV32_INST_EXPANSION_TABLE: HashMap<String, ParseType<W32b >> = {
+    static ref RV32_INST_EXPANSION_TABLE: HashMap<String, ParseType<W32b>> = {
         use super::isa::*;
         use ParseType::*;
         [
@@ -125,6 +126,7 @@ lazy_static! {
         .map(|(s, t)| (s.to_string(), t))
         .collect()
     };
+
     static ref RV64_INST_EXPANSION_TABLE: HashMap<String, ParseType<W64b >> = {
         use super::isa::*;
         use ParseType::*;
@@ -234,6 +236,7 @@ lazy_static! {
         .map(|(s, t)| (s.to_string(), t))
         .collect()
     };
+
     static ref REG_EXPANSION_TABLE: HashMap<String, RiscVRegister> = {
         let mut reg_expansion_table: HashMap<String, RiscVRegister> = RiscVRegister::REG_ARRAY
             .iter()
@@ -307,53 +310,6 @@ impl InstParser<RiscV<W64b>, W64b> for RiscVInstParser<W64b> {
 }
 
 impl<S: AtLeast32b> RiscVInstParser<S> {
-    /// Attempts to consume exactly N arguments from the iterator, possibly comma-separated.
-    /// The first and last tokens cannot be commas. If repeated commas appear anywhere,
-    /// an error is returned.
-    /// The only tokens that may appear during this consumption are commas, names, and immediates.
-    fn consume_commasep_args<'a>(
-        state: &mut RVInstParseState<'a, S>,
-        n: u8,
-    ) -> Result<Vec<Token>, ParseError> {
-        use TokenType::*;
-        let mut found = Vec::<Token>::new();
-        for left in (0..n).rev() {
-            match state.iter.next() {
-                Some(tok) => match tok.data {
-                    // It might make more semantic sense to lex directives as names instead
-                    // but we need to stll be able to treat them as labels
-                    Name(..) | Immediate(..) | Directive(..) => {
-                        // Allow single comma, except when trailing
-                        if left > 0 {
-                            if let Some(tok2) = state.iter.peek() {
-                                if let Comma = tok2.data {
-                                    state.iter.next();
-                                }
-                            }
-                        }
-                        found.push(tok);
-                    }
-                    _ => {
-                        return Err(ParseError::bad_arg(
-                            ErrMetadata::new(&tok.location),
-                            &format!("{:?}", tok.data),
-                        ))
-                    }
-                },
-                None => {
-                    return Err(ParseError::wrong_argc(
-                        ErrMetadata::new(&state.head_loc),
-                        state.inst_name,
-                        n,
-                        found.len() as u8,
-                    ))
-                }
-            }
-        }
-        debug_assert!(found.len() == (n as usize));
-        state.check_no_more_args(n).and(Ok(found))
-    }
-
     /// Consumes tokens for arguments for a memory operation.
     /// These are either of the form "inst reg, imm, reg)" e.g. "lw x1 -4 x2"
     /// or "inst reg, (imm)reg" e.g "lw x1, 4(x2)" (commas optional in both cases)
@@ -434,21 +390,21 @@ impl<S: AtLeast32b> RiscVInstParser<S> {
         match parse_type {
             R(inst_new) => {
                 // R-types are always "inst rd, rs1, rs2" with one or no commas in between
-                let mut args = Self::consume_commasep_args(state, 3)?;
+                let mut args = state.consume_commasep_args(3)?;
                 let rd = state.try_parse_reg(args.remove(0))?;
                 let rs1 = state.try_parse_reg(args.remove(0))?;
                 let rs2 = state.try_parse_reg(args.remove(0))?;
                 ok_wrap_concr(inst_new(rd, rs1, rs2))
             }
             Arith(inst_new) => {
-                let mut args = Self::consume_commasep_args(state, 3)?;
+                let mut args = state.consume_commasep_args(3)?;
                 let rd = state.try_parse_reg(args.remove(0))?;
                 let rs1 = state.try_parse_reg(args.remove(0))?;
                 let imm = state.try_parse_imm(12, args.remove(0))?;
                 ok_wrap_concr(inst_new(rd, rs1, imm))
             }
             Env(inst_new) => {
-                let _args = Self::consume_commasep_args(state, 0)?;
+                let _args = state.consume_commasep_args(0)?;
                 ok_wrap_concr(inst_new())
             }
             MemL(inst_new) => {
@@ -466,7 +422,7 @@ impl<S: AtLeast32b> RiscVInstParser<S> {
                 ok_wrap_concr(inst_new(rs1, rs2, imm))
             }
             B(inst_new) => {
-                let mut args = Self::consume_commasep_args(state, 3)?;
+                let mut args = state.consume_commasep_args(3)?;
                 let rs1 = state.try_parse_reg(args.remove(0))?;
                 let rs2 = state.try_parse_reg(args.remove(0))?;
                 // Becuse branches actually chop off the LSB, we can take up to 13b
@@ -552,13 +508,13 @@ impl<S: AtLeast32b> RiscVInstParser<S> {
                 }
             }
             U(inst_new) => {
-                let mut args = Self::consume_commasep_args(state, 2)?;
+                let mut args = state.consume_commasep_args(2)?;
                 let rd = state.try_parse_reg(args.remove(0))?;
                 let imm = state.try_parse_imm(20, args.remove(0))?;
                 ok_wrap_concr(inst_new(rd, imm))
             }
             La => {
-                let mut args = Self::consume_commasep_args(state, 2)?;
+                let mut args = state.consume_commasep_args(2)?;
                 let rd = state.try_parse_reg(args.remove(0))?;
                 let last_arg = Self::try_parse_imm_or_label_ref(state, 32, args.remove(0))?;
                 match last_arg {
@@ -583,23 +539,23 @@ impl<S: AtLeast32b> RiscVInstParser<S> {
                 }
             }
             Li(inst_expand) => {
-                let mut args = Self::consume_commasep_args(state, 2)?;
+                let mut args = state.consume_commasep_args(2)?;
                 let rd = state.try_parse_reg(args.remove(0))?;
                 let imm = state.try_parse_imm(32, args.remove(0))?;
                 ok_wrap_expanded(inst_expand(rd, imm))
             }
             NoArgs(inst_expand) => {
-                let _args = Self::consume_commasep_args(state, 0)?;
+                let _args = state.consume_commasep_args(0)?;
                 ok_wrap_concr(inst_expand())
             }
             RegReg(inst_expand) => {
-                let mut args = Self::consume_commasep_args(state, 2)?;
+                let mut args = state.consume_commasep_args(2)?;
                 let rd = state.try_parse_reg(args.remove(0))?;
                 let rs = state.try_parse_reg(args.remove(0))?;
                 ok_wrap_concr(inst_expand(rd, rs))
             }
             LikeJ(inst_expand) => {
-                let mut args = Self::consume_commasep_args(state, 1)?;
+                let mut args = state.consume_commasep_args(1)?;
                 // j expands to J-type, so 20-bit immediate
                 let last_arg = Self::try_parse_imm_or_label_ref(state, 20, args.remove(0))?;
                 match last_arg {
@@ -610,7 +566,7 @@ impl<S: AtLeast32b> RiscVInstParser<S> {
                 }
             }
             OneReg(inst_expand) => {
-                let mut args = Self::consume_commasep_args(state, 1)?;
+                let mut args = state.consume_commasep_args(1)?;
                 let rs = state.try_parse_reg(args.remove(0))?;
                 ok_wrap_concr(inst_expand(rs))
             }
@@ -624,32 +580,9 @@ mod tests {
         super::{isa::*, registers::RiscVRegister::*},
         *,
     };
-    use crate::{data_structures::DataLword, instruction::ConcreteInst};
-
-    /// Lexes a program. Asserts that the lex has no errors.
-    fn lex(prog: &str) -> LexResult {
-        let result = Lexer::lex_str(0, prog);
-        assert_eq!(result.reporter.get_errs(), &[]);
-        result
-    }
-
-    /// Parses and lexes the provided string, assuming that there are no errors in either phase.
-    /// Assumes that there were no lex errors.
-    fn parse_and_lex(prog: &str) -> Vec<PartialInst<RiscV<W32b>, W32b>> {
-        let ParseResult {
-            insts, reporter, ..
-        } = Parser::<RV32>::parse_lex_result(lex(prog));
-        assert!(reporter.is_empty(), format!("{:?}", reporter));
-        insts
-    }
-
-    /// Parses and lexes a string assuming it contains instructions that don't need expanding.
-    fn parse_and_lex_concr(prog: &str) -> Vec<RiscVInst<W32b>> {
-        parse_and_lex(prog)
-            .into_iter()
-            .map(|inst| inst.try_into_concrete_inst())
-            .collect()
-    }
+    use crate::{
+        assembler::parser::tests::*, data_structures::DataLword, instruction::ConcreteInst,
+    };
 
     #[test]
     /// Tests the loading of immediates in the .data section.
@@ -680,7 +613,8 @@ mod tests {
     #[test]
     /// Tests parsing of a label in the middle and a label at the end.
     fn test_label_defs() {
-        let insts = parse_and_lex("add a0, sp, fp\nl1: addi sp, sp, -4\naddi sp, sp, 4\nl2:");
+        let insts =
+            parse_and_lex::<RV32>("add a0, sp, fp\nl1: addi sp, sp, -4\naddi sp, sp, 4\nl2:");
         let expected_concrete: [RiscVInst<W32b>; 3] = [
             Add::new(A0, SP, S0),
             Addi::new(SP, SP, DataLword::from(-4)),
@@ -713,7 +647,7 @@ mod tests {
     #[test]
     /// Tests the parsing of labels as an argument.
     fn test_needed_labels() {
-        let insts = parse_and_lex("bne x0, x0, l1\nl1: jal ra, end\nend: nop");
+        let insts = parse_and_lex::<RV32>("bne x0, x0, l1\nl1: jal ra, end\nend: nop");
         assert_eq!(insts.len(), 3);
         assert_eq!(
             insts[0].get_needed_label().unwrap().target,
@@ -741,7 +675,7 @@ mod tests {
 
     #[test]
     fn test_r_type_parse() {
-        let insts = parse_and_lex_concr("add x5, sp, fp");
+        let insts = parse_and_lex_concr::<RV32>("add x5, sp, fp");
         assert_eq!(insts.len(), 1);
         assert_eq!(
             insts[0],
@@ -752,14 +686,14 @@ mod tests {
     #[test]
     fn test_i_arith_parse() {
         // lack of commas is deliberate
-        let insts = parse_and_lex_concr("addi sp sp -4");
+        let insts = parse_and_lex_concr::<RV32>("addi sp sp -4");
         assert_eq!(insts.len(), 1);
         assert_eq!(insts[0], Addi::new(SP, SP, DataLword::from(-4)));
     }
 
     #[test]
     fn test_lui_parse() {
-        let insts = parse_and_lex_concr("lui a0, 0xD_EADC");
+        let insts = parse_and_lex_concr::<RV32>("lui a0, 0xD_EADC");
         assert_eq!(insts.len(), 1);
         assert_eq!(insts[0], Lui::new(A0, DataLword::from(0xD_EADC)));
     }
@@ -776,7 +710,7 @@ mod tests {
 
     #[test]
     fn test_pseudo_li() {
-        let insts = parse_and_lex_concr("li a0, 0xDEAD_BEEF");
+        let insts = parse_and_lex_concr::<RV32>("li a0, 0xDEAD_BEEF");
         assert_eq!(insts, Li32::expand(A0, DataLword::from(0xDEAD_BEEFu32)));
     }
 }
