@@ -412,7 +412,7 @@ pub mod tests {
         let ParseResult {
             insts, reporter, ..
         } = Parser::<A>::parse_lex_result(lex(prog));
-        assert!(reporter.is_empty(), format!("{:?}", reporter));
+        assert!(reporter.is_empty(), "{:?}", reporter);
         insts
     }
 

@@ -56,8 +56,8 @@ impl InstParser<Mips<W32b>, W32b> for MipsInstParser<W32b> {
         &REG_EXPANSION_TABLE
     }
 
-    fn try_expand_found_inst<'a>(
-        state: MipsInstParseState<'a, W32b>,
+    fn try_expand_found_inst(
+        state: MipsInstParseState<'_, W32b>,
         parse_type: &ParseType<W32b>,
     ) -> InstParseResult<Mips<W32b>, W32b> {
         Self::try_expand_found_inst(state, parse_type)
@@ -65,8 +65,8 @@ impl InstParser<Mips<W32b>, W32b> for MipsInstParser<W32b> {
 }
 
 impl<S: AtLeast32b> MipsInstParser<S> {
-    fn try_expand_found_inst<'a>(
-        mut owned_state: MipsInstParseState<'a, S>,
+    fn try_expand_found_inst(
+        mut owned_state: MipsInstParseState<'_, S>,
         parse_type: &ParseType<S>,
     ) -> InstParseResult<Mips<S>, S> {
         use ParseType::*;

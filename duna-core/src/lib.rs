@@ -1,4 +1,4 @@
-// #![allow(clippy::unnecessary_wraps)]
+#![allow(clippy::unnecessary_wraps)]
 #[macro_use]
 extern crate lazy_static;
 extern crate num_traits;

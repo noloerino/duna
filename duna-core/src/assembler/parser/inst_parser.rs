@@ -139,8 +139,8 @@ pub trait InstParser<F: ArchFamily<S>, S: DataWidth> {
     fn inst_expansion_table() -> &'static HashMap<String, Self::ParseType>;
     fn reg_expansion_table() -> &'static HashMap<String, F::Register>;
 
-    fn try_expand_found_inst<'a>(
-        state: InstParseState<'a, F, S, Self::ParseType>,
+    fn try_expand_found_inst(
+        state: InstParseState<'_, F, S, Self::ParseType>,
         parse_type: &Self::ParseType,
     ) -> InstParseResult<F, S>;
 

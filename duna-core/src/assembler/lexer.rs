@@ -169,8 +169,7 @@ impl<'a> LineLexer<'a> {
     }
 
     fn build_name(&mut self, state: &LexState) -> Result<TokenType, ParseError> {
-        let mut cs = Vec::<u8>::new();
-        cs.push(state.head as u8);
+        let mut cs = vec![state.head as u8];
         while let Some((_, c_ref)) = self.iter.peek() {
             // colon acts as a delimiter - if we hit a colon, we should start parsing the next token
             let c = *c_ref;

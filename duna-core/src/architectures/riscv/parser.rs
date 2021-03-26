@@ -282,8 +282,8 @@ impl InstParser<RiscV<W32b>, W32b> for RiscVInstParser<W32b> {
         &REG_EXPANSION_TABLE
     }
 
-    fn try_expand_found_inst<'a>(
-        state: RVInstParseState<'a, W32b>,
+    fn try_expand_found_inst(
+        state: RVInstParseState<'_, W32b>,
         parse_type: &ParseType<W32b>,
     ) -> InstParseResult<RiscV<W32b>, W32b> {
         Self::try_expand_found_inst(state, parse_type)
@@ -301,8 +301,8 @@ impl InstParser<RiscV<W64b>, W64b> for RiscVInstParser<W64b> {
         &REG_EXPANSION_TABLE
     }
 
-    fn try_expand_found_inst<'a>(
-        state: RVInstParseState<'a, W64b>,
+    fn try_expand_found_inst(
+        state: RVInstParseState<'_, W64b>,
         parse_type: &ParseType<W64b>,
     ) -> InstParseResult<RiscV<W64b>, W64b> {
         Self::try_expand_found_inst(state, parse_type)
@@ -313,7 +313,7 @@ impl<S: AtLeast32b> RiscVInstParser<S> {
     /// Consumes tokens for arguments for a memory operation.
     /// These are either of the form "inst reg, imm, reg)" e.g. "lw x1 -4 x2"
     /// or "inst reg, (imm)reg" e.g "lw x1, 4(x2)" (commas optional in both cases)
-    fn consume_mem_args<'a>(state: &mut RVInstParseState<'a, S>) -> Result<MemArgs<S>, ParseError> {
+    fn consume_mem_args(state: &mut RVInstParseState<'_, S>) -> Result<MemArgs<S>, ParseError> {
         // first consumed token must be register name
         let first_tok = state.try_next_tok(3, 0)?;
         let first_reg = state.try_parse_reg(first_tok)?;
@@ -355,8 +355,8 @@ impl<S: AtLeast32b> RiscVInstParser<S> {
     }
 
     /// Attempts to expand a token into a label reference or an immediate of at most max_imm_len.
-    fn try_parse_imm_or_label_ref<'a>(
-        state: &RVInstParseState<'a, S>,
+    fn try_parse_imm_or_label_ref(
+        state: &RVInstParseState<'_, S>,
         max_imm_len: u8,
         token: Token,
     ) -> Result<ImmOrLabelRef<S>, ParseError> {
@@ -381,8 +381,8 @@ impl<S: AtLeast32b> RiscVInstParser<S> {
     }
 
     /// Expands an instruction that is known to be in the expansion table.
-    fn try_expand_found_inst<'a>(
-        mut owned_state: RVInstParseState<'a, S>,
+    fn try_expand_found_inst(
+        mut owned_state: RVInstParseState<'_, S>,
         parse_type: &ParseType<S>,
     ) -> InstParseResult<RiscV<S>, S> {
         use ParseType::*;
@@ -594,7 +594,8 @@ mod tests {
             insts,
             ..
         } = Parser::<RV32>::parse_str(0, prog);
-        assert!(reporter.is_empty(), insts.is_empty());
+        assert!(reporter.is_empty());
+        assert!(insts.is_empty());
         assert_eq!(sections.data(), vec![0xef, 0xbe, 0xad, 0xde, 0x12]);
     }
 
