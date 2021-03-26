@@ -1,5 +1,5 @@
 use duna_core::{
-    architectures::riscv::{RiscVRegister, RV32},
+    architectures::riscv::{RiscVRegister, Rv32},
     assembler::{ErrorReport, Linker},
     program_state::Program,
 };
@@ -13,9 +13,9 @@ fn get_full_test_path(relative_path: &str) -> String {
         .to_string()
 }
 
-fn program_from_file(filename: &str) -> Program<RV32> {
-    let program: Program<RV32> = Linker::with_main(&get_full_test_path(filename))
-        .link::<RV32>(Default::default())
+fn program_from_file(filename: &str) -> Program<Rv32> {
+    let program: Program<Rv32> = Linker::with_main(&get_full_test_path(filename))
+        .link::<Rv32>(Default::default())
         .unwrap();
     // stdout is suppressed unless a test fails
     program.dump_insts();
@@ -28,7 +28,7 @@ fn err_report_from_files(main_filename: &str, others: Vec<&str>) -> ErrorReport 
         linker = linker.with_file(&get_full_test_path(file));
     }
     let report = linker
-        .link::<RV32>(Default::default())
+        .link::<Rv32>(Default::default())
         .err() // needed because RiscVProgram is not Debug
         .expect("linker did not error when it should have");
     report.report();
@@ -100,7 +100,7 @@ fn test_local_labels() {
 #[test]
 fn test_basic_link() {
     let mut program = Linker::with_main(&get_full_test_path("local_labels.s"))
-        .link::<RV32>(Default::default())
+        .link::<Rv32>(Default::default())
         .unwrap();
     program.dump_insts();
     program.run();
@@ -115,7 +115,7 @@ fn test_basic_link() {
 fn test_global_link() {
     let mut program = Linker::with_main(&get_full_test_path("global_link_0.s"))
         .with_file(&get_full_test_path("global_link_1.s"))
-        .link::<RV32>(Default::default())
+        .link::<Rv32>(Default::default())
         .unwrap();
     program.dump_insts();
     program.run();
@@ -203,7 +203,7 @@ fn test_jump_to_la() {
 fn test_aligned_directive_labels() {
     let mut program = Linker::with_main(&get_full_test_path("aligned_directive_labels_0.s"))
         .with_file(&get_full_test_path("aligned_directive_labels_1.s"))
-        .link::<RV32>(Default::default())
+        .link::<Rv32>(Default::default())
         .unwrap();
     program.dump_insts();
     println!(

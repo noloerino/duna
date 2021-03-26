@@ -12,18 +12,18 @@ impl<S: AtLeast32b> ArchFamily<S> for RiscV<S> {
     type Syscalls = RiscVSyscallConvention<S>;
 }
 
-pub struct RV32;
+pub struct Rv32;
 
-impl Architecture for RV32 {
+impl Architecture for Rv32 {
     type DataWidth = W32b;
     type Family = RiscV<W32b>;
     type ProgramBehavior = RiscVProgramBehavior<W32b>;
     type InstParser = RiscVInstParser<W32b>;
 }
 
-pub struct RV64;
+pub struct Rv64;
 
-impl Architecture for RV64 {
+impl Architecture for Rv64 {
     type DataWidth = W64b;
     type Family = RiscV<W64b>;
     type ProgramBehavior = RiscVProgramBehavior<W64b>;

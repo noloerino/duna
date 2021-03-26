@@ -38,7 +38,7 @@ lazy_static! {
             reg_expansion_table.insert(format!("r{}", i), MipsRegister::from(i));
         }
         // don't forget FP
-        reg_expansion_table.insert("fp".to_string(), MipsRegister::FP);
+        reg_expansion_table.insert("fp".to_string(), MipsRegister::Fp);
         reg_expansion_table
     };
 }
@@ -99,7 +99,7 @@ mod tests {
         assert_eq!(insts.len(), 1);
         assert_eq!(
             insts[0],
-            Add::new(MipsRegister::from(5), SP, MipsRegister::FP)
+            Add::new(MipsRegister::from(5), Sp, MipsRegister::Fp)
         );
     }
 }

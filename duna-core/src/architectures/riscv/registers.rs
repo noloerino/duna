@@ -3,11 +3,11 @@ use std::fmt;
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum RiscVRegister {
-    ZERO = 0,
-    RA,
-    SP,
-    GP,
-    TP,
+    Zero = 0,
+    Ra,
+    Sp,
+    Gp,
+    Tp,
     T0,
     T1,
     T2,
@@ -52,17 +52,18 @@ impl From<u8> for RiscVRegister {
 }
 
 impl RiscVRegister {
-    pub const FP: RiscVRegister = RiscVRegister::S0;
+    #[allow(non_upper_case_globals)]
+    pub const Fp: RiscVRegister = RiscVRegister::S0;
     pub const REG_ARRAY: [RiscVRegister; 32] = [
-        RiscVRegister::ZERO,
-        RiscVRegister::RA,
-        RiscVRegister::SP,
-        RiscVRegister::GP,
-        RiscVRegister::TP,
+        RiscVRegister::Zero,
+        RiscVRegister::Ra,
+        RiscVRegister::Sp,
+        RiscVRegister::Gp,
+        RiscVRegister::Tp,
         RiscVRegister::T0,
         RiscVRegister::T1,
         RiscVRegister::T2,
-        RiscVRegister::FP,
+        RiscVRegister::Fp,
         RiscVRegister::S1,
         RiscVRegister::A0,
         RiscVRegister::A1,

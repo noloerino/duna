@@ -47,7 +47,7 @@ impl Li32 {
             upper = BitStr32::new(upper.as_u32() + 1, 20);
         }
         let no_lui = upper.is_zero();
-        let rs1 = if no_lui { ZERO } else { reg };
+        let rs1 = if no_lui { Zero } else { reg };
         let addi = Addi::new(reg, rs1, SignedValue::<W32b>::from(lower).into());
         if no_lui {
             vec![addi]
@@ -77,7 +77,7 @@ impl Li64 {
             upper = BitStr32::new(upper.as_u32() + 1, 20);
         }
         let no_lui = upper.is_zero();
-        let rs1 = if no_lui { ZERO } else { reg };
+        let rs1 = if no_lui { Zero } else { reg };
         let addi = Addi::new(reg, rs1, SignedValue::<W64b>::from(lower).into());
         if upper.is_zero() {
             vec![addi]
@@ -100,14 +100,14 @@ impl Mv {
 pub struct Neg;
 impl Neg {
     pub fn expand<S: AtLeast32b>(rd: RiscVRegister, rs: RiscVRegister) -> RiscVInst<S> {
-        Sub::new(rd, RiscVRegister::ZERO, rs)
+        Sub::new(rd, RiscVRegister::Zero, rs)
     }
 }
 
 pub struct Nop;
 impl Nop {
     pub fn expand<S: AtLeast32b>() -> RiscVInst<S> {
-        Addi::new(ZERO, ZERO, <RegValue<S>>::zero())
+        Addi::new(Zero, Zero, <RegValue<S>>::zero())
     }
 }
 
@@ -121,35 +121,35 @@ impl Not {
 pub struct JalPseudo;
 impl JalPseudo {
     pub fn expand<S: AtLeast32b>(offs: RegValue<S>) -> RiscVInst<S> {
-        Jal::new(RA, offs)
+        Jal::new(Ra, offs)
     }
 }
 
 pub struct JalrPseudo;
 impl JalrPseudo {
     pub fn expand<S: AtLeast32b>(rs: RiscVRegister) -> RiscVInst<S> {
-        Jalr::new(RA, rs, <RegValue<S>>::zero())
+        Jalr::new(Ra, rs, <RegValue<S>>::zero())
     }
 }
 
 pub struct J;
 impl J {
     pub fn expand<S: AtLeast32b>(offs: RegValue<S>) -> RiscVInst<S> {
-        Jal::new(ZERO, offs)
+        Jal::new(Zero, offs)
     }
 }
 
 pub struct Jr;
 impl Jr {
     pub fn expand<S: AtLeast32b>(rs: RiscVRegister) -> RiscVInst<S> {
-        Jalr::new(ZERO, rs, <RegValue<S>>::zero())
+        Jalr::new(Zero, rs, <RegValue<S>>::zero())
     }
 }
 
 pub struct Ret;
 impl Ret {
     pub fn expand<S: AtLeast32b>() -> RiscVInst<S> {
-        Jalr::new(ZERO, RA, <RegValue<S>>::zero())
+        Jalr::new(Zero, Ra, <RegValue<S>>::zero())
     }
 }
 
@@ -197,7 +197,7 @@ mod tests {
         // Negative, but just expands to addi
         let num: Expanded = Li32::expand(A0, DataLword::from(-273));
         assert_eq!(num.len(), 1);
-        assert_eq!(num[0], Addi::new(A0, ZERO, DataLword::from(-273)));
+        assert_eq!(num[0], Addi::new(A0, Zero, DataLword::from(-273)));
     }
 
     #[test]

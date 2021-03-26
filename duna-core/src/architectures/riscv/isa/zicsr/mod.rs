@@ -39,7 +39,7 @@ impl<S: AtLeast32b> IType<S> for Csrrw {
     ) -> InstResult<RiscV<S>, S> {
         let csrno = imm.as_usize();
         csr_valid_check(csrno)?;
-        Ok(if rd == RiscVRegister::ZERO {
+        Ok(if rd == RiscVRegister::Zero {
             vec![
                 // Do not read CSR if rd is x0
                 PrivDiff::csr_write(
@@ -92,7 +92,7 @@ impl<S: AtLeast32b> IType<S> for Csrrs {
         csr_valid_check(csrno)?;
         let priv_state = &state.priv_state;
         let user_state = &state.user_state;
-        Ok(if rs1 == RiscVRegister::ZERO {
+        Ok(if rs1 == RiscVRegister::Zero {
             vec![
                 // Read old value of CSR and write it to RD (our implementation doesn't need
                 // to zero-extend since sizes match)
@@ -140,7 +140,7 @@ impl<S: AtLeast32b> IType<S> for Csrrc {
         csr_valid_check(csrno)?;
         let priv_state = &state.priv_state;
         let user_state = &state.user_state;
-        Ok(if rs1 == RiscVRegister::ZERO {
+        Ok(if rs1 == RiscVRegister::Zero {
             vec![
                 // Read old value of CSR and write it to RD (our implementation doesn't need
                 // to zero-extend since sizes match)
@@ -182,13 +182,13 @@ mod tests {
         state.regfile_set(A0, 0x1234.into());
         state.regfile_set(S0, 0x5678.into());
         // When 0 is the mask, no bits in the CSR get changed
-        state.apply_inst_test(&Csrrs::new(T0, ZERO, csrno.into()));
+        state.apply_inst_test(&Csrrs::new(T0, Zero, csrno.into()));
         assert_eq!(state.csr_read(csrno as usize), csr_val.into());
         assert_eq!(state.regfile_read(T0), csr_val.into());
-        state.apply_inst_test(&Csrrc::new(T0, ZERO, csrno.into()));
+        state.apply_inst_test(&Csrrc::new(T0, Zero, csrno.into()));
         assert_eq!(state.csr_read(csrno as usize), csr_val.into());
         assert_eq!(state.regfile_read(T0), csr_val.into());
-        state.apply_inst_test(&Csrrw::new(ZERO, S0, csrno.into()));
+        state.apply_inst_test(&Csrrw::new(Zero, S0, csrno.into()));
         assert_eq!(state.csr_read(csrno as usize), 0.into());
     }
 

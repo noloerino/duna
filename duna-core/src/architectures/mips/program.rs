@@ -9,7 +9,7 @@ pub struct MipsProgramBehavior<T: DataWidth> {
 
 impl ProgramBehavior<Mips<W32b>, W32b> for MipsProgramBehavior<W32b> {
     fn sp_register() -> MipsRegister {
-        MipsRegister::SP
+        MipsRegister::Sp
     }
 
     fn return_register() -> MipsRegister {
@@ -83,5 +83,5 @@ pub enum MipsCsr {
     /// "Exception type and pending interrupt bits"
     Cause = 13,
     /// "Address of instruction that caused the instruction"
-    EPC = 14,
+    Epc = 14,
 }

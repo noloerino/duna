@@ -1,6 +1,6 @@
 use clap::{App, Arg};
 use duna_core::arch::Architecture;
-use duna_core::architectures::riscv::{RV32, RV64};
+use duna_core::architectures::riscv::{Rv32, Rv64};
 use duna_core::assembler::Linker;
 use duna_core::config::AsmConfig;
 use duna_core::program_state::{Program, ProgramExecutor};
@@ -45,14 +45,14 @@ fn main() {
     let config: AsmConfig = Default::default();
     if matches.is_present("debugger") {
         match isa {
-            "rv32" => link_and_repl::<RV32>(config, linker),
-            "rv64" => link_and_repl::<RV64>(config, linker),
+            "rv32" => link_and_repl::<Rv32>(config, linker),
+            "rv64" => link_and_repl::<Rv64>(config, linker),
             _ => panic!("invalid ISA: {}", isa),
         }
     } else {
         match isa {
-            "rv32" => link_and_run::<RV32>(config, linker),
-            "rv64" => link_and_run::<RV64>(config, linker),
+            "rv32" => link_and_run::<Rv32>(config, linker),
+            "rv64" => link_and_run::<Rv64>(config, linker),
             _ => panic!("invalid ISA: {}", isa),
         }
     }

@@ -56,12 +56,12 @@ mod tests {
     #[test]
     fn test_add_overflow() {
         let mut state = get_init_state();
-        let rd_orig = state.regfile_read(MipsRegister::FP);
+        let rd_orig = state.regfile_read(MipsRegister::Fp);
         state.regfile_set(S0, 0x7FFF_FFFFu32.into());
         state.regfile_set(S1, 0x3.into());
-        state.apply_inst(&Add::new(MipsRegister::FP, S0, S1)).ok();
+        state.apply_inst(&Add::new(MipsRegister::Fp, S0, S1)).ok();
         // Ensure A0 hasn't changed
-        assert_eq!(state.regfile_read(MipsRegister::FP), rd_orig);
+        assert_eq!(state.regfile_read(MipsRegister::Fp), rd_orig);
         // Check bits 2-5 of CSR
         assert_eq!(
             (u32::from(state.csr_read(MipsCsr::Cause as usize)) >> 2) & 0b1111,

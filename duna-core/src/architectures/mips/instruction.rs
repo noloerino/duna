@@ -130,7 +130,7 @@ pub trait RType<S: AtLeast32b> {
                                 // Save PC
                                 PrivDiff::csr_write(
                                     priv_state,
-                                    MipsCsr::EPC as usize,
+                                    MipsCsr::Epc as usize,
                                     user_state.pc.plus_4().into(),
                                 )
                                 .into_state_diff(),

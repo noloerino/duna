@@ -763,7 +763,7 @@ pub enum StateDiff<F: ArchFamily<S>, S: DataWidth> {
 mod tests {
     use super::*;
     use crate::architectures::riscv::RiscVRegister::*;
-    use crate::architectures::riscv::RV32;
+    use crate::architectures::riscv::Rv32;
 
     /// Makes sure the executor can step and revert instructions.
     #[test]
@@ -773,7 +773,7 @@ mod tests {
             addi a1, zero, 2
             addi a0, zero, 16
             ";
-        let mut executor = ProgramExecutor::<RV32>::new(code.parse::<Program<RV32>>().unwrap());
+        let mut executor = ProgramExecutor::<Rv32>::new(code.parse::<Program<Rv32>>().unwrap());
         // after one operation
         assert_eq!(executor.step(), None);
         assert_eq!(executor.program.state.regfile_read(A0), 4u32.into());
@@ -822,7 +822,7 @@ mod tests {
             .data
             v: .word 4
             ";
-        let mut executor = ProgramExecutor::<RV32>::new(code.parse::<Program<RV32>>().unwrap());
+        let mut executor = ProgramExecutor::<Rv32>::new(code.parse::<Program<Rv32>>().unwrap());
         // Sanity check of initialization
         assert_eq!(executor.program.state.regfile_read(A0), 0u32.into());
         assert_eq!(executor.step(), None);

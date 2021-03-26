@@ -374,8 +374,8 @@ mod tests_32 {
     #[test]
     fn test_write_x0() {
         let mut state: ProgramState<RiscV<W32b>, W32b> = Default::default();
-        state.apply_inst_test(&Addi::new(ZERO, ZERO, DataLword::from(0x100)));
-        assert_eq!(i32::from(state.regfile_read(ZERO)), 0);
+        state.apply_inst_test(&Addi::new(Zero, Zero, DataLword::from(0x100)));
+        assert_eq!(i32::from(state.regfile_read(Zero)), 0);
     }
 
     #[test]
@@ -404,7 +404,7 @@ mod tests_32 {
         assert_eq!(ecall_inst.to_machine_code(), ECALL_HEX);
         // jal ra, 16
         const JAL_HEX: u32 = 0x0100_00EF;
-        let jal_inst: RiscVInst<W32b> = Jal::new(RA, DataLword::from(16));
+        let jal_inst: RiscVInst<W32b> = Jal::new(Ra, DataLword::from(16));
         assert_eq!(jal_inst.to_machine_code(), JAL_HEX);
     }
 
@@ -574,8 +574,8 @@ mod tests_32 {
     #[test]
     fn test_ecall() {
         let mut state = get_init_state();
-        state.regfile_set(SP, 0x7FFF_0000.into());
-        let addr = ByteAddr32::from(state.regfile_read(SP));
+        state.regfile_set(Sp, 0x7FFF_0000.into());
+        let addr = ByteAddr32::from(state.regfile_read(Sp));
         state.memory_set_word(addr, DataLword::from(0xDEAD_BEEFu32));
         // Set ecall code
         state.regfile_set(
@@ -597,14 +597,14 @@ mod tests_32 {
         let mut state = get_init_state();
         let starting_pc_val = 0x10FC_0000;
         state.set_user_pc(ByteAddr32::from(starting_pc_val));
-        let inst = Jal::new(RA, DataLword::from(16));
+        let inst = Jal::new(Ra, DataLword::from(16));
         state.apply_inst_test(&inst);
-        assert_eq!(u32::from(state.regfile_read(RA)), starting_pc_val + 4);
+        assert_eq!(u32::from(state.regfile_read(Ra)), starting_pc_val + 4);
         assert_eq!(state.get_user_pc(), ByteAddr32::from(starting_pc_val + 16));
         state.set_user_pc(ByteAddr32::from(starting_pc_val));
-        let inst = Jal::new(RA, DataLword::from(-256));
+        let inst = Jal::new(Ra, DataLword::from(-256));
         state.apply_inst_test(&inst);
-        assert_eq!(u32::from(state.regfile_read(RA)), starting_pc_val + 4);
+        assert_eq!(u32::from(state.regfile_read(Ra)), starting_pc_val + 4);
         assert_eq!(state.get_user_pc(), ByteAddr32::from(starting_pc_val - 256));
     }
 

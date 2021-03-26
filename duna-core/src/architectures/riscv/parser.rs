@@ -245,8 +245,8 @@ lazy_static! {
         for i in 0..32 {
             reg_expansion_table.insert(format!("x{}", i), RiscVRegister::from(i));
         }
-        // don't forget FP
-        reg_expansion_table.insert("fp".to_string(), RiscVRegister::FP);
+        // don't forget Fp
+        reg_expansion_table.insert("fp".to_string(), RiscVRegister::Fp);
         reg_expansion_table
     };
 }
@@ -269,7 +269,7 @@ pub struct RiscVInstParser<S: AtLeast32b> {
     _phantom: PhantomData<S>,
 }
 
-type RVInstParseState<'a, S> = InstParseState<'a, RiscV<S>, S, ParseType<S>>;
+type RvInstParseState<'a, S> = InstParseState<'a, RiscV<S>, S, ParseType<S>>;
 
 impl InstParser<RiscV<W32b>, W32b> for RiscVInstParser<W32b> {
     type ParseType = ParseType<W32b>;
@@ -283,7 +283,7 @@ impl InstParser<RiscV<W32b>, W32b> for RiscVInstParser<W32b> {
     }
 
     fn try_expand_found_inst(
-        state: RVInstParseState<'_, W32b>,
+        state: RvInstParseState<'_, W32b>,
         parse_type: &ParseType<W32b>,
     ) -> InstParseResult<RiscV<W32b>, W32b> {
         Self::try_expand_found_inst(state, parse_type)
@@ -302,7 +302,7 @@ impl InstParser<RiscV<W64b>, W64b> for RiscVInstParser<W64b> {
     }
 
     fn try_expand_found_inst(
-        state: RVInstParseState<'_, W64b>,
+        state: RvInstParseState<'_, W64b>,
         parse_type: &ParseType<W64b>,
     ) -> InstParseResult<RiscV<W64b>, W64b> {
         Self::try_expand_found_inst(state, parse_type)
@@ -313,7 +313,7 @@ impl<S: AtLeast32b> RiscVInstParser<S> {
     /// Consumes tokens for arguments for a memory operation.
     /// These are either of the form "inst reg, imm, reg)" e.g. "lw x1 -4 x2"
     /// or "inst reg, (imm)reg" e.g "lw x1, 4(x2)" (commas optional in both cases)
-    fn consume_mem_args(state: &mut RVInstParseState<'_, S>) -> Result<MemArgs<S>, ParseError> {
+    fn consume_mem_args(state: &mut RvInstParseState<'_, S>) -> Result<MemArgs<S>, ParseError> {
         // first consumed token must be register name
         let first_tok = state.try_next_tok(3, 0)?;
         let first_reg = state.try_parse_reg(first_tok)?;
@@ -356,7 +356,7 @@ impl<S: AtLeast32b> RiscVInstParser<S> {
 
     /// Attempts to expand a token into a label reference or an immediate of at most max_imm_len.
     fn try_parse_imm_or_label_ref(
-        state: &RVInstParseState<'_, S>,
+        state: &RvInstParseState<'_, S>,
         max_imm_len: u8,
         token: Token,
     ) -> Result<ImmOrLabelRef<S>, ParseError> {
@@ -382,7 +382,7 @@ impl<S: AtLeast32b> RiscVInstParser<S> {
 
     /// Expands an instruction that is known to be in the expansion table.
     fn try_expand_found_inst(
-        mut owned_state: RVInstParseState<'_, S>,
+        mut owned_state: RvInstParseState<'_, S>,
         parse_type: &ParseType<S>,
     ) -> InstParseResult<RiscV<S>, S> {
         use ParseType::*;
@@ -593,7 +593,7 @@ mod tests {
             sections,
             insts,
             ..
-        } = Parser::<RV32>::parse_str(0, prog);
+        } = Parser::<Rv32>::parse_str(0, prog);
         assert!(reporter.is_empty());
         assert!(insts.is_empty());
         assert_eq!(sections.data(), vec![0xef, 0xbe, 0xad, 0xde, 0x12]);
@@ -606,7 +606,7 @@ mod tests {
             ".section .data\n.byte 0x123", // immediate too large
         ];
         for prog in &programs {
-            let ParseResult { reporter, .. } = Parser::<RV32>::parse_str(0, prog);
+            let ParseResult { reporter, .. } = Parser::<Rv32>::parse_str(0, prog);
             assert!(!reporter.is_empty());
         }
     }
@@ -615,11 +615,11 @@ mod tests {
     /// Tests parsing of a label in the middle and a label at the end.
     fn test_label_defs() {
         let insts =
-            parse_and_lex::<RV32>("add a0, sp, fp\nl1: addi sp, sp, -4\naddi sp, sp, 4\nl2:");
+            parse_and_lex::<Rv32>("add a0, sp, fp\nl1: addi sp, sp, -4\naddi sp, sp, 4\nl2:");
         let expected_concrete: [RiscVInst<W32b>; 3] = [
-            Add::new(A0, SP, S0),
-            Addi::new(SP, SP, DataLword::from(-4)),
-            Addi::new(SP, SP, DataLword::from(4)),
+            Add::new(A0, Sp, S0),
+            Addi::new(Sp, Sp, DataLword::from(-4)),
+            Addi::new(Sp, Sp, DataLword::from(4)),
         ];
         assert_eq!(insts.len(), 3);
         assert_eq!(insts[0].label, None);
@@ -648,7 +648,7 @@ mod tests {
     #[test]
     /// Tests the parsing of labels as an argument.
     fn test_needed_labels() {
-        let insts = parse_and_lex::<RV32>("bne x0, x0, l1\nl1: jal ra, end\nend: nop");
+        let insts = parse_and_lex::<Rv32>("bne x0, x0, l1\nl1: jal ra, end\nend: nop");
         assert_eq!(insts.len(), 3);
         assert_eq!(
             insts[0].get_needed_label().unwrap().target,
@@ -669,32 +669,32 @@ mod tests {
             "add x1,,x2, x3",
         ];
         for inst in bad_insts {
-            let ParseResult { reporter, .. } = Parser::<RV32>::parse_str(0, inst);
+            let ParseResult { reporter, .. } = Parser::<Rv32>::parse_str(0, inst);
             assert!(!reporter.is_empty());
         }
     }
 
     #[test]
     fn test_r_type_parse() {
-        let insts = parse_and_lex_concr::<RV32>("add x5, sp, fp");
+        let insts = parse_and_lex_concr::<Rv32>("add x5, sp, fp");
         assert_eq!(insts.len(), 1);
         assert_eq!(
             insts[0],
-            Add::new(RiscVRegister::from(5), SP, RiscVRegister::FP)
+            Add::new(RiscVRegister::from(5), Sp, RiscVRegister::Fp)
         );
     }
 
     #[test]
     fn test_i_arith_parse() {
         // lack of commas is deliberate
-        let insts = parse_and_lex_concr::<RV32>("addi sp sp -4");
+        let insts = parse_and_lex_concr::<Rv32>("addi sp sp -4");
         assert_eq!(insts.len(), 1);
-        assert_eq!(insts[0], Addi::new(SP, SP, DataLword::from(-4)));
+        assert_eq!(insts[0], Addi::new(Sp, Sp, DataLword::from(-4)));
     }
 
     #[test]
     fn test_lui_parse() {
-        let insts = parse_and_lex_concr::<RV32>("lui a0, 0xD_EADC");
+        let insts = parse_and_lex_concr::<Rv32>("lui a0, 0xD_EADC");
         assert_eq!(insts.len(), 1);
         assert_eq!(insts[0], Lui::new(A0, DataLword::from(0xD_EADC)));
     }
@@ -704,14 +704,14 @@ mod tests {
         // immediates for instructions like addi can only be 12 bits long
         let ParseResult {
             insts, reporter, ..
-        } = Parser::<RV32>::parse_str(0, "addi sp sp 0xF000");
+        } = Parser::<Rv32>::parse_str(0, "addi sp sp 0xF000");
         assert!(!reporter.is_empty());
         assert!(insts.is_empty());
     }
 
     #[test]
     fn test_pseudo_li() {
-        let insts = parse_and_lex_concr::<RV32>("li a0, 0xDEAD_BEEF");
+        let insts = parse_and_lex_concr::<Rv32>("li a0, 0xDEAD_BEEF");
         assert_eq!(insts, Li32::expand(A0, DataLword::from(0xDEAD_BEEFu32)));
     }
 }

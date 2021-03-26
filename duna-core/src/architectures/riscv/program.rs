@@ -9,7 +9,7 @@ pub struct RiscVProgramBehavior<S: DataWidth> {
 
 impl ProgramBehavior<RiscV<W32b>, W32b> for RiscVProgramBehavior<W32b> {
     fn sp_register() -> RiscVRegister {
-        RiscVRegister::SP
+        RiscVRegister::Sp
     }
 
     fn return_register() -> RiscVRegister {
@@ -19,7 +19,7 @@ impl ProgramBehavior<RiscV<W32b>, W32b> for RiscVProgramBehavior<W32b> {
 
 impl ProgramBehavior<RiscV<W64b>, W64b> for RiscVProgramBehavior<W64b> {
     fn sp_register() -> RiscVRegister {
-        RiscVRegister::SP
+        RiscVRegister::Sp
     }
 
     fn return_register() -> RiscVRegister {

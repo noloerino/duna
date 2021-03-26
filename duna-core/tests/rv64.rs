@@ -1,6 +1,6 @@
 //! Some basic tests for the 64-bit variant of RISCV.
 use duna_core::{
-    architectures::riscv::{RiscVRegister, RV64},
+    architectures::riscv::{RiscVRegister, Rv64},
     assembler::Linker,
     program_state::Program,
 };
@@ -29,8 +29,8 @@ fn test_jumps() {
         end:
             addi a0, a0, 1
         ";
-    let mut program: Program<RV64> = Linker::with_main_str(code)
-        .link::<RV64>(Default::default())
+    let mut program: Program<Rv64> = Linker::with_main_str(code)
+        .link::<Rv64>(Default::default())
         .unwrap();
     program.run();
     assert_eq!(
@@ -48,8 +48,8 @@ fn test_sext_w() {
         sext.w a0, t1
         sext.w a1, t2
         ";
-    let mut program: Program<RV64> = Linker::with_main_str(code)
-        .link::<RV64>(Default::default())
+    let mut program: Program<Rv64> = Linker::with_main_str(code)
+        .link::<Rv64>(Default::default())
         .unwrap();
     program.run();
     assert_eq!(
@@ -84,8 +84,8 @@ fn test_m_sanity() {
         # rem by 0 => source in output
         rem s3, t0, x0   # s3 = 9
         ";
-    let mut program: Program<RV64> = Linker::with_main_str(code)
-        .link::<RV64>(Default::default())
+    let mut program: Program<Rv64> = Linker::with_main_str(code)
+        .link::<Rv64>(Default::default())
         .unwrap();
     program.run();
     let state = program.state;
@@ -114,8 +114,8 @@ fn test_csr_sanity() {
         csrrs x0, t0, 0xFF
         csrrs a1, x0, 0xFF
     ";
-    let mut program: Program<RV64> = Linker::with_main_str(code)
-        .link::<RV64>(Default::default())
+    let mut program: Program<Rv64> = Linker::with_main_str(code)
+        .link::<Rv64>(Default::default())
         .unwrap();
     program.run();
     let state = program.state;

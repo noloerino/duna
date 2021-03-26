@@ -589,7 +589,7 @@ mod tests_32 {
         let starting_pc_val = 0x10FC_0000;
         state.set_user_pc(ByteAddr32::from(starting_pc_val));
         let tgt_pc_val = 0xABCD_EF10u32;
-        let inst = Jalr::new(RA, RS1, DataLword::from(-4));
+        let inst = Jalr::new(Ra, RS1, DataLword::from(-4));
         let exp_pc_val = tgt_pc_val - 4;
         state.regfile_set(RS1, DataLword::from(tgt_pc_val));
         state.apply_inst_test(&inst);

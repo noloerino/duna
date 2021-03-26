@@ -311,8 +311,8 @@ pub trait SystemInst<S: AtLeast32b> {
                 Self::name(),
                 InstFields::I {
                     fields: Self::inst_fields(),
-                    rd: RiscVRegister::ZERO,
-                    rs1: RiscVRegister::ZERO,
+                    rd: RiscVRegister::Zero,
+                    rs1: RiscVRegister::Zero,
                     imm: Self::funct12(),
                 },
             ),
@@ -446,7 +446,7 @@ mod tests {
     #[test]
     fn test_inst_display() {
         assert_eq!(
-            format!("{}", &Addi::new(SP, SP, DataLword::from(-4))),
+            format!("{}", &Addi::new(Sp, Sp, DataLword::from(-4))),
             "addi sp, sp, -4"
         );
         assert_eq!(format!("{:X}", &Nop::expand::<W32b>()), "0x00000013");

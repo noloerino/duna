@@ -1,7 +1,7 @@
 mod utils;
 
 use duna_core::{
-    architectures::riscv::RV32,
+    architectures::riscv::Rv32,
     assembler::{ErrorReport, Linker},
     config::AsmConfig,
     data_structures::ByteAddr32,
@@ -38,7 +38,7 @@ impl SimSnapshot {
 // and likely to define a parameterized trait with concrete behaviors
 #[wasm_bindgen]
 pub struct SimState {
-    assemble_result: Option<Result<ProgramExecutor<RV32>, ErrorReport>>,
+    assemble_result: Option<Result<ProgramExecutor<Rv32>, ErrorReport>>,
     exit_code: Option<u8>,
 }
 
@@ -60,19 +60,19 @@ impl SimState {
     pub fn assemble(&mut self, program_text: &str) {
         self.assemble_result = Some(
             Linker::with_main_str(program_text)
-                .link::<RV32>(AsmConfig::default())
+                .link::<Rv32>(AsmConfig::default())
                 .map(ProgramExecutor::new),
         );
     }
 
-    fn executor_mut(&mut self) -> Option<&mut ProgramExecutor<RV32>> {
+    fn executor_mut(&mut self) -> Option<&mut ProgramExecutor<Rv32>> {
         self.assemble_result
             .as_mut()?
             .as_mut() // convert Result<Program> to Result<&mut Program>
             .ok() // convert Result<&mut Program> to Option<&mut Program>
     }
 
-    fn executor_ref(&self) -> Option<&ProgramExecutor<RV32>> {
+    fn executor_ref(&self) -> Option<&ProgramExecutor<Rv32>> {
         self.assemble_result
             .as_ref()?
             .as_ref() // convert Result<Program> to Result<&Program>
