@@ -23,7 +23,7 @@
     "@babel/core": "^7.12.10",
     "@babel/plugin-transform-react-jsx": "^7.12.12",
     "babel-loader": "^8.2.2",
-    "copy-webpack-plugin": "^6.0.0",
+    "copy-webpack-plugin": "^8.1.0",
     "css-loader": "^5.0.1",
     "prettier": "^2.0.5",
     "style-loader": "^2.0.0",
