@@ -14,6 +14,11 @@ module.exports = {
   module: {
     rules: [
       {
+        // https://github.com/rustwasm/wasm-pack/issues/835
+        test: /\.wasm$/,
+        type: "webassembly/sync"
+      },
+      {
         test: /\.tsx?$/,
         use: "ts-loader",
         exclude: /node_modules/
@@ -30,9 +35,12 @@ module.exports = {
       },
       {
         test: /\.css$/i,
-        use: ["style-loader", "css-loader"],
+        use: ["style-loader", "css-loader"]
       },
     ]
+  },
+  experiments: {
+    syncWebAssembly: true
   },
   resolve: {
       extensions: [".tsx", ".ts", ".js", ".wasm"]

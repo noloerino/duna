@@ -12,7 +12,8 @@ const SYS_OPCODE: BitStr32 = BitStr32::new(0b111_0011, 7);
 
 /// Checks the validity of the CSR.
 fn csr_valid_check(_csrno: usize) -> Result<(), TermCause> {
-    todo!()
+    // TODO
+    Ok(())
 }
 
 /// Atomic Read/Write CSR
