@@ -232,7 +232,7 @@ pub trait IType<S: AtLeast32b> {
     fn new(rd: RiscVRegister, rs1: RiscVRegister, imm: RegValue<S>) -> RiscVInst<S> {
         let imm_vec = imm.to_bit_str(12);
         RiscVInst {
-            eval: Box::new(move |state| <Self as IType<S>>::eval(&state, rd, rs1, imm_vec)),
+            eval: Box::new(move |state| <Self as IType<S>>::eval(state, rd, rs1, imm_vec)),
             data: InstData::new(
                 Self::name(),
                 InstFields::I {
@@ -328,7 +328,7 @@ pub trait SType<S: AtLeast32b> {
     fn new(rs1: RiscVRegister, rs2: RiscVRegister, imm: RegValue<S>) -> RiscVInst<S> {
         let imm_vec = imm.to_bit_str(12);
         RiscVInst {
-            eval: Box::new(move |state| Self::eval(&state, rs1, rs2, imm_vec)),
+            eval: Box::new(move |state| Self::eval(state, rs1, rs2, imm_vec)),
             data: InstData::new(
                 Self::name(),
                 InstFields::S {

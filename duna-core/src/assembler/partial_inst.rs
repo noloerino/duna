@@ -113,7 +113,7 @@ impl<F: ArchFamily<S>, S: DataWidth> PartialInst<F, S> {
 
     pub fn get_needed_label(&self) -> Option<&LabelRef> {
         match &self.tpe {
-            PartialInstType::NeedsLabelRef(NeedsLabel { needed_label, .. }) => Some(&needed_label),
+            PartialInstType::NeedsLabelRef(NeedsLabel { needed_label, .. }) => Some(needed_label),
             PartialInstType::Complete(..) => None,
         }
     }

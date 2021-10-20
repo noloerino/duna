@@ -54,7 +54,7 @@ impl<'a> DirectiveParser<'a> {
             "global" | "globl" => self.parse_global_label(),
             // TODO: equ, set, equiv (refactor symbol table to have enum value)
             _ => Err(ParseError::unsupported_directive(
-                ErrMetadata::new(&self.head_loc),
+                ErrMetadata::new(self.head_loc),
                 self.head_directive,
             )),
         }
@@ -65,7 +65,7 @@ impl<'a> DirectiveParser<'a> {
         use ProgramSection::*;
         match self.state.curr_section {
             Text => Err(ParseError::unimplemented(
-                ErrMetadata::new(&self.head_loc),
+                ErrMetadata::new(self.head_loc),
                 "cannot insert literals in .text section (only instructions allowed)",
             )),
             section => {
@@ -137,7 +137,7 @@ impl<'a> DirectiveParser<'a> {
     fn parse_string(mut self, null_terminated: bool) -> DirectiveParseResult {
         if let ProgramSection::Text = self.state.curr_section {
             return Err(ParseError::unimplemented(
-                ErrMetadata::new(&self.head_loc),
+                ErrMetadata::new(self.head_loc),
                 "cannot insert literals in .text section (only instructions allowed)",
             ));
         }
@@ -166,7 +166,7 @@ impl<'a> DirectiveParser<'a> {
     fn parse_zero(mut self) -> DirectiveParseResult {
         if let ProgramSection::Text = self.state.curr_section {
             return Err(ParseError::unimplemented(
-                ErrMetadata::new(&self.head_loc),
+                ErrMetadata::new(self.head_loc),
                 "cannot insert literals in .text section (only instructions allowed)",
             ));
         }

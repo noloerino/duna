@@ -310,6 +310,7 @@ impl<'a> LineLexer<'a> {
     fn build_string_literal(&mut self, state: &LexState) -> Result<TokenType, ParseError> {
         // assume leading double quote mark was already consumed
         let mut cs = Vec::<char>::new();
+        #[allow(clippy::while_let_on_iterator)]
         while let Some((_, c)) = self.iter.next() {
             match c {
                 // found end quote, so return

@@ -73,7 +73,7 @@ where
                 },
                 None => {
                     return Err(ParseError::wrong_argc(
-                        ErrMetadata::new(&self.head_loc),
+                        ErrMetadata::new(self.head_loc),
                         self.inst_name,
                         n,
                         found.len() as u8,
@@ -95,7 +95,7 @@ where
             Ok(tok)
         } else {
             Err(ParseError::wrong_argc(
-                ErrMetadata::new(&self.head_loc),
+                ErrMetadata::new(self.head_loc),
                 self.inst_name,
                 needed_args,
                 found_so_far,
@@ -149,7 +149,7 @@ pub trait InstParser<F: ArchFamily<S>, S: DataWidth> {
             Self::try_expand_found_inst(state, parse_type)
         } else {
             Err(ParseError::bad_inst_name(
-                ErrMetadata::new(&state.head_loc),
+                ErrMetadata::new(state.head_loc),
                 state.inst_name,
             ))
         }

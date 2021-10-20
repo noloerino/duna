@@ -431,7 +431,7 @@ impl<S: AtLeast32b> RiscVInstParser<S> {
                     ImmOrLabelRef::Imm(imm) => {
                         if u8::from(imm.get_byte(0)) & 1 > 0 {
                             Err(ParseError::generic(
-                                ErrMetadata::new(&state.head_loc),
+                                ErrMetadata::new(state.head_loc),
                                 &format!(
                                     "branch immediates must be multiples of two, got {}",
                                     imm.to_string()
@@ -474,7 +474,7 @@ impl<S: AtLeast32b> RiscVInstParser<S> {
                         }
                     }
                     _ => Err(ParseError::wrong_diff_argc(
-                        ErrMetadata::new(&state.head_loc),
+                        ErrMetadata::new(state.head_loc),
                         state.inst_name,
                         1,
                         2,
@@ -499,7 +499,7 @@ impl<S: AtLeast32b> RiscVInstParser<S> {
                         ok_wrap_concr(isa::Jalr::new(rd, rs1, imm))
                     }
                     _ => Err(ParseError::wrong_diff_argc(
-                        ErrMetadata::new(&state.head_loc),
+                        ErrMetadata::new(state.head_loc),
                         state.inst_name,
                         1,
                         3,

@@ -273,7 +273,7 @@ impl<A: Architecture> ProgramExecutor<A> {
             for curr_diff in curr_diffs.iter().skip(self.curr_step_idx) {
                 self.program
                     .state
-                    .apply_diff(&curr_diff)
+                    .apply_diff(curr_diff)
                     // TODO
                     .unwrap();
             }
@@ -681,7 +681,7 @@ impl<F: ArchFamily<S>, S: DataWidth> ProgramState<F, S> {
     /// popped instresult?
     pub fn apply_diff_stack(&mut self, diffs: DiffStack<F, S>) -> InstResult<F, S> {
         for diff in &diffs {
-            self.apply_diff(&diff)?;
+            self.apply_diff(diff)?;
         }
         Ok(diffs)
     }

@@ -72,11 +72,11 @@ impl<S: DataWidth> PrivState<S> {
                 };
                 match fd_idx {
                     1 => {
-                        print!("{}", String::from_utf8_lossy(&data));
+                        print!("{}", String::from_utf8_lossy(data));
                         self.stdout.extend(data);
                     }
                     2 => {
-                        eprint!("{}", String::from_utf8_lossy(&data));
+                        eprint!("{}", String::from_utf8_lossy(data));
                         self.stderr.extend(data);
                     }
                     _ => unimplemented!(),

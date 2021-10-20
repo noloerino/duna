@@ -73,7 +73,7 @@ impl Linker {
         // Link other programs' local labels
         let mut programs: Vec<UnlinkedProgram<A>> = Vec::new();
         for (i, FileData { content, .. }) in self.file_map.iter().enumerate() {
-            let (prog, new_reporter) = Assembler::assemble_str(i, &content);
+            let (prog, new_reporter) = Assembler::assemble_str(i, content);
             programs.push(prog);
             reporter.merge(new_reporter);
         }

@@ -79,15 +79,15 @@ mod tests {
         bm.flip(31);
         assert_eq!(bm.get_lowest_zero().unwrap(), 1);
         // extra checks ensure no off-by-one errors
-        assert_eq!(bm.read(0), true);
-        assert_eq!(bm.read(1), false);
-        assert_eq!(bm.read(30), false);
-        assert_eq!(bm.read(31), true);
-        assert_eq!(bm.read(32), false);
+        assert!(bm.read(0));
+        assert!(!bm.read(1));
+        assert!(!bm.read(30));
+        assert!(bm.read(31));
+        assert!(!bm.read(32));
         bm.flip(0);
         assert_eq!(bm.get_lowest_zero().unwrap(), 0);
-        assert_eq!(bm.read(0), false);
-        assert_eq!(bm.read(1), false);
+        assert!(!bm.read(0));
+        assert!(!bm.read(1));
     }
 
     /// Tests a bitmap backed by several integers.
@@ -102,13 +102,13 @@ mod tests {
         bm.flip(255);
         assert_eq!(bm.get_lowest_zero().unwrap(), 10);
         for i in 0..10 {
-            assert_eq!(bm.read(i), true);
+            assert!(bm.read(i));
         }
-        assert_eq!(bm.read(31), true);
-        assert_eq!(bm.read(142), true);
-        assert_eq!(bm.read(255), true);
+        assert!(bm.read(31));
+        assert!(bm.read(142));
+        assert!(bm.read(255));
         bm.flip(142);
-        assert_eq!(bm.read(142), false);
+        assert!(!bm.read(142));
         // check that holes work
         bm.flip(7);
         assert_eq!(bm.get_lowest_zero().unwrap(), 7);
