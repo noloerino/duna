@@ -1,77 +1,71 @@
-// JQuery is required for GoldenLayout, meaning it's available even if it's not a direct dependency
-import "jquery";
-import GoldenLayout from "golden-layout";
-import "golden-layout/src/css/goldenlayout-base.css";
-import "golden-layout/src/css/goldenlayout-light-theme.css";
+import { GoldenLayout } from "golden-layout";
+// import { LayoutConfig, ComponentContainer, JsonValue } from "golden-layout"
+import "golden-layout/dist/css/goldenlayout-base.css";
+import "golden-layout/dist/css/themes/goldenlayout-light-theme.css";
 // Needed for JSX
 import React from "../no-react";
 
-// Takes in a function of the form ((state) => jsx) and appends it to the golden container
+// Takes in a function of the form (() => jsx) and appends it to the golden container
+// Eventually this should probably be ((state) => jsx)
 //
 // The second arg to registerComponent needs to be a function keyword, not a lambda
 // because reasons
 const goldenComponent = (jsxFn) => {
   return function (container, state) {
-    container.getElement()[0].appendChild(jsxFn(state));
+    container.element.appendChild(jsxFn());
   };
 };
 
 const config = {
-  settings: {
-    showPopoutIcon: false,
-    showMaximiseIcon: false,
-    showCloseIcon: false,
+  root: {
+    type: "row",
+    content: [
+      {
+        type: "column",
+        content: [
+          {
+            type: "component",
+            componentType: "editor",
+            componentState: {},
+            content: [],
+          },
+          {
+            type: "component",
+            componentType: "errors",
+            componentState: {},
+            content: [],
+          },
+        ],
+      },
+      {
+        type: "column",
+        content: [
+          {
+            type: "component",
+            componentType: "state",
+            componentState: {},
+            content: [],
+          },
+          {
+            type: "component",
+            componentType: "console",
+            componentState: {},
+            content: [],
+          },
+        ],
+      },
+    ],
   },
-  content: [
-    {
-      type: "row",
-      height: 100,
-      content: [
-        {
-          type: "column",
-          content: [
-            {
-              type: "component",
-              componentName: "editor",
-              componentState: {},
-              isClosable: false,
-            },
-            {
-              type: "component",
-              componentName: "errors",
-              componentState: {},
-              isClosable: false,
-            },
-          ],
-        },
-        {
-          type: "stack",
-          content: [
-            {
-              type: "component",
-              componentName: "state",
-              componentState: {},
-              isClosable: false,
-            },
-            {
-              type: "component",
-              componentName: "console",
-              componentState: {},
-              isClosable: false,
-            },
-          ],
-        },
-      ],
-    },
-  ],
+  header: {
+    show: "top",
+  }
 };
 
 export const goldenInit = () => {
   let layout = new GoldenLayout(
-    config,
     document.getElementById("golden-base")
   );
-  layout.registerComponent(
+  layout.registerComponentConstructor(
     "editor",
     goldenComponent(() => (
       <div>
@@ -94,7 +88,7 @@ export const goldenInit = () => {
       </div>
     ))
   );
-  layout.registerComponent(
+  layout.registerComponentConstructor(
     "console",
     goldenComponent(() => (
       // Fragment isn't implemented :(
@@ -111,7 +105,7 @@ export const goldenInit = () => {
       </div>
     ))
   );
-  layout.registerComponent(
+  layout.registerComponentConstructor(
     "errors",
     goldenComponent(() => (
       <pre
@@ -120,7 +114,7 @@ export const goldenInit = () => {
       ></pre>
     ))
   );
-  layout.registerComponent(
+  layout.registerComponentConstructor(
     "state",
     goldenComponent(() => (
       <textarea id="sim-state" className="flexCol"
@@ -134,5 +128,5 @@ export const goldenInit = () => {
       </textarea>
     ))
   );
-  layout.init();
+  layout.loadLayout(config);
 };
