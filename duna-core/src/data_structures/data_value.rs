@@ -8,22 +8,22 @@ use num_traits::{
 };
 use std::{cmp, fmt, marker::PhantomData};
 
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd)]
 pub struct W8b {
     value: u8,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd)]
 pub struct W16b {
     value: u16,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd)]
 pub struct W32b {
     value: u32,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd)]
 pub struct W64b {
     value: u64,
 }
@@ -248,23 +248,23 @@ impl DataWidth for W64b {
 // Marks an interpretation of a data width.
 pub trait DataInterp: fmt::Debug + Clone + Copy + PartialEq {}
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Unsigned;
 impl DataInterp for Unsigned {}
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Signed;
 impl DataInterp for Signed {}
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RegData;
 impl DataInterp for RegData {}
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ByteAddr;
 impl DataInterp for ByteAddr {}
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DataValue<S: DataWidth, T: DataInterp> {
     value: S,
     _phantom: PhantomData<T>,

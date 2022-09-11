@@ -1,4 +1,4 @@
-use super::{priv_s::PrivDiff, phys::*, program::StateDiff};
+use super::{phys::*, priv_s::PrivDiff, program::StateDiff};
 use crate::{arch::*, data_structures::*};
 use std::{collections::HashMap, fmt, marker::PhantomData};
 
@@ -6,20 +6,11 @@ use std::{collections::HashMap, fmt, marker::PhantomData};
 type VirtPn = u64;
 
 /// Maps a virtual page to a physical one.
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub struct PtEntry {
     pub valid: bool,
     /// The physical page number.
     pub ppn: PhysPn,
-}
-
-impl Default for PtEntry {
-    fn default() -> PtEntry {
-        PtEntry {
-            valid: false,
-            ppn: 0,
-        }
-    }
 }
 
 /// Represents an operation that updates the page table.
@@ -47,7 +38,7 @@ impl PtUpdate {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum ReplacementUpdate {
     /// Represents an increment to a clock hand, which can be used to represent either clock or
     /// FIFO replacement policies. In the case of a clock-based algorithm, this should be used in
@@ -76,7 +67,7 @@ impl fmt::Debug for PtLookupData {
     }
 }
 
-#[derive(Debug, PartialEq, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct MemFault<S: DataWidth> {
     pub user_vaddr: ByteAddrValue<S>,
     pub cause: MemFaultCause,
@@ -117,7 +108,7 @@ impl<S: DataWidth> MemFault<S> {
     }
 }
 
-#[derive(Debug, PartialEq, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum MemFaultCause {
     PageFault,
     SegFault,

@@ -1,7 +1,7 @@
 use crate::{data_structures::*, program_state::IRegister};
 use std::fmt;
 
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum RiscVRegister {
     Zero = 0,
     Ra,

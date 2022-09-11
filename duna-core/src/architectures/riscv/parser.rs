@@ -432,10 +432,7 @@ impl<S: AtLeast32b> RiscVInstParser<S> {
                         if u8::from(imm.get_byte(0)) & 1 > 0 {
                             Err(ParseError::generic(
                                 ErrMetadata::new(state.head_loc),
-                                &format!(
-                                    "branch immediates must be multiples of two, got {}",
-                                    imm.to_string()
-                                ),
+                                &format!("branch immediates must be multiples of two, got {}", imm,),
                             ))
                         } else {
                             // LSB chopping is handled by instruction

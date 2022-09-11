@@ -279,7 +279,7 @@ impl<A: Architecture> ProgramExecutor<A> {
             }
             None
         };
-        // hack to get around the fact that exists aren't stored
+        // hack to get around the fact that exits aren't stored
         if rv == None {
             self.curr_inst_idx += 1;
         }

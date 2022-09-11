@@ -87,7 +87,7 @@ where
                     )),
                     Directive(section_name) => DirectiveParser::new(
                         self.iter,
-                        &mut self.state,
+                        self.state,
                         &head_tok.location,
                         &section_name,
                     )

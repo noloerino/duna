@@ -114,7 +114,7 @@ impl SimState {
 
     pub fn stdout(&self) -> Option<String> {
         self.executor_ref().map(|executor| {
-            std::str::from_utf8(&executor.state().get_stdout().to_vec())
+            std::str::from_utf8(executor.state().get_stdout())
                 .unwrap()
                 .to_string()
         })

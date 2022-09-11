@@ -224,7 +224,7 @@ impl<'a> LineLexer<'a> {
                         ErrMetadata::new(&state.location),
                         &format!(
                             "ran out of characters while parsing number literal {}",
-                            head.to_string()
+                            head,
                         ),
                     ));
                 }

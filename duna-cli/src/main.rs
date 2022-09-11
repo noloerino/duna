@@ -73,7 +73,7 @@ fn link_or_exit<A: Architecture>(config: AsmConfig, linker: Linker) -> Program<A
 fn link_and_run<A: Architecture>(config: AsmConfig, linker: Linker) {
     let mut program = link_or_exit::<A>(config, linker);
     let prog_exit_code = program.run();
-    println!("{}", format!("Program exited with code {}", prog_exit_code));
+    println!("Program exited with code {}", prog_exit_code);
 }
 
 // Runs a gdb-like repl.

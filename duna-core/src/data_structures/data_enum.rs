@@ -1,6 +1,6 @@
 use super::*;
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub enum DataWidthEnum {
     Byte,
     Half,
@@ -8,7 +8,7 @@ pub enum DataWidthEnum {
     Dword,
 }
 
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum DataEnum {
     Byte(DataByte),
     Half(DataHalf),
@@ -63,13 +63,13 @@ impl From<DataEnum> for DataDword {
     }
 }
 
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct DataDiff<S: DataWidth> {
     pub old: RegValue<S>,
     pub new: RegValue<S>,
 }
 
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum DataEnumDiff {
     Byte(DataDiff<W8b>),
     Half(DataDiff<W16b>),

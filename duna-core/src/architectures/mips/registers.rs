@@ -2,7 +2,7 @@ use crate::data_structures::*;
 use crate::program_state::IRegister;
 use std::fmt;
 
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum MipsRegister {
     Zero = 0,
     At,

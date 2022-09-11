@@ -1,18 +1,10 @@
 use crate::{data_structures::*, program_state::*};
 
 /// Options for the assembler.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct AsmConfig {
     /// Parameters for the machine being emulated.
     pub machine: MachineConfig,
-}
-
-impl Default for AsmConfig {
-    fn default() -> Self {
-        AsmConfig {
-            machine: Default::default(),
-        }
-    }
 }
 
 /// Configures the start of the text, stack, and data segments.
@@ -60,19 +52,10 @@ impl SegmentStarts {
 }
 
 /// Configuration for the machine being emulated.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct MachineConfig {
     pub segment_starts: SegmentStarts,
     pub mem_config: MemConfig,
-}
-
-impl Default for MachineConfig {
-    fn default() -> Self {
-        MachineConfig {
-            segment_starts: SegmentStarts::default(),
-            mem_config: MemConfig::default(),
-        }
-    }
 }
 
 /// Configures a memory device.
