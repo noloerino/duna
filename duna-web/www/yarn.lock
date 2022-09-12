@@ -857,7 +857,7 @@ clone-deep@^4.0.1:
     kind-of "^6.0.2"
     shallow-clone "^3.0.0"
 
-codemirror@^5.59.0:
+codemirror@5:
   version "5.65.8"
   resolved "https://registry.yarnpkg.com/codemirror/-/codemirror-5.65.8.tgz#50f145ba7eb725091110c31f3a7c1fdef6bdc721"
   integrity sha512-TNGkSkkoAsmZSf6W6g35LMVQJBHKasc2CKwhr/fTxSYun7cn6J+CbtyNjV/MYlFVkNTsqZoviegyCZimWhoMMA==
@@ -1398,7 +1398,7 @@ globby@^11.0.3:
     merge2 "^1.4.1"
     slash "^3.0.0"
 
-golden-layout@^2.3.0:
+golden-layout@^2.5.0:
   version "2.5.0"
   resolved "https://registry.yarnpkg.com/golden-layout/-/golden-layout-2.5.0.tgz#9f7425859233c4d0f3e9a08d9cce8bb75566cde6"
   integrity sha512-HmLJLPKgKSMO+48Ro2CO5Hikk7NWQmQU5qJvpKu/PCV1Iw+mGyxRaqDGYKnx0K7DZmZs1Bk3YvWSATajjkNksw==

@@ -10,8 +10,8 @@ use std::process;
 
 fn main() {
     let matches = App::new("duna")
-        .version("0.1")
-        .author("Jonathan Shi <jhshi@berkeley.edu>")
+        .version("0.0.1")
+        .author("Jonathan Shi <jonathan.h.shi@gmail.com>")
         .arg(
             Arg::with_name("isa")
                 .long("isa")

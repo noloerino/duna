@@ -13,9 +13,9 @@
     "url": ""
   },
   "dependencies": {
-    "codemirror": "^5.59.0",
+    "codemirror": "5",
     "duna_web": "file:../pkg",
-    "golden-layout": "^2.3.0"
+    "golden-layout": "^2.5.0"
   },
   "license": "MIT",
   "devDependencies": {

@@ -1,11 +1,13 @@
 import { init as duna_init, SimState, SimSnapshot } from "duna_web";
 import { memory } from "duna_web/duna_web_bg.wasm";
 import { CodeMirrorWrapper } from "./components/codemirror";
-import { goldenInit } from "./components/golden.jsx";
+import { initLayout } from "./components/golden.jsx";
 
 duna_init();
-// All DOM manipulation must occur after goldenInit
-goldenInit();
+
+// DOM components must be laid out before codemirror is initialized
+initLayout();
+
 let cm = new CodeMirrorWrapper();
 
 let simState = SimState.new();
@@ -35,14 +37,14 @@ const updateState = () => {
   let snapshot = simState.snapshot();
   const state = <HTMLTextAreaElement>document.getElementById("sim-state");
   state.value = snapshot
-    ? (`PC: ${snapshot.curr_pc()}\n` +
+    ? `PC: ${snapshot.curr_pc()}\n` +
       `next instruction: ${snapshot.curr_inst()}\n\n` +
-      `${snapshot.reg_dump()}`)
-    : "" ;
-}
+      `${snapshot.reg_dump()}`
+    : "";
+};
 
 const step = () => {
-  simState.step()
+  simState.step();
   updateState();
 };
 
@@ -54,7 +56,7 @@ const run = () => {
 const reset = () => {
   simState.reset();
   updateState();
-}
+};
 
 const assembleButton = document.getElementById("assemble");
 assembleButton.onclick = (e) => assembleProgram();
@@ -67,7 +69,6 @@ runButton.onclick = (e) => run();
 
 const resetButton = document.getElementById("reset");
 resetButton.onclick = (e) => reset();
-
 
 window.onbeforeunload = () => {
   cm.save();

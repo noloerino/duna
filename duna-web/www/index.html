@@ -18,12 +18,13 @@
         min-height: 30em;
         border: solid 0.1em;
       }
-      .flexCol, .lm_content {
+      .flexCol,
+      .lm_content {
         /* Forces Golden panes to act as flexboxes when needed */
         display: flex;
         flex-direction: column;
       }
-      .lm_content >:last-child {
+      .lm_content > :last-child {
         flex: 1;
       }
       .flexRow {
@@ -48,6 +49,6 @@
         margin-bottom: 0;
       }
     </style>
-    <div id="golden-base" style="flex: 1"></div>
+    <div id="root" style="flex: 1"></div>
   </body>
 </html>
