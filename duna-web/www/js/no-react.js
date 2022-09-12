@@ -9,8 +9,7 @@ const React = {
 
   createElement: function (tag, attrs, children) {
     if (tag instanceof Function) {
-      console.log(tag);
-      // Case: "tag" is a custom-defined component, and is a function
+      // `tag` is a custom-defined component, and is a function
       return tag();
     }
 

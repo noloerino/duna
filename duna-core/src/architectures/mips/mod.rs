@@ -6,3 +6,5 @@ mod isa;
 mod parser;
 mod program;
 mod registers;
+
+pub use arch::*;

@@ -1078,6 +1078,9 @@ dns-packet@^5.2.2:
   dependencies:
     "@leichtgewicht/ip-codec" "^2.0.1"
 
+duna-web@../pkg:
+  version "0.1.0"
+
 "duna_web@file:../pkg":
   version "0.1.0"
 

@@ -14,6 +14,8 @@ let simState = SimState.new();
 
 console.log("You're running the duna simulator, version", BUILD_VERSION);
 
+let languageSelect = <HTMLSelectElement>document.getElementById("language");
+
 const assembleProgram = () => {
   const compileErrors = <HTMLPreElement>(
     document.getElementById("compile-errors")
@@ -21,7 +23,7 @@ const assembleProgram = () => {
   const program = cm.getProgram();
   simState.assemble(program);
   let errs = simState.get_errors();
-  compileErrors.innerText = errs ?? "No errors!";
+  compileErrors.innerText = errs ?? "Assembled with no errors!";
   if (!errs) {
     updateState();
   }
@@ -43,6 +45,11 @@ const updateState = () => {
     : "";
 };
 
+const revert = () => {
+  simState.revert();
+  updateState();
+};
+
 const step = () => {
   simState.step();
   updateState();
@@ -58,8 +65,17 @@ const reset = () => {
   updateState();
 };
 
+const changeLanguage = () => {
+  reset();
+  let newLanguage = languageSelect.value;
+  simState.reset_to_arch(newLanguage);
+};
+
 const assembleButton = document.getElementById("assemble");
 assembleButton.onclick = (e) => assembleProgram();
+
+const revertButton = document.getElementById("revert");
+revertButton.onclick = (e) => revert();
 
 const stepButton = document.getElementById("step");
 stepButton.onclick = (e) => step();
@@ -69,6 +85,8 @@ runButton.onclick = (e) => run();
 
 const resetButton = document.getElementById("reset");
 resetButton.onclick = (e) => reset();
+
+languageSelect.onchange = (e) => changeLanguage();
 
 window.onbeforeunload = () => {
   cm.save();
